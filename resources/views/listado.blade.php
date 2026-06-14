@@ -242,14 +242,14 @@
     {{-- Tabla de datos --}}
     <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div class="overflow-x-auto" @if($modoTabla) x-data="newRowForm()" @endif>
-            <table class="text-sm" style="width:auto;min-width:100%">
+            <table class="w-full text-sm">
                 <thead>
                     <tr class="border-b border-gray-100 bg-gray-50">
                         @if($modoTabla)
                             <th class="w-8"></th>
                         @endif
                         @foreach($campos as $campo)
-                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide" style="max-width:500px">
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
                                 {{ $campo->label }}
                             </th>
                         @endforeach
@@ -393,7 +393,7 @@
                             <tr class="hover:bg-gray-50 cursor-pointer"
                                 onclick="window.location='{{ route('ficha', [$project->slug, $projectTable->name, $registro->id]) }}'">
                                 @foreach($campos as $campo)
-                                    <td class="px-4 py-3 text-gray-700" style="max-width:500px;word-break:break-word">
+                                    <td class="px-4 py-3 text-gray-700">
                                         @include('partials.cell', ['campo' => $campo, 'valor' => $registro->{$campo->name} ?? null, 'fkOptions' => $fkOptions, 'usuariosMap' => $usuariosMap ?? []])
                                     </td>
                                 @endforeach
