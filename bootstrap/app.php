@@ -16,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustProxies(at: '*');
         $middleware->alias([
             'project.access' => \App\Http\Middleware\CheckProjectAccess::class,
+            'auth.api'       => \App\Http\Middleware\ApiTokenAuth::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
