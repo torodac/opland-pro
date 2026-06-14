@@ -244,19 +244,19 @@
         <div class="overflow-x-auto" @if($modoTabla) x-data="newRowForm()" @endif>
             <table class="w-full text-sm">
                 <thead>
-                    <tr class="border-b border-gray-300 bg-gray-50">
+                    <tr class="border-b border-gray-200 bg-gray-50">
                         @if($modoTabla)
                             <th class="w-8"></th>
                         @endif
                         @foreach($campos as $campo)
-                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
                                 {{ $campo->label }}
                             </th>
                         @endforeach
                         <th class="w-10"></th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-200">
+                <tbody class="divide-y divide-gray-100">
                     @forelse($registros as $registro)
                         @if($modoTabla)
                             {{-- ── FILA EDITABLE ── --}}
