@@ -393,7 +393,7 @@
                             <tr class="hover:bg-gray-50 cursor-pointer"
                                 onclick="window.location='{{ route('ficha', [$project->slug, $projectTable->name, $registro->id]) }}'">
                                 @foreach($campos as $campo)
-                                    <td class="px-4 py-3 text-gray-700">
+                                    <td class="px-4 py-3 text-gray-700" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ $registro->{$campo->name} ?? '' }}">
                                         @include('partials.cell', ['campo' => $campo, 'valor' => $registro->{$campo->name} ?? null, 'fkOptions' => $fkOptions, 'usuariosMap' => $usuariosMap ?? []])
                                     </td>
                                 @endforeach
@@ -661,3 +661,23 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 @endif
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const table = document.querySelector('table');
+    if (!table) return;
+
+    // Medir anchos naturales sin w-full
+    table.style.tableLayout = 'auto';
+    table.style.width = 'auto';
+    table.offsetHeight; // forzar reflow
+
+    const ths = table.querySelectorAll('thead th');
+    const widths = Array.from(ths).map(th => Math.min(th.offsetWidth, 500));
+
+    // Aplicar layout fijo con los anchos medidos
+    table.style.tableLayout = 'fixed';
+    table.style.width = '100%';
+    ths.forEach((th, i) => { th.style.width = widths[i] + 'px'; });
+});
+</script>
