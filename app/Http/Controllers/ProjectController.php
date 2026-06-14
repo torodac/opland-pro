@@ -18,7 +18,10 @@ class ProjectController extends Controller
             })->values();
 
         if ($projects->count() === 1) {
-            return redirect($this->resolveHomeUrl($user, $projects->first()));
+            $homeUrl = $this->resolveHomeUrl($user, $projects->first());
+            if ($homeUrl !== url('/')) {
+                return redirect($homeUrl);
+            }
         }
 
         return view('proyectos', compact('projects'));
@@ -51,6 +54,6 @@ class ProjectController extends Controller
             return route('listado', [$project->slug, $first->projectTable->name]);
         }
 
-        return route('proyectos');
+        return url('/');
     }
 }
