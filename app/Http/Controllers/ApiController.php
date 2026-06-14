@@ -29,10 +29,24 @@ class ApiController extends Controller
         return response()->json(['token' => $token]);
     }
 
+    // Verifica que el usuario tiene acceso al proyecto
+    private function checkProjectAccess(\App\Models\User $user, Project $project): bool
+    {
+        return DB::table('admin_user_roles')
+            ->where('user_id', $user->id)
+            ->where(function ($q) use ($project) {
+                $q->where('role', 'admin')
+                  ->orWhere('role', 'admin_' . $project->slug);
+            })
+            ->exists();
+    }
+
     // GET /api/{slug}  → lista de tablas del proyecto
     public function tables(Request $request, string $slug)
     {
         $project = Project::where('slug', $slug)->firstOrFail();
+
+        abort_unless($this->checkProjectAccess($request->user(), $project), 403, 'Sin acceso al proyecto');
 
         $tables = $project->tables()
             ->where('active', true)
@@ -46,6 +60,8 @@ class ApiController extends Controller
     public function data(Request $request, string $slug, string $tabla)
     {
         $project = Project::where('slug', $slug)->firstOrFail();
+
+        abort_unless($this->checkProjectAccess($request->user(), $project), 403, 'Sin acceso al proyecto');
 
         $projectTable = $project->tables()->where('name', $tabla)->firstOrFail();
 
