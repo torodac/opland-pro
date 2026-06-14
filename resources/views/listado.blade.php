@@ -244,7 +244,7 @@
         <div class="overflow-x-auto" @if($modoTabla) x-data="newRowForm()" @endif>
             <table class="w-full text-sm">
                 <thead>
-                    <tr class="border-b border-gray-100 bg-gray-50">
+                    <tr class="border-b border-gray-300 bg-gray-50">
                         @if($modoTabla)
                             <th class="w-8"></th>
                         @endif
@@ -256,7 +256,7 @@
                         <th class="w-10"></th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-50">
+                <tbody class="divide-y divide-gray-200">
                     @forelse($registros as $registro)
                         @if($modoTabla)
                             {{-- ── FILA EDITABLE ── --}}
