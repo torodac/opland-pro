@@ -210,8 +210,12 @@ class ExcelController extends Controller
             // 3. Crear tabla física en BD y campos de sistema
             $projectTable->createDynamicTable();
 
-            // 4. Crear campos
+            // 4. Crear campos (saltando los que ya creó createDynamicTable)
+            $existingFieldNames = $projectTable->fields()->pluck('name')->toArray();
             foreach ($request->fields as $i => $fieldData) {
+                if (in_array($fieldData['name'], $existingFieldNames)) {
+                    continue;
+                }
                 $extras = null;
                 if ($fieldData['type'] === 'desplegable' && !empty($fieldData['ref_table'])) {
                     $extras = 'ref:' . $fieldData['ref_table'];
