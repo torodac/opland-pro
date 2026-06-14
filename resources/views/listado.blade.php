@@ -393,7 +393,7 @@
                             <tr class="hover:bg-gray-50 cursor-pointer"
                                 onclick="window.location='{{ route('ficha', [$project->slug, $projectTable->name, $registro->id]) }}'">
                                 @foreach($campos as $campo)
-                                    <td class="px-4 py-3 text-gray-700 break-words" style="max-width:500px">
+                                    <td class="px-4 py-3 text-gray-700" style="max-width:500px;word-break:break-word">
                                         @include('partials.cell', ['campo' => $campo, 'valor' => $registro->{$campo->name} ?? null, 'fkOptions' => $fkOptions, 'usuariosMap' => $usuariosMap ?? []])
                                     </td>
                                 @endforeach
