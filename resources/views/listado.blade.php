@@ -242,7 +242,7 @@
     {{-- Tabla de datos --}}
     <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div class="overflow-x-auto" @if($modoTabla) x-data="newRowForm()" @endif>
-            <table class="w-full text-sm">
+            <table class="text-sm" style="width:auto;min-width:100%">
                 <thead>
                     <tr class="border-b border-gray-100 bg-gray-50">
                         @if($modoTabla)
