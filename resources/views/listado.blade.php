@@ -249,7 +249,7 @@
                             <th class="w-8"></th>
                         @endif
                         @foreach($campos as $campo)
-                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap" style="max-width:500px">
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide" style="max-width:500px">
                                 {{ $campo->label }}
                             </th>
                         @endforeach
