@@ -53,6 +53,11 @@ class ProjectTable extends Model
         return $this->belongsTo(Project::class);
     }
 
+    public function menuItem()
+    {
+        return $this->hasOne(MenuItem::class, 'project_table_id');
+    }
+
     // Campos configurados para esta tabla, ordenados
     public function fields()
     {

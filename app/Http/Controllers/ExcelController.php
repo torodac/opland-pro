@@ -202,6 +202,7 @@ class ExcelController extends Controller
             // 2. Crear MenuItem
             $projectTable->menuItem()->create([
                 'project_id' => $project->id,
+                'label'      => $request->table_label,
                 'order'      => $nextOrder,
                 'icon'       => 'fa-table',
             ]);
