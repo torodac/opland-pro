@@ -207,7 +207,10 @@ class ExcelController extends Controller
                 'icon'       => 'fa-table',
             ]);
 
-            // 3. Crear campos
+            // 3. Crear tabla física en BD y campos de sistema
+            $projectTable->createDynamicTable();
+
+            // 4. Crear campos
             foreach ($request->fields as $i => $fieldData) {
                 $extras = null;
                 if ($fieldData['type'] === 'desplegable' && !empty($fieldData['ref_table'])) {
@@ -225,10 +228,10 @@ class ExcelController extends Controller
                 $field->addColumnToTable();
             }
 
-            // 4. Recargar con campos para el import
+            // 5. Recargar con campos para el import
             $projectTable->load('fields');
 
-            // 5. Importar datos
+            // 6. Importar datos
             $keyFields = array_filter($request->input('key_fields', []));
             $importer = new TablaImport(
                 $project,
