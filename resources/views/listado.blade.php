@@ -249,7 +249,7 @@
                             <th class="w-8"></th>
                         @endif
                         @foreach($campos as $campo)
-                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap" style="max-width:500px">
                                 {{ $campo->label }}
                             </th>
                         @endforeach
@@ -393,7 +393,7 @@
                             <tr class="hover:bg-gray-50 cursor-pointer"
                                 onclick="window.location='{{ route('ficha', [$project->slug, $projectTable->name, $registro->id]) }}'">
                                 @foreach($campos as $campo)
-                                    <td class="px-4 py-3 text-gray-700">
+                                    <td class="px-4 py-3 text-gray-700 break-words" style="max-width:500px">
                                         @include('partials.cell', ['campo' => $campo, 'valor' => $registro->{$campo->name} ?? null, 'fkOptions' => $fkOptions, 'usuariosMap' => $usuariosMap ?? []])
                                     </td>
                                 @endforeach
