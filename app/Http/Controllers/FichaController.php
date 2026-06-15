@@ -78,7 +78,7 @@ class FichaController extends Controller
             'canEdit'        => $canEdit,
             'usuariosMap'    => $usuariosMap,
             'projectTables'   => $project->tables()->where('admin_only', false)->orderBy('order')->get(),
-            'projectUsuarios' => $this->loadUsuarios($project),
+            'projectUsuarios' => $this->loadUsuariosForForm($project),
             'createUser'     => $usuarios[(int) $registro->createuser] ?? null,
             'updateUser'     => $usuarios[(int) $registro->updateuser] ?? null,
             'breadcrumb'     => [
@@ -108,7 +108,7 @@ class FichaController extends Controller
             'fkOptions'      => $this->loadFkOptions($project, $projectTable),
             'tabs'           => [],
             'usuariosMap'    => $this->loadUsuariosMap($project),
-            'projectUsuarios' => $this->loadUsuarios($project),
+            'projectUsuarios' => $this->loadUsuariosForForm($project),
             'projectTables'  => $project->tables()->where('admin_only', false)->orderBy('order')->get(),
             'createUser'     => null,
             'updateUser'     => null,
@@ -304,6 +304,38 @@ class FichaController extends Controller
             ->map(fn($u) => ['id' => $u->id, 'label' => $u->nombre ?? "#{$u->id}"])
             ->values()
             ->toArray();
+    }
+
+    // Devuelve solo el propio usuario si el rol no permite ver todos los registros
+    private function loadUsuariosForForm(Project $project): array
+    {
+        $all = $this->loadUsuarios($project);
+        if ($this->userCanSeeAllRecords($project)) return $all;
+
+        $ownId = Auth::user()?->projectUserId($project);
+        if (!$ownId) return $all;
+
+        return array_values(array_filter($all, fn($u) => (string) $u['id'] === (string) $ownId));
+    }
+
+    private function userCanSeeAllRecords(Project $project): bool
+    {
+        $user = Auth::user();
+        if (!$user || $user->isProjectAdmin($project)) return true;
+
+        $projectUserId = $user->projectUserId($project);
+        if (!$projectUserId) return true;
+
+        $usuariosTable = $project->slug . '_usuarios';
+        $rolesTable    = $project->slug . '_roles';
+        if (!\Illuminate\Support\Facades\Schema::hasTable($usuariosTable) ||
+            !\Illuminate\Support\Facades\Schema::hasTable($rolesTable)) return true;
+
+        $usuario = DB::table($usuariosTable)->find($projectUserId);
+        if (!$usuario || !$usuario->id_rol) return true;
+
+        $role = DB::table($rolesTable)->find($usuario->id_rol);
+        return !$role || $role->todos_registros;
     }
 
     private function loadUsuariosMap(Project $project): array

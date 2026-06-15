@@ -336,16 +336,12 @@
                                                 @endforeach
                                             </select>
                                         @elseif($campo->type === 'multiusuario')
-                                            @php $seenIds = [] @endphp
                                             <select multiple
                                                     x-init="(() => { try { const sel = JSON.parse(value || '[]').map(String); $el.querySelectorAll('option').forEach(o => o.selected = sel.includes(o.value)); } catch(e){} })()"
                                                     @change="value = JSON.stringify(Array.from($el.selectedOptions).map(o => o.value)); save()"
                                                     class="w-full text-sm border border-transparent hover:border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-transparent focus:bg-white outline-none transition-colors">
-                                                @foreach($usuariosMap as $uid => $unombre)
-                                                    @if(!in_array((string)$uid, $seenIds))
-                                                        @php $seenIds[] = (string)$uid @endphp
-                                                        <option value="{{ $uid }}">{{ $unombre }}</option>
-                                                    @endif
+                                                @foreach($projectUsuarios as $pu)
+                                                    <option value="{{ $pu['id'] }}">{{ $pu['label'] }}</option>
                                                 @endforeach
                                             </select>
                                         @elseif($campo->type === 'text')
@@ -497,14 +493,10 @@
                                         @endforeach
                                     </select>
                                 @elseif($campo->type === 'multiusuario')
-                                    @php $seenIds2 = [] @endphp
                                     <select multiple x-model="fields['{{ $campo->name }}']"
                                             class="w-full text-sm border border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-white outline-none">
-                                        @foreach($usuariosMap as $uid => $unombre)
-                                            @if(!in_array((string)$uid, $seenIds2))
-                                                @php $seenIds2[] = (string)$uid @endphp
-                                                <option value="{{ $uid }}">{{ $unombre }}</option>
-                                            @endif
+                                        @foreach($projectUsuarios as $pu)
+                                            <option value="{{ $pu['id'] }}">{{ $pu['label'] }}</option>
                                         @endforeach
                                     </select>
                                 @elseif($campo->type === 'text')

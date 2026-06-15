@@ -94,16 +94,28 @@ class ListadoController extends Controller
         $modoTabla         = $request->input('modo') === 'tabla' && $requiredHidden->isEmpty();
         $tablaNoDisponible = $request->input('modo') === 'tabla' && $requiredHidden->isNotEmpty();
 
-        // Mapa id→nombre de usuarios del proyecto para campos multiusuario
+        // Mapa id→nombre de usuarios del proyecto para campos multiusuario (display)
         $usuariosMap   = [];
         $usuariosTable = $project->slug . '_usuarios';
+        $allUsuarios   = [];
         if (Schema::hasTable($usuariosTable)) {
-            DB::table($usuariosTable)
-                ->get(['id', 'nombre'])
-                ->each(function ($u) use (&$usuariosMap) {
-                    $usuariosMap[(int) $u->id]    = $u->nombre;
-                    $usuariosMap[(string) $u->id] = $u->nombre;
-                });
+            $allUsuarios = DB::table($usuariosTable)
+                ->where(fn($q) => $q->whereNull('deleted')->orWhere('deleted', 0))
+                ->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))
+                ->get(['id', 'nombre']);
+            $allUsuarios->each(function ($u) use (&$usuariosMap) {
+                $usuariosMap[(int) $u->id]    = $u->nombre;
+                $usuariosMap[(string) $u->id] = $u->nombre;
+            });
+        }
+
+        // Lista filtrada para el formulario: solo el propio usuario si el rol está restringido
+        $projectUsuarios = $allUsuarios->map(fn($u) => ['id' => $u->id, 'label' => $u->nombre ?? "#{$u->id}"])->values()->toArray();
+        if (!$this->userCanSeeAllRecords($project)) {
+            $ownId = Auth::user()?->projectUserId($project);
+            if ($ownId) {
+                $projectUsuarios = array_values(array_filter($projectUsuarios, fn($u) => (string) $u['id'] === (string) $ownId));
+            }
         }
 
         return view('listado', [
@@ -116,6 +128,7 @@ class ListadoController extends Controller
             'registros'         => $registros,
             'fkOptions'         => $fkOptions,
             'usuariosMap'       => $usuariosMap,
+            'projectUsuarios'   => $projectUsuarios,
             'modoTabla'         => $modoTabla,
             'tablaNoDisponible' => $tablaNoDisponible,
             'requiredHidden'    => $requiredHidden,
@@ -153,6 +166,18 @@ class ListadoController extends Controller
         $user = Auth::user();
         if (!$user) return false;
         return $user->canEditTable($project, $tableName);
+    }
+
+    private function userCanSeeAllRecords(Project $project): bool
+    {
+        $user = Auth::user();
+        if (!$user || $user->isProjectAdmin($project)) return true;
+
+        $projectUserId = $user->projectUserId($project);
+        if (!$projectUserId) return true;
+
+        $role = $this->getUserProjectRole($project, $projectUserId);
+        return !$role || $role->todos_registros;
     }
 
     // Carga el registro de rol del usuario en {slug}_roles
