@@ -178,7 +178,9 @@ class FichaController extends Controller
         ]);
 
         if ($projectTable->name === 'usuarios') {
-            $this->syncAdminUserPassword($registro, $newHidden === 1 || (bool) $registro->deleted);
+            $deactivate = $newHidden === 1 || (bool) $registro->deleted;
+            DB::table($fullTable)->where('id', $id)
+                ->update(['acceso' => $deactivate ? 'sin acceso' : 'APP y web']);
         }
 
         return back();
@@ -198,7 +200,9 @@ class FichaController extends Controller
         ]);
 
         if ($projectTable->name === 'usuarios') {
-            $this->syncAdminUserPassword($registro, $newDeleted === 1 || (bool) $registro->hidden);
+            $deactivate = $newDeleted === 1 || (bool) $registro->hidden;
+            DB::table($fullTable)->where('id', $id)
+                ->update(['acceso' => $deactivate ? 'sin acceso' : 'APP y web']);
         }
 
         return back();
@@ -300,22 +304,6 @@ class FichaController extends Controller
             ->whereIn('id', $ids)
             ->pluck('name', 'id')
             ->toArray();
-    }
-
-    // Bloquea o restaura la contraseña del usuario de admin según si está oculto/borrado
-    private function syncAdminUserPassword(object $registro, bool $deactivate): void
-    {
-        $adminUserId = $registro->admin_user_id ?? null;
-        if (!$adminUserId) return;
-
-        $user = User::find($adminUserId);
-        if (!$user) return;
-
-        if ($deactivate) {
-            $user->update(['password' => '!disabled!', 'must_change_password' => false]);
-        } else {
-            $user->update(['password' => Hash::make('bienvenido'), 'must_change_password' => true]);
-        }
     }
 
     // Cuando se guarda en {slug}_usuarios, crea/actualiza la cuenta global y el rol

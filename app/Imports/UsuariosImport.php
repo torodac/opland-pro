@@ -71,6 +71,7 @@ class UsuariosImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
                 }
 
                 DB::table($fullTable)->insert(array_merge($rowData, [
+                    'acceso'     => 'APP y web',
                     'createdat'  => $now,
                     'updatedat'  => $now,
                     'createuser' => $this->importerId,

@@ -119,6 +119,7 @@ class Project extends Model
                 $t->unsignedBigInteger('id_rol')->nullable();
                 $t->string('dni', 20)->nullable();
                 $t->string('telefono', 30)->nullable();
+                $t->string('acceso', 20)->default('APP y web');
                 $t->unsignedBigInteger('admin_user_id')->nullable();
                 $t->tinyInteger('hidden')->default(0);
                 $t->tinyInteger('deleted')->default(0);
@@ -135,6 +136,7 @@ class Project extends Model
             ['name' => 'id_rol',   'label' => 'Rol',       'type' => 'id',       'order' => 20,  'in_list' => true,  'in_form' => true,  'required' => false, 'extras' => 'ref:roles'],
             ['name' => 'dni',      'label' => 'DNI',       'type' => 'string',   'order' => 30,  'in_list' => false, 'in_form' => true,  'required' => false],
             ['name' => 'telefono', 'label' => 'Teléfono',  'type' => 'telefono', 'order' => 40,  'in_list' => false, 'in_form' => true,  'required' => false],
+            ['name' => 'acceso',   'label' => 'Acceso',    'type' => 'select',   'order' => 50,  'in_list' => true,  'in_form' => true,  'required' => false, 'extras' => 'opt:APP,web,APP y web,sin acceso'],
             ['name' => 'hidden',   'label' => 'Oculto',    'type' => 'tinyint',  'order' => 997, 'in_list' => false, 'in_form' => false, 'required' => false],
             ['name' => 'deleted',  'label' => 'Borrado',   'type' => 'tinyint',  'order' => 998, 'in_list' => false, 'in_form' => false, 'required' => false],
         ];
