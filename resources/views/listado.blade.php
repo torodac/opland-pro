@@ -336,7 +336,18 @@
                                                 @endforeach
                                             </select>
                                         @elseif($campo->type === 'multiusuario')
-                                            <span class="block px-2 py-1 text-gray-400 text-xs">—</span>
+                                            @php $seenIds = [] @endphp
+                                            <select multiple
+                                                    x-init="(() => { try { const sel = JSON.parse(value || '[]').map(String); $el.querySelectorAll('option').forEach(o => o.selected = sel.includes(o.value)); } catch(e){} })()"
+                                                    @change="value = JSON.stringify(Array.from($el.selectedOptions).map(o => o.value)); save()"
+                                                    class="w-full text-sm border border-transparent hover:border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-transparent focus:bg-white outline-none transition-colors">
+                                                @foreach($usuariosMap as $uid => $unombre)
+                                                    @if(!in_array((string)$uid, $seenIds))
+                                                        @php $seenIds[] = (string)$uid @endphp
+                                                        <option value="{{ $uid }}">{{ $unombre }}</option>
+                                                    @endif
+                                                @endforeach
+                                            </select>
                                         @elseif($campo->type === 'text')
                                             <div @click="editing = true">
                                                 <span x-show="!editing" class="block px-2 py-1 min-w-16 min-h-7 rounded cursor-text hover:bg-gray-50 truncate max-w-xs" x-text="value || '—'"></span>
@@ -485,6 +496,17 @@
                                             <option value="{{ $fkId }}">{{ $fkNombre }}</option>
                                         @endforeach
                                     </select>
+                                @elseif($campo->type === 'multiusuario')
+                                    @php $seenIds2 = [] @endphp
+                                    <select multiple x-model="fields['{{ $campo->name }}']"
+                                            class="w-full text-sm border border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-white outline-none">
+                                        @foreach($usuariosMap as $uid => $unombre)
+                                            @if(!in_array((string)$uid, $seenIds2))
+                                                @php $seenIds2[] = (string)$uid @endphp
+                                                <option value="{{ $uid }}">{{ $unombre }}</option>
+                                            @endif
+                                        @endforeach
+                                    </select>
                                 @elseif($campo->type === 'text')
                                     <textarea x-model="fields['{{ $campo->name }}']" rows="2"
                                               @keydown.escape="cancel()"
@@ -570,7 +592,7 @@ function newRowForm() {
     return {
         newRow: false,
         saving: false,
-        fields: {!! json_encode(collect($campos)->mapWithKeys(fn($c) => [$c->name => ''])) !!},
+        fields: {!! json_encode(collect($campos)->mapWithKeys(fn($c) => [$c->name => $c->type === 'multiusuario' ? [] : ''])) !!},
         async save() {
             this.saving = true;
             try {
