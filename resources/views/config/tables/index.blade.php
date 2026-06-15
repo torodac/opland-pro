@@ -22,7 +22,8 @@
                  data-csrf="{{ csrf_token() }}">
                 @foreach($panelTables as $table)
                     <div class="table-card cursor-grab active:cursor-grabbing select-none flex items-center gap-2.5 px-3 py-2.5 bg-white border border-gray-200 rounded-lg hover:border-orange-300 hover:bg-orange-50 transition-colors group"
-                         data-id="{{ $table->id }}">
+                         data-id="{{ $table->id }}"
+                         data-patch-url="{{ route('config.projects.tables.patch', [$project, $table]) }}">
                         <svg class="w-4 h-4 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0112 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m2.25-2.25h.375a1.125 1.125 0 011.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125H12m2.625 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125h.375"/>
                         </svg>
@@ -38,17 +39,17 @@
     </div>
 
     {{-- Configuración (solo admin) --}}
-    @if($configTables->count())
     <div style="margin-bottom: 2.3rem;">
         <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Configuración</h2>
 
         <div id="sortable-config"
-             class="border border-dashed border-gray-300 rounded-xl p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3"
+             class="border border-dashed border-gray-300 rounded-xl p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 min-h-[60px]"
              data-reorder-url="{{ route('config.projects.tables.reorder', $project) }}"
              data-csrf="{{ csrf_token() }}">
             @foreach($configTables as $table)
                 <div class="table-card cursor-grab active:cursor-grabbing select-none flex items-center gap-2.5 px-3 py-2.5 bg-white border border-gray-200 rounded-lg hover:border-orange-300 hover:bg-orange-50 transition-colors group"
-                     data-id="{{ $table->id }}">
+                     data-id="{{ $table->id }}"
+                     data-patch-url="{{ route('config.projects.tables.patch', [$project, $table]) }}">
                     <svg class="w-4 h-4 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>
                     </svg>
@@ -61,7 +62,6 @@
             @endforeach
         </div>
     </div>
-    @endif
 
     {{-- Crear tabla --}}
     <div style="margin-bottom: 2.3rem;" x-data="{
@@ -220,11 +220,26 @@ document.addEventListener('DOMContentLoaded', () => {
           .catch(e => console.error('reorder fetch failed', e));
     }
 
+    const csrf = document.querySelector('[id^="sortable-"]')?.dataset.csrf;
+
     document.querySelectorAll('[id^="sortable-"]').forEach(container => {
         Sortable.create(container, {
+            group: 'tables',
             animation: 150,
             ghostClass: 'opacity-40',
-            onEnd: sendGlobalOrder,
+            onEnd(evt) {
+                if (evt.from !== evt.to) {
+                    const tableId  = evt.item.dataset.id;
+                    const adminOnly = evt.to.id === 'sortable-config';
+                    const patchUrl = evt.item.dataset.patchUrl;
+                    fetch(patchUrl, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf },
+                        body: JSON.stringify({ admin_only: adminOnly }),
+                    }).then(r => { if (!r.ok) console.error('patch admin_only failed', r.status); });
+                }
+                sendGlobalOrder();
+            },
         });
     });
 });
