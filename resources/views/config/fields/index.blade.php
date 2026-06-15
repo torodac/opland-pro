@@ -258,35 +258,34 @@
         @if($errors->has('new_name'))
             <p class="text-xs text-red-500 px-4 pt-3">{{ $errors->first('new_name') }}</p>
         @endif
-        <form method="POST" action="{{ route('config.projects.tables.clone', [$project, $table]) }}"
-              class="p-4 grid grid-cols-1 sm:grid-cols-[auto_auto_auto_auto] gap-4 items-end">
+        <form method="POST" action="{{ route('config.projects.tables.clone', [$project, $table]) }}" class="p-4">
             @csrf
-            <div class="flex flex-col gap-1">
-                <label class="text-xs text-gray-500 font-medium">Proyecto destino</label>
-                <select name="target_project_id" required
-                        class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
-                    @foreach($allProjects as $proj)
-                        <option value="{{ $proj->id }}" {{ $proj->id === $project->id ? 'selected' : '' }}>{{ $proj->name }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div class="flex flex-col gap-1">
-                <label class="text-xs text-gray-500 font-medium">Nombre interno <span class="text-red-400">*</span></label>
-                <input type="text" name="new_name" required
-                       value="{{ old('new_name') }}"
-                       placeholder="ej: fotos_extra"
-                       class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 font-mono">
-            </div>
-            <div class="flex flex-col gap-1">
-                <label class="text-xs text-gray-500 font-medium">Etiqueta <span class="text-red-400">*</span></label>
-                <input type="text" name="new_label" required
-                       value="{{ old('new_label') }}"
-                       placeholder="ej: Fotos extra"
-                       class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
-            </div>
-            <div>
+            <div style="display:flex; flex-wrap:wrap; gap:1rem; align-items:flex-end;">
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <label class="text-xs text-gray-500 font-medium">Proyecto destino</label>
+                    <select name="target_project_id" required
+                            class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
+                        @foreach($allProjects as $proj)
+                            <option value="{{ $proj->id }}" {{ $proj->id === $project->id ? 'selected' : '' }}>{{ $proj->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <label class="text-xs text-gray-500 font-medium">Nombre interno <span class="text-red-400">*</span></label>
+                    <input type="text" name="new_name" required
+                           value="{{ old('new_name') }}"
+                           placeholder="ej: fotos_extra"
+                           class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 font-mono">
+                </div>
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <label class="text-xs text-gray-500 font-medium">Etiqueta <span class="text-red-400">*</span></label>
+                    <input type="text" name="new_label" required
+                           value="{{ old('new_label') }}"
+                           placeholder="ej: Fotos extra"
+                           class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
+                </div>
                 <button type="submit"
-                        class="w-full px-4 py-2 bg-gray-700 hover:bg-gray-800 text-white text-sm font-medium rounded-lg transition-colors">
+                        class="px-4 py-2 bg-gray-700 hover:bg-gray-800 text-white text-sm font-medium rounded-lg transition-colors">
                     <i class="fa-regular fa-copy mr-1"></i> Crear
                 </button>
             </div>
