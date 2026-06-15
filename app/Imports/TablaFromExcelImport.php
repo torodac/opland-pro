@@ -78,8 +78,10 @@ class TablaFromExcelImport implements ToCollection, WithHeadingRow, SkipsEmptyRo
                                     ? "Solo acepta 0/1 (valor: «{$val}»)" : null,
                     'decimal' => (!preg_match('/^-?\d+([.,]\d+)?$/', $val))
                                     ? 'No es un número decimal válido' : null,
-                    'fecha'   => (!preg_match('/\d{2,4}[-\/]\d{2}[-\/]\d{2,4}/', $val))
-                                    ? 'Formato de fecha no reconocido' : null,
+                    'fecha'     => (!preg_match('/^(\d{1,2}\/\d{1,2}\/\d{4}|\d{2,4}[-]\d{2}[-]\d{2,4})$/', $val))
+                                    ? 'Formato de fecha no reconocido (esperado dd/mm/aaaa o aaaa-mm-dd)' : null,
+                    'timestamp' => (!preg_match('/^(\d{1,2}\/\d{1,2}\/\d{4}( \d{1,2}:\d{2}(:\d{2})?)?|\d{4}-\d{2}-\d{2}( \d{2}:\d{2}(:\d{2})?)?)$/', $val))
+                                    ? 'Formato de timestamp no reconocido (esperado dd/mm/aaaa hh:MM o aaaa-mm-dd hh:MM:ss)' : null,
                     'email'   => (!filter_var($val, FILTER_VALIDATE_EMAIL))
                                     ? 'No es un email válido' : null,
                     'string'  => (mb_strlen($val) > 255)
@@ -119,16 +121,19 @@ class TablaFromExcelImport implements ToCollection, WithHeadingRow, SkipsEmptyRo
         $allDecimal = $values->every(fn($v) => preg_match('/^\d+([.,]\d+)?$/', (string) $v));
         if ($allDecimal) return 'decimal';
 
-        $allDate = $values->every(function ($v) {
-            try {
-                return (bool) \Carbon\Carbon::parse((string) $v);
-            } catch (\Exception) {
-                return false;
-            }
-        });
-        if ($allDate && $values->every(fn($v) => preg_match('/\d{2,4}[-\/]\d{2}[-\/]\d{2,4}/', (string) $v))) {
-            return 'fecha';
-        }
+        // Timestamp: dd/mm/aaaa hh:MM o aaaa-mm-dd hh:MM:ss
+        $allTimestamp = $values->every(fn($v) => preg_match(
+            '/^(\d{1,2}\/\d{1,2}\/\d{4} \d{1,2}:\d{2}|\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2})/',
+            (string) $v
+        ));
+        if ($allTimestamp) return 'timestamp';
+
+        // Fecha: dd/mm/aaaa o aaaa-mm-dd
+        $allDate = $values->every(fn($v) => preg_match(
+            '/^(\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2})$/',
+            (string) $v
+        ));
+        if ($allDate) return 'fecha';
 
         $allEmail = $values->every(fn($v) => filter_var($v, FILTER_VALIDATE_EMAIL));
         if ($allEmail) return 'email';

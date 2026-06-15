@@ -31,6 +31,22 @@ class TablaImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
         $this->buildRefCache();
     }
 
+    // Convierte dd/mm/aaaa [hh:MM[:ss]] → aaaa-mm-dd [hh:MM:ss]
+    private function normalizeDateValue(string $val, string $type): string
+    {
+        // Formato dd/mm/aaaa hh:MM[:ss]
+        if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/', $val, $m)) {
+            $date = sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]);
+            $time = sprintf('%02d:%02d:%02d', $m[4], $m[5], $m[6] ?? 0);
+            return $type === 'fecha' ? $date : "{$date} {$time}";
+        }
+        // Formato dd/mm/aaaa
+        if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $val, $m)) {
+            return sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]);
+        }
+        return $val;
+    }
+
     // Pre-carga los mapas nombre→id para todos los campos desplegable
     private function buildRefCache(): void
     {
@@ -50,6 +66,7 @@ class TablaImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
     {
         $fullTable    = $this->projectTable->getFullTableName();
         $allowedNames = $this->projectTable->fields->pluck('name')->toArray();
+        $fieldTypes   = $this->projectTable->fields->pluck('type', 'name')->toArray();
         $now          = now();
 
         foreach ($rows as $row) {
@@ -62,6 +79,11 @@ class TablaImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
                 // Si el campo tiene lookup y el valor no es numérico, resolver texto→id
                 if ($valor !== null && isset($this->refCache[$name]) && !is_numeric($valor)) {
                     $valor = $this->refCache[$name][trim((string) $valor)] ?? null;
+                }
+
+                // Normalizar fechas y timestamps en formato dd/mm/aaaa [hh:MM]
+                if ($valor !== null && in_array($fieldTypes[$name] ?? '', ['fecha', 'timestamp'])) {
+                    $valor = $this->normalizeDateValue((string) $valor, $fieldTypes[$name]);
                 }
 
                 $rowData[$name] = $valor;

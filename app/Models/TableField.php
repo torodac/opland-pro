@@ -43,6 +43,7 @@ class TableField extends Model
         'tinyint'   => 'boolean',   // YES/NO select
         'smallint'  => 'boolean',   // checkbox
         'fecha'     => 'date',
+        'timestamp' => 'timestamp',
         'time'      => 'time',
         'email'     => 'string',
         'telefono'  => 'string',
@@ -74,6 +75,7 @@ class TableField extends Model
                 'decimal'          => $table->decimal($this->name, 10, 2)->nullable(),
                 'boolean'          => $table->boolean($this->name)->nullable(),
                 'date'             => $table->date($this->name)->nullable(),
+                'timestamp'        => $table->timestamp($this->name)->nullable(),
                 'time'             => $table->time($this->name)->nullable(),
                 'unsignedBigInteger' => $table->unsignedBigInteger($this->name)->nullable(),
                 'json'             => $table->json($this->name)->nullable(),
