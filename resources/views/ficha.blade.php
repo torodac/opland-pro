@@ -4,6 +4,18 @@
         @if($registro)
             {{-- Modo lectura --}}
             <div id="grupo-ver" class="flex gap-2">
+                {{-- Reset password: solo en tabla usuarios, solo admins --}}
+                @if($projectTable->name === 'usuarios' && auth()->user()?->isProjectAdmin($project))
+                <form method="POST" action="{{ route('ficha.reset-password', [$project->slug, $projectTable->name, $registro->id]) }}">
+                    @csrf
+                    <button type="submit"
+                            onclick="return confirm('¿Restablecer la contraseña a «bienvenido»?')"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors">
+                        <i class="fa-solid fa-key text-xs"></i>
+                        <span class="hidden sm:inline">Reset password</span>
+                    </button>
+                </form>
+                @endif
                 {{-- Bloquear / Desbloquear: solo admins, siempre visible --}}
                 @if(auth()->user()?->isProjectAdmin($project))
                 <form method="POST" action="{{ route('ficha.block', [$project->slug, $projectTable->name, $registro->id]) }}">
@@ -94,6 +106,12 @@
         @endif
 
     </x-slot>
+
+    @if(session('success'))
+        <div class="mb-4 px-4 py-3 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg">
+            {{ session('success') }}
+        </div>
+    @endif
 
     <div x-data="{ tab: 'detalles' }">
 

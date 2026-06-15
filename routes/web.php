@@ -101,6 +101,7 @@ Route::middleware('auth')->group(function () {
         Route::patch('{table}/{id}/campo', [FichaController::class, 'updateField'])->name('ficha.update-field');
         Route::patch('{table}/{id}/archivar', [FichaController::class, 'archive'])->name('ficha.archive');
         Route::patch('{table}/{id}/bloquear', [FichaController::class, 'block'])->name('ficha.block');
+        Route::post('{table}/{id}/reset-password', [FichaController::class, 'resetPassword'])->name('ficha.reset-password');
         Route::delete('{table}/{id}', [FichaController::class, 'destroy'])->name('ficha.destroy');
     });
 

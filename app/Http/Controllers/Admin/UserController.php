@@ -22,32 +22,12 @@ class UserController extends Controller
 
     public function create()
     {
-        $projects = Project::orderBy('name')->get();
-
-        return view('config.users.form', ['user' => new User(), 'projects' => $projects]);
+        abort(403, 'Los usuarios se crean desde la tabla Usuarios de cada proyecto.');
     }
 
     public function store(Request $request)
     {
-        $data = $request->validate([
-            'name'  => 'required|string|max:100',
-            'email' => 'required|email|unique:admin_users,email',
-            'roles' => 'nullable|array',
-            'roles.*' => 'string|max:100',
-        ]);
-
-        $user = User::create([
-            'name'                 => $data['name'],
-            'email'                => $data['email'],
-            'password'             => Hash::make('bienvenido'),
-            'must_change_password' => true,
-        ]);
-
-        foreach ($data['roles'] ?? [] as $role) {
-            UserRole::create(['user_id' => $user->id, 'role' => $role]);
-        }
-
-        return redirect()->route('config.users.index')->with('success', 'Usuario creado.');
+        abort(403, 'Los usuarios se crean desde la tabla Usuarios de cada proyecto.');
     }
 
     public function edit(User $user)

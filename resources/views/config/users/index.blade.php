@@ -11,10 +11,7 @@
 
     <div class="flex items-center justify-between mb-6">
         <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Usuarios de la aplicación</h2>
-        <a href="{{ route('config.users.create') }}"
-           class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors">
-            + Nuevo usuario
-        </a>
+        <p class="text-xs text-gray-400">Los usuarios se crean desde la tabla Usuarios de cada proyecto.</p>
     </div>
 
     <div class="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">

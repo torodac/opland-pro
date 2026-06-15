@@ -193,6 +193,26 @@ class FichaController extends Controller
         return redirect()->route('ficha', [$project->slug, $table, $id]);
     }
 
+    public function resetPassword(Project $project, string $table, int $id)
+    {
+        abort_unless($table === 'usuarios', 404);
+        abort_unless(Auth::user()?->isProjectAdmin($project), 403);
+
+        $fullTable = $project->slug . '_usuarios';
+        $registro  = DB::table($fullTable)->find($id);
+        abort_if(!$registro, 404);
+
+        $appUser = User::where('email', $registro->mail ?? '')->first();
+        abort_if(!$appUser, 404, 'No se encontró la cuenta de acceso vinculada.');
+
+        $appUser->update([
+            'password'             => Hash::make('bienvenido'),
+            'must_change_password' => true,
+        ]);
+
+        return back()->with('success', "Contraseña de {$registro->nombre} restablecida a 'bienvenido'.");
+    }
+
     public function block(Project $project, string $table, int $id)
     {
         abort_unless(Auth::user()?->isProjectAdmin($project), 403);

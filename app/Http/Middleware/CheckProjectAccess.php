@@ -5,6 +5,8 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class CheckProjectAccess
 {
@@ -17,6 +19,20 @@ class CheckProjectAccess
 
         if (!$user->canAccessProject($project)) {
             abort(403, 'No tienes acceso a este proyecto.');
+        }
+
+        // Comprobar campo acceso en {slug}_usuarios (solo usuarios no-admin)
+        if (!$user->isProjectAdmin($project)) {
+            $usuariosTable = $project->slug . '_usuarios';
+            if (Schema::hasTable($usuariosTable)) {
+                $acceso = DB::table($usuariosTable)
+                    ->where('admin_user_id', $user->id)
+                    ->value('acceso');
+                // APP = solo móvil, sin acceso = nada; ambos bloquean la web
+                if (in_array($acceso, ['APP', 'sin acceso'])) {
+                    abort(403, 'No tienes acceso a este proyecto.');
+                }
+            }
         }
 
         $tableName = $request->route('table');
