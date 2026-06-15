@@ -37,7 +37,11 @@
                         <input type="text" name="icon" value="{{ old('icon', $table->icon) }}"
                                class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 font-mono"
                                placeholder="fas fa-users">
-                        <p class="text-xs text-gray-400 mt-1">Clase de Font Awesome, ej: <span class="font-mono">fas fa-calendar</span></p>
+                        <p class="text-xs text-gray-400 mt-1">
+                            Clase de Font Awesome, ej: <span class="font-mono">fas fa-calendar</span> —
+                            <a href="https://fontawesome.com/search?o=r&m=free" target="_blank"
+                               class="text-orange-500 hover:underline">Ver iconos disponibles</a>
+                        </p>
                     </div>
                 </div>
 
