@@ -39,7 +39,7 @@
                                placeholder="fas fa-users">
                         <p class="text-xs text-gray-400 mt-1">
                             Clase de Font Awesome, ej: <span class="font-mono">fas fa-calendar</span> —
-                            <a href="https://fontawesome.com/search?o=r&m=free" target="_blank"
+                            <a href="https://fontawesome.com/v6/search?o=r&m=free" target="_blank"
                                class="text-orange-500 hover:underline">Ver iconos disponibles</a>
                         </p>
                     </div>
