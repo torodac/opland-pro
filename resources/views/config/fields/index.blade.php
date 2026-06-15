@@ -285,7 +285,7 @@
             </div>
             <div>
                 <button type="submit"
-                        class="px-5 py-2 bg-gray-700 hover:bg-gray-800 text-white text-sm font-medium rounded-lg transition-colors">
+                        class="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors">
                     <i class="fa-regular fa-copy mr-1.5"></i> Crear tabla
                 </button>
             </div>
