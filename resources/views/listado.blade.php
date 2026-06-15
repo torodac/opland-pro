@@ -488,7 +488,7 @@
                                     <input type="date" x-model="fields['{{ $campo->name }}']"
                                            @keydown.enter="save()"
                                            class="w-full text-sm border border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-white outline-none">
-                                @elseif($campo->type === 'id')
+                                @elseif(in_array($campo->type, ['id', 'desplegable']))
                                     <select x-model="fields['{{ $campo->name }}']"
                                             class="w-full text-sm border border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-white outline-none">
                                         <option value=""></option>
