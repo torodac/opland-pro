@@ -30,11 +30,35 @@ class FichaController extends Controller
         $role = $user->getProjectRolePublic($project);
         if (!$role || $role->todos_registros) return;
 
-        $ids = json_decode($registro->control_user ?? '[]', true) ?? [];
-        if (empty($ids)) return; // sin restricción cuando control_user es null o []
-        $ids = array_map('strval', $ids);
+        $valor = $registro->control_user ?? null;
 
-        abort_if(!in_array((string) $projectUserId, $ids), 403);
+        // Determinar tipo del campo control_user
+        $fieldType = $this->getControlUserFieldType($project, $fullTable);
+
+        if ($fieldType === 'desplegable') {
+            // Valor único (entero): null = sin restricción
+            if ($valor === null || $valor === '') return;
+            abort_if((string) $valor !== (string) $projectUserId, 403);
+        } else {
+            // multiusuario: JSON array — vacío = sin restricción
+            $ids = json_decode($valor ?? '[]', true) ?? [];
+            if (empty($ids)) return;
+            $ids = array_map('strval', $ids);
+            abort_if(!in_array((string) $projectUserId, $ids), 403);
+        }
+    }
+
+    private function getControlUserFieldType(Project $project, string $fullTable): string
+    {
+        // Extraer el nombre de la tabla dinámica (sin slug)
+        $tableName = str_replace($project->slug . '_', '', $fullTable, $replaced = 1);
+        $field = $project->tables()
+            ->where('name', $tableName)
+            ->first()
+            ?->fields()
+            ->where('name', 'control_user')
+            ->value('type');
+        return $field ?? 'multiusuario';
     }
 
     private function resolveTable(Project $project, string $table): ProjectTable
@@ -229,18 +253,26 @@ class FichaController extends Controller
         return back();
     }
 
-    // Carga opciones [id => nombre] para cada campo FK (type='id' con extras='ref:tabla')
+    // Carga opciones [id => nombre] para cada campo FK (type='id'/'desplegable' con extras='ref:tabla')
     private function loadFkOptions(Project $project, ProjectTable $projectTable): array
     {
+        $restricted    = !$this->userCanSeeAllRecords($project);
+        $ownProjectId  = $restricted ? Auth::user()?->projectUserId($project) : null;
+        $usuariosTable = $project->slug . '_usuarios';
+
         $options = [];
         foreach ($projectTable->fields as $field) {
             $fullRef = $field->getRefFullTable($project->slug);
             if (!$fullRef) continue;
-            $options[$field->name] = DB::table($fullRef)
-                ->where('deleted', 0)
-                ->orderBy('nombre')
-                ->pluck('nombre', 'id')
-                ->toArray();
+
+            $query = DB::table($fullRef)->where('deleted', 0)->orderBy('nombre');
+
+            // Si es control_user como desplegable y el rol está restringido, solo el propio usuario
+            if ($restricted && $field->name === 'control_user' && $field->type === 'desplegable' && $fullRef === $usuariosTable) {
+                $query->where('id', $ownProjectId);
+            }
+
+            $options[$field->name] = $query->pluck('nombre', 'id')->toArray();
         }
         return $options;
     }

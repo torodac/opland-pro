@@ -70,16 +70,20 @@ class ListadoController extends Controller
 
         $registros = $query->orderByDesc('id')->paginate(50)->withQueryString();
 
-        // Opciones para campos FK (type='id')
+        // Opciones para campos FK (type='id'/'desplegable')
+        $restricted   = !$this->userCanSeeAllRecords($project);
+        $ownProjectId = $restricted ? Auth::user()?->projectUserId($project) : null;
+        $usuariosTable = $project->slug . '_usuarios';
+
         $fkOptions = [];
         foreach ($projectTable->listFields as $field) {
             $fullRef = $field->getRefFullTable($project->slug);
             if (!$fullRef) continue;
-            $fkOptions[$field->name] = DB::table($fullRef)
-                ->where('deleted', 0)
-                ->orderBy('nombre')
-                ->pluck('nombre', 'id')
-                ->toArray();
+            $fkQuery = DB::table($fullRef)->where('deleted', 0)->orderBy('nombre');
+            if ($restricted && $field->name === 'control_user' && $field->type === 'desplegable' && $fullRef === $usuariosTable) {
+                $fkQuery->where('id', $ownProjectId);
+            }
+            $fkOptions[$field->name] = $fkQuery->pluck('nombre', 'id')->toArray();
         }
 
         // Comprueba si el rol del usuario permite editar esta tabla
@@ -151,13 +155,34 @@ class ListadoController extends Controller
         $role = $this->getUserProjectRole($project, $projectUserId);
         if (!$role || $role->todos_registros) return;
 
-        $isPgsql = DB::connection()->getDriverName() === 'pgsql';
-        $cast    = $isPgsql ? '::text' : '';
-        $query->where(function ($q) use ($projectUserId, $cast) {
-            $q->whereNull('control_user')
-              ->orWhereRaw("control_user{$cast} = '[]'")
-              ->orWhereRaw("control_user{$cast} LIKE ?", ["%\"{$projectUserId}\"%"]);
-        });
+        $fieldType = $this->getControlUserFieldType($project, $fullTable);
+
+        if ($fieldType === 'desplegable') {
+            $query->where(function ($q) use ($projectUserId) {
+                $q->whereNull('control_user')
+                  ->orWhere('control_user', $projectUserId);
+            });
+        } else {
+            $isPgsql = DB::connection()->getDriverName() === 'pgsql';
+            $cast    = $isPgsql ? '::text' : '';
+            $query->where(function ($q) use ($projectUserId, $cast) {
+                $q->whereNull('control_user')
+                  ->orWhereRaw("control_user{$cast} = '[]'")
+                  ->orWhereRaw("control_user{$cast} LIKE ?", ["%\"{$projectUserId}\"%"]);
+            });
+        }
+    }
+
+    private function getControlUserFieldType(Project $project, string $fullTable): string
+    {
+        $tableName = str_replace($project->slug . '_', '', $fullTable, $replaced = 1);
+        $field = $project->tables()
+            ->where('name', $tableName)
+            ->first()
+            ?->fields()
+            ->where('name', 'control_user')
+            ->value('type');
+        return $field ?? 'multiusuario';
     }
 
     // Comprueba si el usuario puede editar registros de esta tabla según su rol
