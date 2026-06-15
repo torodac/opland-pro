@@ -41,6 +41,7 @@ class FieldController extends Controller
         $data['required'] = $request->boolean('required');
         $data['in_list']  = $request->boolean('in_list');
         $data['in_form']  = $request->boolean('in_form');
+        $data['extras']   = $this->normalizeExtras($data['type'] ?? null, $data['extras'] ?? null);
 
         $field = $table->fields()->create($data);
 
@@ -76,6 +77,7 @@ class FieldController extends Controller
         $data['required'] = $request->boolean('required');
         $data['in_list']  = $request->boolean('in_list');
         $data['in_form']  = $request->boolean('in_form');
+        $data['extras']   = $this->normalizeExtras($field->type, $data['extras'] ?? null);
 
         $field->update($data);
 
@@ -118,5 +120,14 @@ class FieldController extends Controller
         return redirect()
             ->route('config.projects.tables.fields.index', [$project, $table])
             ->with('success', 'Campo eliminado.');
+    }
+
+    private function normalizeExtras(?string $type, ?string $extras): ?string
+    {
+        if (!$extras) return $extras;
+        if ($type === 'select' && !str_starts_with($extras, 'opt:') && !str_starts_with($extras, 'ref:')) {
+            return 'opt:' . $extras;
+        }
+        return $extras;
     }
 }
