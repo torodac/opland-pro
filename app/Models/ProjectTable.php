@@ -88,6 +88,7 @@ class ProjectTable extends Model
             Schema::create($tableName, function (Blueprint $table) {
                 $table->id();
                 $table->string('nombre')->nullable();
+                $table->tinyInteger('blocked')->default(0);
                 $table->tinyInteger('hidden')->default(0);
                 $table->tinyInteger('deleted')->default(0);
                 $table->unsignedBigInteger('createuser')->nullable();
@@ -99,9 +100,10 @@ class ProjectTable extends Model
 
         // Campos de sistema visibles en formulario y listado
         $systemFields = [
-            ['name' => 'nombre',   'label' => 'Nombre',   'type' => 'string',  'order' => 1,   'in_list' => true,  'in_form' => true,  'required' => true],
-            ['name' => 'hidden', 'label' => 'Oculto', 'type' => 'tinyint', 'order' => 997, 'in_list' => false, 'in_form' => false, 'required' => false],
-            ['name' => 'deleted',  'label' => 'Borrado',  'type' => 'tinyint', 'order' => 998, 'in_list' => false, 'in_form' => false, 'required' => false],
+            ['name' => 'nombre',   'label' => 'Nombre',    'type' => 'string',  'order' => 1,   'in_list' => true,  'in_form' => true,  'required' => true],
+            ['name' => 'blocked',  'label' => 'Bloqueado', 'type' => 'tinyint', 'order' => 996, 'in_list' => false, 'in_form' => false, 'required' => false],
+            ['name' => 'hidden',   'label' => 'Oculto',    'type' => 'tinyint', 'order' => 997, 'in_list' => false, 'in_form' => false, 'required' => false],
+            ['name' => 'deleted',  'label' => 'Borrado',   'type' => 'tinyint', 'order' => 998, 'in_list' => false, 'in_form' => false, 'required' => false],
         ];
 
         foreach ($systemFields as $f) {

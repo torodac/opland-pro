@@ -22,6 +22,12 @@
                     </svg>
                     <span class="hidden sm:inline">Nueva</span>
                 </a>
+                @if($registro->blocked ?? false)
+                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-400 border border-red-200 rounded-lg">
+                    <i class="fas fa-lock text-xs"></i>
+                    <span class="hidden sm:inline">Bloqueado</span>
+                </span>
+                @endif
                 @if($canEdit ?? true)
                 <button onclick="toggleEdit()"
                         class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">
@@ -30,7 +36,7 @@
                     </svg>
                     <span class="hidden sm:inline">Editar</span>
                 </button>
-                @else
+                @elseif(!($registro->blocked ?? false))
                 <span class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-400 border border-gray-200 rounded-lg cursor-not-allowed"
                       title="No tienes permisos para editar esta tabla">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -68,6 +74,16 @@
                     <i class="fas {{ $registro->deleted ? 'fa-trash-restore' : 'fa-trash' }} text-xs"></i>
                     <span class="hidden sm:inline">{{ $registro->deleted ? 'Restaurar' : 'Eliminar' }}</span>
                 </button>
+
+                {{-- Bloquear / Desbloquear --}}
+                <form method="POST" action="{{ route('ficha.block', [$project->slug, $projectTable->name, $registro->id]) }}">
+                    @csrf @method('PATCH')
+                    <button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors
+                        {{ $registro->blocked ? 'border-green-300 text-green-600 hover:bg-green-50' : 'border-red-300 text-red-500 hover:bg-red-50' }}">
+                        <i class="fas {{ $registro->blocked ? 'fa-lock-open' : 'fa-lock' }} text-xs"></i>
+                        <span class="hidden sm:inline">{{ $registro->blocked ? 'Desbloquear' : 'Bloquear' }}</span>
+                    </button>
+                </form>
 
                 {{-- Cancelar --}}
                 <button onclick="toggleEdit()"

@@ -58,7 +58,8 @@ class FichaController extends Controller
         $usuarios   = $this->resolveUsers($registro->createuser, $registro->updateuser);
         $fkOptions  = $this->loadFkOptions($project, $projectTable);
         $tabs       = $this->loadTabData($project, $projectTable, $id);
-        $canEdit    = Auth::user()?->canEditTable($project, $projectTable->name) ?? false;
+        $canEdit    = (Auth::user()?->canEditTable($project, $projectTable->name) ?? false)
+                      && !$registro->blocked;
         $usuariosMap = $this->loadUsuariosMap($project);
 
         $camposFicha = ($projectTable->nombre_ocultar_ficha && $projectTable->nombre_formula)
@@ -146,6 +147,8 @@ class FichaController extends Controller
     public function update(Request $request, Project $project, string $table, int $id)
     {
         $projectTable = $this->resolveTable($project, $table);
+        $registro = DB::table($projectTable->getFullTableName())->find($id);
+        abort_if($registro?->blocked, 403, 'Este registro está bloqueado y no puede editarse.');
         $this->validateRequired($request, $projectTable);
         $data = $this->filterData($request, $projectTable);
         $data['updateuser'] = $this->currentUserId() ?? DB::table($projectTable->getFullTableName())->where('id', $id)->value('updateuser');
@@ -162,6 +165,21 @@ class FichaController extends Controller
         }
 
         return redirect()->route('ficha', [$project->slug, $table, $id]);
+    }
+
+    public function block(Project $project, string $table, int $id)
+    {
+        $projectTable = $this->resolveTable($project, $table);
+        $fullTable    = $projectTable->getFullTableName();
+        $registro     = DB::table($fullTable)->find($id);
+
+        DB::table($fullTable)->where('id', $id)->update([
+            'blocked'    => $registro->blocked ? 0 : 1,
+            'updateuser' => $this->currentUserId() ?? $registro->updateuser,
+            'updatedat'  => now(),
+        ]);
+
+        return back();
     }
 
     public function archive(Project $project, string $table, int $id)
