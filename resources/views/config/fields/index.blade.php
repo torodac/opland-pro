@@ -38,6 +38,8 @@
                    class="text-sm border border-gray-200 rounded-lg px-2.5 py-1 w-56 focus:outline-none focus:ring-2 focus:ring-orange-300 font-mono">
         </div>
         <span x-show="saving" class="text-xs text-gray-400" x-cloak>Guardando…</span>
+        <a href="https://fontawesome.com/v6/search?o=r&m=free" target="_blank"
+           class="text-xs text-orange-500 hover:underline shrink-0">Ver iconos</a>
     </div>
 
     <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
