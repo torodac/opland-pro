@@ -21,9 +21,9 @@
                 <form method="POST" action="{{ route('ficha.block', [$project->slug, $projectTable->name, $registro->id]) }}">
                     @csrf @method('PATCH')
                     <button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors
-                        {{ $registro->blocked ? 'border-green-300 text-green-600 hover:bg-green-50' : 'border-gray-200 text-gray-500 hover:bg-gray-50' }}">
-                        <i class="fas {{ $registro->blocked ? 'fa-lock-open' : 'fa-lock' }} text-xs"></i>
-                        <span class="hidden sm:inline">{{ $registro->blocked ? 'Desbloquear' : 'Bloquear' }}</span>
+                        {{ ($registro->blocked ?? false) ? 'border-green-300 text-green-600 hover:bg-green-50' : 'border-gray-200 text-gray-500 hover:bg-gray-50' }}">
+                        <i class="fas {{ ($registro->blocked ?? false) ? 'fa-lock-open' : 'fa-lock' }} text-xs"></i>
+                        <span class="hidden sm:inline">{{ ($registro->blocked ?? false) ? 'Desbloquear' : 'Bloquear' }}</span>
                     </button>
                 </form>
                 @endif

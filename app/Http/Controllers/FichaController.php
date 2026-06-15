@@ -51,7 +51,7 @@ class FichaController extends Controller
     private function getControlUserFieldType(Project $project, string $fullTable): string
     {
         // Extraer el nombre de la tabla dinámica (sin slug)
-        $tableName = str_replace($project->slug . '_', '', $fullTable, $replaced = 1);
+        $tableName = substr($fullTable, strlen($project->slug . '_'));
         $field = $project->tables()
             ->where('name', $tableName)
             ->first()
@@ -84,7 +84,7 @@ class FichaController extends Controller
         $fkOptions  = $this->loadFkOptions($project, $projectTable);
         $tabs       = $this->loadTabData($project, $projectTable, $id);
         $canEdit    = (Auth::user()?->canEditTable($project, $projectTable->name) ?? false)
-                      && !$registro->blocked;
+                      && !($registro->blocked ?? false);
         $usuariosMap = $this->loadUsuariosMap($project);
 
         $camposFicha = ($projectTable->nombre_ocultar_ficha && $projectTable->nombre_formula)
@@ -174,7 +174,7 @@ class FichaController extends Controller
     {
         $projectTable = $this->resolveTable($project, $table);
         $registro = DB::table($projectTable->getFullTableName())->find($id);
-        abort_if($registro?->blocked, 403, 'Este registro está bloqueado y no puede editarse.');
+        abort_if($registro?->blocked ?? false, 403, 'Este registro está bloqueado y no puede editarse.');
         $this->validateRequired($request, $projectTable);
         $data = $this->filterData($request, $projectTable);
         $data['updateuser'] = $this->currentUserId() ?? DB::table($projectTable->getFullTableName())->where('id', $id)->value('updateuser');
@@ -221,7 +221,7 @@ class FichaController extends Controller
         $registro     = DB::table($fullTable)->find($id);
 
         DB::table($fullTable)->where('id', $id)->update([
-            'blocked'    => $registro->blocked ? 0 : 1,
+            'blocked'    => ($registro->blocked ?? 0) ? 0 : 1,
             'updateuser' => $this->currentUserId() ?? $registro->updateuser,
             'updatedat'  => now(),
         ]);

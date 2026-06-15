@@ -175,7 +175,7 @@ class ListadoController extends Controller
 
     private function getControlUserFieldType(Project $project, string $fullTable): string
     {
-        $tableName = str_replace($project->slug . '_', '', $fullTable, $replaced = 1);
+        $tableName = substr($fullTable, strlen($project->slug . '_'));
         $field = $project->tables()
             ->where('name', $tableName)
             ->first()
