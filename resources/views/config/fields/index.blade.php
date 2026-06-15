@@ -248,6 +248,52 @@
         </div>
     @endif
 
+    {{-- Clonar estructura (solo admin global) --}}
+    @if(auth()->user()?->isAdmin() && $allProjects->isNotEmpty())
+    <div class="mt-6 bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="px-4 py-3 bg-gray-50 border-b border-gray-100">
+            <h2 class="text-sm font-semibold text-gray-700">Clonar estructura</h2>
+            <p class="text-xs text-gray-400 mt-0.5">Crea una tabla nueva con los mismos campos en el proyecto que elijas. No copia datos.</p>
+        </div>
+        <form method="POST" action="{{ route('config.projects.tables.clone', [$project, $table]) }}" class="p-4 space-y-4">
+            @csrf
+            @if($errors->has('new_name'))
+                <p class="text-xs text-red-500">{{ $errors->first('new_name') }}</p>
+            @endif
+            <div class="flex flex-wrap gap-4 items-end">
+                <div class="flex flex-col gap-1">
+                    <label class="text-xs text-gray-500 font-medium">Proyecto destino</label>
+                    <select name="target_project_id" required
+                            class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 w-48">
+                        @foreach($allProjects as $p)
+                            <option value="{{ $p->id }}" {{ $p->id === $project->id ? 'selected' : '' }}>{{ $p->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-xs text-gray-500 font-medium">Nombre interno <span class="text-red-400">*</span></label>
+                    <input type="text" name="new_name" required
+                           value="{{ old('new_name', $table->name) }}"
+                           placeholder="ej: fotos_extra"
+                           class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 font-mono w-44">
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-xs text-gray-500 font-medium">Etiqueta <span class="text-red-400">*</span></label>
+                    <input type="text" name="new_label" required
+                           value="{{ old('new_label', $table->label) }}"
+                           placeholder="ej: Fotos extra"
+                           class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 w-44">
+                </div>
+                <button type="submit"
+                        onclick="return confirm('¿Clonar la estructura de «{{ addslashes($table->label) }}»?')"
+                        class="px-4 py-2 bg-gray-700 hover:bg-gray-800 text-white text-sm font-medium rounded-lg transition-colors">
+                    <i class="fa-regular fa-copy mr-1"></i> Clonar
+                </button>
+            </div>
+        </form>
+    </div>
+    @endif
+
 </x-app-layout>
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>

@@ -55,6 +55,9 @@ Route::middleware('auth')->group(function () {
             Route::patch('projects/{project}/tables/{table}/patch',
                 [App\Http\Controllers\Admin\TableController::class, 'patch'])
                 ->name('projects.tables.patch')->scopeBindings();
+            Route::post('projects/{project}/tables/{table}/clone',
+                [App\Http\Controllers\Admin\FieldController::class, 'cloneTable'])
+                ->name('projects.tables.clone')->scopeBindings()->middleware('role.admin');
             Route::patch('projects/{project}/tables/{table}/tabs',
                 [App\Http\Controllers\Admin\TableController::class, 'updateTabs'])
                 ->name('projects.tables.tabs')->scopeBindings();

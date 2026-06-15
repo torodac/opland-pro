@@ -14,8 +14,9 @@ class FieldController extends Controller
     {
         $fields        = $table->fields()->orderBy('order')->get();
         $relatedTables = $table->relatedTables();
+        $allProjects   = auth()->user()?->isAdmin() ? Project::orderBy('name')->get() : collect();
 
-        return view('config.fields.index', compact('project', 'table', 'fields', 'relatedTables'));
+        return view('config.fields.index', compact('project', 'table', 'fields', 'relatedTables', 'allProjects'));
     }
 
     public function create(Project $project, ProjectTable $table)
@@ -120,6 +121,76 @@ class FieldController extends Controller
         return redirect()
             ->route('config.projects.tables.fields.index', [$project, $table])
             ->with('success', 'Campo eliminado.');
+    }
+
+    public function cloneTable(Request $request, Project $project, ProjectTable $table)
+    {
+        $request->validate([
+            'new_name'         => 'required|alpha_dash|max:50',
+            'new_label'        => 'required|string|max:100',
+            'target_project_id'=> 'required|exists:projects,id',
+        ]);
+
+        $target    = Project::findOrFail($request->target_project_id);
+        $newName   = $request->new_name;
+        $newLabel  = $request->new_label;
+        $fullName  = $target->slug . '_' . $newName;
+
+        if (\Illuminate\Support\Facades\Schema::hasTable($fullName)) {
+            return back()->withErrors(['new_name' => "La tabla «{$fullName}» ya existe en la BD."]);
+        }
+        if ($target->tables()->where('name', $newName)->exists()) {
+            return back()->withErrors(['new_name' => "Ya existe una tabla con ese nombre en el proyecto «{$target->name}»."]);
+        }
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($project, $table, $target, $newName, $newLabel) {
+            $nextOrder  = $target->tables()->max('order') + 1;
+            $newTable   = $target->tables()->create([
+                'name'       => $newName,
+                'label'      => $newLabel,
+                'order'      => $nextOrder,
+                'admin_only' => $table->admin_only,
+            ]);
+
+            $newTable->menuItem()->create([
+                'project_id' => $target->id,
+                'label'      => $newLabel,
+                'order'      => $nextOrder,
+                'icon'       => $table->menuItem?->icon ?? 'fa-table',
+            ]);
+
+            $newTable->createDynamicTable();
+
+            $existingNames = $newTable->fields()->pluck('name')->toArray();
+            $sourceFields  = $table->fields()->orderBy('order')->get();
+
+            foreach ($sourceFields as $field) {
+                if (in_array($field->name, $existingNames)) continue;
+
+                $cloned = $newTable->fields()->create([
+                    'name'     => $field->name,
+                    'label'    => $field->label,
+                    'type'     => $field->type,
+                    'extras'   => $field->extras,
+                    'order'    => $field->order,
+                    'in_list'  => $field->in_list,
+                    'in_form'  => $field->in_form,
+                    'required' => $field->required,
+                ]);
+                $cloned->addColumnToTable();
+            }
+
+            if ($table->nombre_formula) {
+                $newTable->update([
+                    'nombre_formula'        => $table->nombre_formula,
+                    'nombre_ocultar_ficha'  => $table->nombre_ocultar_ficha,
+                ]);
+            }
+        });
+
+        return redirect()
+            ->route('config.projects.tables.fields.index', [$target, $newName])
+            ->with('success', "Tabla «{$newLabel}» clonada en el proyecto «{$target->name}».");
     }
 
     private function normalizeExtras(?string $type, ?string $extras): ?string
