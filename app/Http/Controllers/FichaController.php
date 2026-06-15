@@ -393,6 +393,8 @@ class FichaController extends Controller
     {
         $rules = [];
         foreach ($projectTable->fields->where('required', true) as $field) {
+            // nombre se calcula automáticamente cuando hay fórmula; no validar como required
+            if ($field->name === 'nombre' && $projectTable->nombre_formula) continue;
             $rules[$field->name] = 'required';
         }
 
