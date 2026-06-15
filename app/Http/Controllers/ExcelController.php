@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Exports\TablaExport;
 use App\Imports\TablaImport;
 use App\Imports\TablaFromExcelImport;
+use App\Imports\UsuariosImport;
 use App\Models\Project;
 use App\Models\ProjectTable;
 use App\Models\TableField;
@@ -119,13 +120,17 @@ class ExcelController extends Controller
 
         $keyFields = array_filter($request->input('key_fields', []));
 
-        $importer = new TablaImport(
-            $project,
-            $projectTable,
-            empty($keyFields) ? [] : $keyFields,
-            $request->input('dup_mode'),
-            auth()->id()
-        );
+        if ($projectTable->name === 'usuarios') {
+            $importer = new UsuariosImport($project, $projectTable, auth()->id());
+        } else {
+            $importer = new TablaImport(
+                $project,
+                $projectTable,
+                empty($keyFields) ? [] : $keyFields,
+                $request->input('dup_mode'),
+                auth()->id()
+            );
+        }
 
         Excel::import($importer, Storage::path($path));
 
