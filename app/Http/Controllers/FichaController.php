@@ -285,7 +285,10 @@ class FichaController extends Controller
             $fullRef = $field->getRefFullTable($project->slug);
             if (!$fullRef) continue;
 
-            $query = DB::table($fullRef)->where('deleted', 0)->orderBy('nombre');
+            $query = DB::table($fullRef)
+                ->where(fn($q) => $q->whereNull('deleted')->orWhere('deleted', 0))
+                ->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))
+                ->orderBy('nombre');
 
             // Si es control_user como desplegable y el rol está restringido, solo el propio usuario
             if ($restricted && $field->name === 'control_user' && $field->type === 'desplegable' && $fullRef === $usuariosTable) {
@@ -328,7 +331,9 @@ class FichaController extends Controller
                 $fullRef = $field->getRefFullTable($project->slug);
                 if (!$fullRef) continue;
                 $tabFkOptions[$field->name] = DB::table($fullRef)
-                    ->where('deleted', 0)->orderBy('nombre')
+                    ->where(fn($q) => $q->whereNull('deleted')->orWhere('deleted', 0))
+                    ->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))
+                    ->orderBy('nombre')
                     ->pluck('nombre', 'id')->toArray();
             }
 

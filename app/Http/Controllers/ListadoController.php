@@ -79,7 +79,10 @@ class ListadoController extends Controller
         foreach ($projectTable->listFields as $field) {
             $fullRef = $field->getRefFullTable($project->slug);
             if (!$fullRef) continue;
-            $fkQuery = DB::table($fullRef)->where('deleted', 0)->orderBy('nombre');
+            $fkQuery = DB::table($fullRef)
+                ->where(fn($q) => $q->whereNull('deleted')->orWhere('deleted', 0))
+                ->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))
+                ->orderBy('nombre');
             if ($restricted && $field->name === 'control_user' && $field->type === 'desplegable' && $fullRef === $usuariosTable) {
                 $fkQuery->where('id', $ownProjectId);
             }

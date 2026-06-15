@@ -67,7 +67,7 @@ class TablaImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
 
             $fullRef = $this->project->slug . '_' . $refTable;
             $this->refCache[$field->name] = DB::table($fullRef)
-                ->where('deleted', 0)
+                ->where(fn($q) => $q->whereNull('deleted')->orWhere('deleted', 0))
                 ->pluck('id', 'nombre')
                 ->toArray();
         }
