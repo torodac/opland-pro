@@ -64,6 +64,8 @@ Route::middleware('auth')->group(function () {
                 ->name('projects.import-excel.form');
             Route::post('projects/{project}/import-excel/preview', [ExcelController::class, 'createFromExcelPreview'])
                 ->name('projects.import-excel.preview');
+            Route::post('projects/{project}/import-excel/validate', [ExcelController::class, 'createFromExcelValidate'])
+                ->name('projects.import-excel.validate');
             Route::post('projects/{project}/import-excel/confirm', [ExcelController::class, 'createFromExcel'])
                 ->name('projects.import-excel.confirm');
 

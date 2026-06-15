@@ -4,7 +4,7 @@
     <h1 class="text-xl font-semibold text-gray-800 mb-1">Crear tabla desde Excel</h1>
     <p class="text-sm text-gray-500 mb-6">Revisa y ajusta los campos inferidos antes de crear la tabla.</p>
 
-    <form action="{{ route('config.projects.import-excel.confirm', $project) }}" method="POST" class="space-y-6">
+    <form action="{{ route('config.projects.import-excel.validate', $project) }}" method="POST" class="space-y-6">
         @csrf
         <input type="hidden" name="table_name" value="{{ $tableName }}">
         <input type="hidden" name="table_label" value="{{ $tableLabel }}">

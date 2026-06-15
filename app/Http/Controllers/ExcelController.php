@@ -176,6 +176,55 @@ class ExcelController extends Controller
         ));
     }
 
+    public function createFromExcelValidate(Request $request, Project $project)
+    {
+        $request->validate([
+            'table_name'     => 'required|alpha_dash|max:50',
+            'table_label'    => 'required|string|max:100',
+            'fields'         => 'required|array',
+            'fields.*.name'  => 'required|alpha_dash|max:50',
+            'fields.*.label' => 'required|string|max:100',
+            'fields.*.type'  => 'required|in:' . implode(',', array_keys(TableField::$typeMap)),
+            'dup_mode'       => 'required|in:insert,update,skip',
+        ]);
+
+        $path = session('excel_create_path');
+        if (!$path) {
+            return back()->withErrors(['archivo' => 'Sesión expirada. Vuelve a subir el archivo.']);
+        }
+
+        $importer = new TablaFromExcelImport();
+        Excel::import($importer, Storage::path($path));
+
+        $fields     = $request->input('fields', []);
+        $fieldNames = array_column($fields, 'name');
+        $fieldTypes = array_column($fields, 'type');
+
+        $errors = $importer->validateAgainstTypes($fieldNames, $fieldTypes);
+
+        if (empty($errors)) {
+            // Sin errores: proceder directamente al confirm
+            return $this->createFromExcel($request, $project);
+        }
+
+        $errorsByCol = [];
+        foreach ($errors as $e) {
+            $errorsByCol[$e['col']][] = $e;
+        }
+
+        return view('excel.create-from-excel-errors', [
+            'project'     => $project,
+            'errors'      => $errors,
+            'errorsByCol' => $errorsByCol,
+            'totalRows'   => $importer->allRows->count(),
+            'fields'      => $fields,
+            'tableName'   => $request->table_name,
+            'tableLabel'  => $request->table_label,
+            'dupMode'     => $request->dup_mode,
+            'keyFields'   => $request->input('key_fields', []),
+        ]);
+    }
+
     public function createFromExcel(Request $request, Project $project)
     {
         $request->validate([
@@ -242,13 +291,15 @@ class ExcelController extends Controller
             $projectTable->load('fields');
 
             // 6. Importar datos
-            $keyFields = array_filter($request->input('key_fields', []));
-            $importer = new TablaImport(
+            $keyFields  = array_filter($request->input('key_fields', []));
+            $skipErrors = (bool) $request->input('skip_errors', false);
+            $importer   = new TablaImport(
                 $project,
                 $projectTable,
                 empty($keyFields) ? [] : $keyFields,
                 $request->input('dup_mode'),
-                auth()->id()
+                auth()->id(),
+                $skipErrors
             );
             Excel::import($importer, Storage::path($path));
 

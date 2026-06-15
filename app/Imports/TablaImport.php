@@ -25,7 +25,8 @@ class TablaImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
         private ProjectTable $projectTable,
         private array $keyFields,
         private string $dupMode,
-        private int $userId = 0
+        private int $userId = 0,
+        private bool $skipErrors = false
     ) {
         $this->buildRefCache();
     }
@@ -95,15 +96,23 @@ class TablaImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
                 }
             }
 
-            DB::table($fullTable)->insert(array_merge($rowData, [
-                'createdat'  => $now,
-                'updatedat'  => $now,
-                'createuser' => $this->userId,
-                'updateuser' => $this->userId,
-                'deleted'    => 0,
-                'hidden'     => 0,
-            ]));
-            $this->inserted++;
+            try {
+                DB::table($fullTable)->insert(array_merge($rowData, [
+                    'createdat'  => $now,
+                    'updatedat'  => $now,
+                    'createuser' => $this->userId,
+                    'updateuser' => $this->userId,
+                    'deleted'    => 0,
+                    'hidden'     => 0,
+                ]));
+                $this->inserted++;
+            } catch (\Exception $e) {
+                if ($this->skipErrors) {
+                    $this->skipped++;
+                } else {
+                    throw $e;
+                }
+            }
         }
     }
 }
