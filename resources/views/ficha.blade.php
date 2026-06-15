@@ -4,6 +4,17 @@
         @if($registro)
             {{-- Modo lectura --}}
             <div id="grupo-ver" class="flex gap-2">
+                {{-- Bloquear / Desbloquear: solo admins, siempre visible --}}
+                @if(auth()->user()?->isProjectAdmin($project))
+                <form method="POST" action="{{ route('ficha.block', [$project->slug, $projectTable->name, $registro->id]) }}">
+                    @csrf @method('PATCH')
+                    <button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors
+                        {{ $registro->blocked ? 'border-green-300 text-green-600 hover:bg-green-50' : 'border-gray-200 text-gray-500 hover:bg-gray-50' }}">
+                        <i class="fas {{ $registro->blocked ? 'fa-lock-open' : 'fa-lock' }} text-xs"></i>
+                        <span class="hidden sm:inline">{{ $registro->blocked ? 'Desbloquear' : 'Bloquear' }}</span>
+                    </button>
+                </form>
+                @endif
                 {{-- Clonar --}}
                 @if($canEdit ?? true)
                 <a href="{{ route('ficha.create', [$project->slug, $projectTable->name]) }}?{{ http_build_query(collect($projectTable->fields)->filter(fn($f) => $f->in_form)->mapWithKeys(fn($f) => [$f->name => $registro->{$f->name} ?? ''])->toArray()) }}"
@@ -22,31 +33,17 @@
                     </svg>
                     <span class="hidden sm:inline">Nueva</span>
                 </a>
-                {{-- Bloquear / Desbloquear: solo admins, siempre visible --}}
-                @if(auth()->user()?->isProjectAdmin($project))
-                <form method="POST" action="{{ route('ficha.block', [$project->slug, $projectTable->name, $registro->id]) }}">
-                    @csrf @method('PATCH')
-                    <button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors
-                        {{ $registro->blocked ? 'border-green-300 text-green-600 hover:bg-green-50' : 'border-gray-200 text-gray-500 hover:bg-gray-50' }}">
-                        <i class="fas {{ $registro->blocked ? 'fa-lock-open' : 'fa-lock' }} text-xs"></i>
-                        <span class="hidden sm:inline">{{ $registro->blocked ? 'Desbloquear' : 'Bloquear' }}</span>
-                    </button>
-                </form>
-                @endif
+                {{-- Editar --}}
                 @if($canEdit ?? true)
                 <button onclick="toggleEdit()"
                         class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 0L19 7l-6.586 6.586A2 2 0 0116 14H13v-3z"/>
-                    </svg>
+                    <i class="fa-solid fa-pen-to-square text-sm"></i>
                     <span class="hidden sm:inline">Editar</span>
                 </button>
                 @elseif(!($registro->blocked ?? false))
                 <span class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-400 border border-gray-200 rounded-lg cursor-not-allowed"
                       title="No tienes permisos para editar esta tabla">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
-                    </svg>
+                    <i class="fa-solid fa-ban text-sm"></i>
                     <span class="hidden sm:inline">Sin permisos</span>
                 </span>
                 @endif
