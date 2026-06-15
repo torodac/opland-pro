@@ -31,9 +31,11 @@ class TableController extends Controller
 
         $table->update($data);
 
-        if (isset($data['icon'])) {
-            \App\Models\MenuItem::where('project_table_id', $table->id)
-                ->update(['icon' => $data['icon']]);
+        $menuUpdate = [];
+        if (isset($data['icon']))  $menuUpdate['icon']  = $data['icon'];
+        if (isset($data['label'])) $menuUpdate['label'] = $data['label'];
+        if ($menuUpdate) {
+            \App\Models\MenuItem::where('project_table_id', $table->id)->update($menuUpdate);
         }
 
         return response()->json(['ok' => true]);
@@ -115,6 +117,12 @@ class TableController extends Controller
         $data['admin_only']   = $request->boolean('admin_only');
 
         $table->update($data);
+
+        \App\Models\MenuItem::where('project_table_id', $table->id)
+            ->update(array_filter([
+                'label' => $data['label'] ?? null,
+                'icon'  => $data['icon'] ?? null,
+            ]));
 
         return redirect()
             ->route('config.projects.tables.fields.index', [$project, $table])
