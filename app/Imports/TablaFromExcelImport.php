@@ -50,7 +50,12 @@ class TablaFromExcelImport implements ToCollection, WithHeadingRow, SkipsEmptyRo
         if ($allBool) return 'tinyint';
 
         $allInt = $values->every(fn($v) => preg_match('/^\d+$/', (string) $v));
-        if ($allInt) return 'int';
+        if ($allInt) {
+            // Si algún valor supera el rango de integer de PostgreSQL, usar string
+            // (teléfonos, IDs largos, etc. no son operables como entero)
+            $maxVal = $values->max(fn($v) => (int) $v);
+            return $maxVal > 2147483647 ? 'string' : 'int';
+        }
 
         $allDecimal = $values->every(fn($v) => preg_match('/^\d+([.,]\d+)?$/', (string) $v));
         if ($allDecimal) return 'decimal';
