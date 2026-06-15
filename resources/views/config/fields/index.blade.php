@@ -21,25 +21,34 @@
 
     {{-- Barra ajustes de tabla --}}
     @php $patchTableUrl = route('config.projects.tables.patch', [$project, $table]); @endphp
-    <div class="mb-4 flex items-center gap-4 px-5 py-3.5 bg-white rounded-xl border border-gray-200 text-sm text-gray-600"
-         x-data="{ icon: '{{ $table->icon ?? '' }}', saving: false, save() {
-             this.saving = true;
-             fetch('{{ $patchTableUrl }}', {
-                 method: 'PATCH',
-                 headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
-                 body: JSON.stringify({ icon: this.icon })
-             }).finally(() => { setTimeout(() => this.saving = false, 600) });
-         } }">
+    <div class="mb-4 flex items-center gap-4 px-5 py-3.5 bg-white rounded-xl border border-gray-200 text-sm text-gray-600 flex-wrap"
+         x-data="{
+             label: {{ json_encode($table->label) }},
+             icon: '{{ $table->icon ?? '' }}',
+             saving: false,
+             save(fields) {
+                 this.saving = true;
+                 fetch('{{ $patchTableUrl }}', {
+                     method: 'PATCH',
+                     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                     body: JSON.stringify(fields)
+                 }).finally(() => { setTimeout(() => this.saving = false, 600) });
+             }
+         }">
+        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide shrink-0">Nombre</span>
+        <input type="text" x-model="label" @change="save({ label })" @blur="save({ label })"
+               class="text-sm border border-gray-200 rounded-lg px-2.5 py-1 w-48 focus:outline-none focus:ring-2 focus:ring-orange-300">
+        <span class="text-gray-200">|</span>
         <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide shrink-0">Icono sidebar</span>
         <div class="flex items-center gap-2">
             <i :class="icon || 'fa-regular fa-circle'" class="fa-fw text-gray-500 text-sm w-5 text-center"></i>
-            <input type="text" x-model="icon" @change="save()" @blur="save()"
+            <input type="text" x-model="icon" @change="save({ icon })" @blur="save({ icon })"
                    placeholder="fa-solid fa-dumbbell"
                    class="text-sm border border-gray-200 rounded-lg px-2.5 py-1 w-56 focus:outline-none focus:ring-2 focus:ring-orange-300 font-mono">
         </div>
-        <span x-show="saving" class="text-xs text-gray-400" x-cloak>Guardando…</span>
         <a href="https://fontawesome.com/v6/search?o=r&m=free" target="_blank"
            class="text-xs text-orange-500 hover:underline shrink-0">Ver iconos</a>
+        <span x-show="saving" class="text-xs text-gray-400" x-cloak>Guardando…</span>
     </div>
 
     {{-- Configuración nombre --}}
@@ -47,29 +56,24 @@
          x-data="{
              formula: {{ json_encode($table->nombre_formula ?? '') }},
              ocultarFicha: {{ $table->nombre_ocultar_ficha ?? true ? 'true' : 'false' }},
-             ocultarListado: {{ $table->nombre_ocultar_listado ?? true ? 'true' : 'false' }},
              saving: false,
              save() {
                  this.saving = true;
                  fetch('{{ $patchTableUrl }}', {
                      method: 'PATCH',
                      headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
-                     body: JSON.stringify({ nombre_formula: this.formula, nombre_ocultar_ficha: this.ocultarFicha, nombre_ocultar_listado: this.ocultarListado })
+                     body: JSON.stringify({ nombre_formula: this.formula, nombre_ocultar_ficha: this.ocultarFicha })
                  }).finally(() => { setTimeout(() => this.saving = false, 600) });
              }
          }">
         <div class="flex items-center gap-4 flex-wrap">
-            <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide shrink-0">Configuración nombre</span>
+            <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide shrink-0">Fórmula nombre</span>
             <input type="text" x-model="formula" @change="save()" @blur="save()"
                    placeholder='campo1+"_"+campo2'
                    class="text-sm border border-gray-200 rounded-lg px-2.5 py-1 w-80 focus:outline-none focus:ring-2 focus:ring-orange-300 font-mono">
             <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-500">
                 <input type="checkbox" x-model="ocultarFicha" @change="save()" class="rounded">
                 Ocultar en ficha
-            </label>
-            <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-500">
-                <input type="checkbox" x-model="ocultarListado" @change="save()" class="rounded">
-                Ocultar en listado
             </label>
             <span x-show="saving" class="text-xs text-gray-400" x-cloak>Guardando…</span>
         </div>
