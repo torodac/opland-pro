@@ -14,15 +14,16 @@ class User extends Authenticatable
 
     protected $table = 'admin_users';
 
-    protected $fillable = ['name', 'email', 'password'];
+    protected $fillable = ['name', 'email', 'password', 'must_change_password'];
 
     protected $hidden = ['password', 'remember_token'];
 
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
-            'password'          => 'hashed',
+            'email_verified_at'    => 'datetime',
+            'password'             => 'hashed',
+            'must_change_password' => 'boolean',
         ];
     }
 

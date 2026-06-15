@@ -26,19 +26,21 @@
                            required>
                 </div>
 
+                @if($user->exists)
                 <div class="px-5 py-4 flex items-start gap-4">
-                    <label class="w-32 shrink-0 text-sm text-gray-400 pt-2">
-                        Contraseña {{ $user->exists ? '' : '*' }}
-                    </label>
+                    <label class="w-32 shrink-0 text-sm text-gray-400 pt-2">Contraseña</label>
                     <div class="flex-1">
                         <input type="password" name="password"
-                               class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300"
-                               {{ $user->exists ? '' : 'required' }}>
-                        @if($user->exists)
-                            <p class="text-xs text-gray-400 mt-1">Déjala vacía para no cambiarla.</p>
-                        @endif
+                               class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
+                        <p class="text-xs text-gray-400 mt-1">Déjala vacía para no cambiarla.</p>
                     </div>
                 </div>
+                @else
+                <div class="px-5 py-4 flex items-start gap-4">
+                    <label class="w-32 shrink-0 text-sm text-gray-400 pt-2">Contraseña</label>
+                    <p class="text-sm text-gray-400 pt-2">Se asignará <span class="font-mono">bienvenido</span> y el usuario deberá cambiarla en su primer acceso.</p>
+                </div>
+                @endif
 
                 {{-- Roles --}}
                 <div class="px-5 py-4">

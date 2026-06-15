@@ -18,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'project.access' => \App\Http\Middleware\CheckProjectAccess::class,
             'auth.api'       => \App\Http\Middleware\ApiTokenAuth::class,
         ]);
+        $middleware->appendToGroup('web', \App\Http\Middleware\ForcePasswordChange::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

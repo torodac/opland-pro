@@ -12,6 +12,12 @@ Route::get('login', [LoginController::class, 'showLogin'])->name('login');
 Route::post('login', [LoginController::class, 'login']);
 Route::post('logout', [LoginController::class, 'logout'])->name('logout');
 
+// Cambio de contraseña obligatorio (primer acceso)
+Route::middleware('auth')->group(function () {
+    Route::get('change-password', [App\Http\Controllers\ChangePasswordController::class, 'show'])->name('password.change');
+    Route::post('change-password', [App\Http\Controllers\ChangePasswordController::class, 'update'])->name('password.change.update');
+});
+
 // Recuperación de contraseña
 Route::get('forgot-password', [App\Http\Controllers\PasswordResetController::class, 'showRequest'])->name('password.request');
 Route::post('forgot-password', [App\Http\Controllers\PasswordResetController::class, 'sendLink'])->name('password.send-link');

@@ -30,17 +30,17 @@ class UserController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'name'     => 'required|string|max:100',
-            'email'    => 'required|email|unique:admin_users,email',
-            'password' => ['required', Password::min(8)],
-            'roles'    => 'nullable|array',
-            'roles.*'  => 'string|max:100',
+            'name'  => 'required|string|max:100',
+            'email' => 'required|email|unique:admin_users,email',
+            'roles' => 'nullable|array',
+            'roles.*' => 'string|max:100',
         ]);
 
         $user = User::create([
-            'name'     => $data['name'],
-            'email'    => $data['email'],
-            'password' => Hash::make($data['password']),
+            'name'                 => $data['name'],
+            'email'                => $data['email'],
+            'password'             => Hash::make('bienvenido'),
+            'must_change_password' => true,
         ]);
 
         foreach ($data['roles'] ?? [] as $role) {
