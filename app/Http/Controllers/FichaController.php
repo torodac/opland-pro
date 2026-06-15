@@ -167,14 +167,19 @@ class FichaController extends Controller
     public function archive(Project $project, string $table, int $id)
     {
         $projectTable = $this->resolveTable($project, $table);
-        $fullTable = $projectTable->getFullTableName();
-        $registro = DB::table($fullTable)->find($id);
+        $fullTable    = $projectTable->getFullTableName();
+        $registro     = DB::table($fullTable)->find($id);
+        $newHidden    = $registro->hidden ? 0 : 1;
 
         DB::table($fullTable)->where('id', $id)->update([
-            'hidden'     => $registro->hidden ? 0 : 1,
+            'hidden'     => $newHidden,
             'updateuser' => $this->currentUserId() ?? $registro->updateuser,
             'updatedat'  => now(),
         ]);
+
+        if ($projectTable->name === 'usuarios') {
+            $this->syncAdminUserPassword($registro, $newHidden === 1 || (bool) $registro->deleted);
+        }
 
         return back();
     }
@@ -182,14 +187,19 @@ class FichaController extends Controller
     public function destroy(Project $project, string $table, int $id)
     {
         $projectTable = $this->resolveTable($project, $table);
-        $fullTable = $projectTable->getFullTableName();
-        $registro = DB::table($fullTable)->find($id);
+        $fullTable    = $projectTable->getFullTableName();
+        $registro     = DB::table($fullTable)->find($id);
+        $newDeleted   = $registro->deleted ? 0 : 1;
 
         DB::table($fullTable)->where('id', $id)->update([
-            'deleted'    => $registro->deleted ? 0 : 1,
+            'deleted'    => $newDeleted,
             'updateuser' => $this->currentUserId() ?? $registro->updateuser,
             'updatedat'  => now(),
         ]);
+
+        if ($projectTable->name === 'usuarios') {
+            $this->syncAdminUserPassword($registro, $newDeleted === 1 || (bool) $registro->hidden);
+        }
 
         return back();
     }
@@ -290,6 +300,22 @@ class FichaController extends Controller
             ->whereIn('id', $ids)
             ->pluck('name', 'id')
             ->toArray();
+    }
+
+    // Bloquea o restaura la contraseña del usuario de admin según si está oculto/borrado
+    private function syncAdminUserPassword(object $registro, bool $deactivate): void
+    {
+        $adminUserId = $registro->admin_user_id ?? null;
+        if (!$adminUserId) return;
+
+        $user = User::find($adminUserId);
+        if (!$user) return;
+
+        if ($deactivate) {
+            $user->update(['password' => '!disabled!', 'must_change_password' => false]);
+        } else {
+            $user->update(['password' => Hash::make('bienvenido'), 'must_change_password' => true]);
+        }
     }
 
     // Cuando se guarda en {slug}_usuarios, crea/actualiza la cuenta global y el rol
