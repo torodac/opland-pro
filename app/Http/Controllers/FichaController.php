@@ -335,10 +335,10 @@ class FichaController extends Controller
 
         $appUser = User::firstOrCreate(
             ['email' => $email],
-            ['name' => $nombre, 'password' => Hash::make(Str::random(20))]
+            ['name' => $nombre, 'password' => Hash::make('bienvenido'), 'must_change_password' => true]
         );
 
-        if ($appUser->wasRecentlyCreated === false) {
+        if (!$appUser->wasRecentlyCreated) {
             $appUser->update(['name' => $nombre, 'email' => $email]);
         }
 
