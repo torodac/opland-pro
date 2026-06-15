@@ -75,7 +75,8 @@
                     <span class="hidden sm:inline">{{ $registro->deleted ? 'Restaurar' : 'Eliminar' }}</span>
                 </button>
 
-                {{-- Bloquear / Desbloquear --}}
+                {{-- Bloquear / Desbloquear: solo admins --}}
+                @if(auth()->user()?->isProjectAdmin($project))
                 <form method="POST" action="{{ route('ficha.block', [$project->slug, $projectTable->name, $registro->id]) }}">
                     @csrf @method('PATCH')
                     <button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors
@@ -84,6 +85,7 @@
                         <span class="hidden sm:inline">{{ $registro->blocked ? 'Desbloquear' : 'Bloquear' }}</span>
                     </button>
                 </form>
+                @endif
 
                 {{-- Cancelar --}}
                 <button onclick="toggleEdit()"

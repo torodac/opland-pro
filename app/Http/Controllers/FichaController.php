@@ -169,6 +169,7 @@ class FichaController extends Controller
 
     public function block(Project $project, string $table, int $id)
     {
+        abort_unless(Auth::user()?->isProjectAdmin($project), 403);
         $projectTable = $this->resolveTable($project, $table);
         $fullTable    = $projectTable->getFullTableName();
         $registro     = DB::table($fullTable)->find($id);
