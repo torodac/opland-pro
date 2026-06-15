@@ -123,7 +123,8 @@ class ExcelController extends Controller
             $project,
             $projectTable,
             empty($keyFields) ? [] : $keyFields,
-            $request->input('dup_mode')
+            $request->input('dup_mode'),
+            auth()->id()
         );
 
         Excel::import($importer, Storage::path($path));
@@ -241,7 +242,8 @@ class ExcelController extends Controller
                 $project,
                 $projectTable,
                 empty($keyFields) ? [] : $keyFields,
-                $request->input('dup_mode')
+                $request->input('dup_mode'),
+                auth()->id()
             );
             Excel::import($importer, Storage::path($path));
 
