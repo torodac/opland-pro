@@ -77,6 +77,7 @@
         @break
 
     @case('id')
+    @case('desplegable')
         @php $opciones = $fkOptions[$campo->name] ?? []; @endphp
         <select id="campo_{{ $campo->name }}" name="{{ $campo->name }}" {{ $req }} class="{{ $base }}">
             <option value="">— Selecciona —</option>

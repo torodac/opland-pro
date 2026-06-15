@@ -106,10 +106,16 @@ class TableField extends Model
     }
 
     // Nombre completo en BD: "ref:socios" → "{slug}_socios", "ref:master.estados" → "master_estados"
+    // Para desplegable sin prefijo "ref:" (ej. "master_duraciones"), lo trata como nombre directo de tabla.
     public function getRefFullTable(string $currentSlug): string
     {
-        if (!str_starts_with($this->extras ?? '', 'ref:')) return '';
-        $ref = substr($this->extras, 4);
+        $extras = $this->extras ?? '';
+        if (!str_starts_with($extras, 'ref:')) {
+            // tolerancia: desplegable con extras = nombre directo de tabla
+            if ($this->type === 'desplegable' && $extras !== '') return $extras;
+            return '';
+        }
+        $ref = substr($extras, 4);
         if (str_contains($ref, '.')) {
             [$slug, $table] = explode('.', $ref, 2);
             return $slug . '_' . $table;
