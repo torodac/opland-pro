@@ -26,17 +26,25 @@
             {{-- Modo edición --}}
             <div id="grupo-editar" style="display:none" class="flex gap-2">
                 {{-- Ocultar --}}
-                <form method="POST" action="{{ route('ficha.archive', [$project->slug, $projectTable->name, $registro->id]) }}">
-                    @csrf @method('PATCH')
-                    <button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors
-                        {{ $registro->hidden ? 'border-green-300 text-green-600 hover:bg-green-50' : 'border-amber-300 text-amber-600 hover:bg-amber-50' }}">
-                        <i class="fas {{ $registro->hidden ? 'fa-eye' : 'fa-eye-slash' }} text-xs"></i>
-                        <span class="hidden sm:inline">{{ $registro->hidden ? 'Mostrar' : 'Ocultar' }}</span>
+                @if($projectTable->name === 'usuarios' && !$registro->hidden)
+                    <button type="button" onclick="confirmarOcultar()"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors border-amber-300 text-amber-600 hover:bg-amber-50">
+                        <i class="fas fa-eye-slash text-xs"></i>
+                        <span class="hidden sm:inline">Ocultar</span>
                     </button>
-                </form>
+                @else
+                    <form method="POST" action="{{ route('ficha.archive', [$project->slug, $projectTable->name, $registro->id]) }}">
+                        @csrf @method('PATCH')
+                        <button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors
+                            {{ $registro->hidden ? 'border-green-300 text-green-600 hover:bg-green-50' : 'border-amber-300 text-amber-600 hover:bg-amber-50' }}">
+                            <i class="fas {{ $registro->hidden ? 'fa-eye' : 'fa-eye-slash' }} text-xs"></i>
+                            <span class="hidden sm:inline">{{ $registro->hidden ? 'Mostrar' : 'Ocultar' }}</span>
+                        </button>
+                    </form>
+                @endif
 
                 {{-- Eliminar --}}
-                <button type="button" onclick="confirmarEliminar()"
+                <button type="button" onclick="{{ $projectTable->name === 'usuarios' && !$registro->deleted ? 'confirmarArchivar()' : 'confirmarEliminar()' }}"
                         class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors
                             {{ $registro->deleted ? 'border-green-300 text-green-600 hover:bg-green-50' : 'border-red-300 text-red-500 hover:bg-red-50' }}">
                     <i class="fas {{ $registro->deleted ? 'fa-trash-restore' : 'fa-trash' }} text-xs"></i>
@@ -308,6 +316,57 @@
 </div>
 @endif
 
+@if($registro && $projectTable->name === 'usuarios')
+{{-- Modal confirmación ocultar usuario --}}
+<div id="modal-ocultar" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/40" onclick="cerrarModalOcultar()"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="relative bg-white rounded-xl shadow-xl w-1/3 min-w-80 p-6">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                    <i class="fas fa-eye-slash text-amber-500"></i>
+                </div>
+                <h3 class="text-base font-semibold text-gray-800">Ocultar usuario</h3>
+            </div>
+            <p class="text-sm text-gray-500 mb-6">
+                Al ocultar a <strong>{{ $registro->nombre ?? 'este usuario' }}</strong> se le bloqueará el acceso a la aplicación. ¿Continuar?
+            </p>
+            <div class="flex justify-end gap-2">
+                <button onclick="cerrarModalOcultar()" class="px-4 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">Cancelar</button>
+                <button onclick="document.getElementById('form-archive-usuario').submit()"
+                        class="px-4 py-2 text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition-colors">Ocultar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<form id="form-archive-usuario" method="POST" action="{{ route('ficha.archive', [$project->slug, $projectTable->name, $registro->id]) }}" class="hidden">
+    @csrf @method('PATCH')
+</form>
+
+{{-- Modal confirmación archivar usuario --}}
+<div id="modal-archivar" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/40" onclick="cerrarModalArchivar()"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="relative bg-white rounded-xl shadow-xl w-1/3 min-w-80 p-6">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                    <i class="fas fa-trash text-red-500"></i>
+                </div>
+                <h3 class="text-base font-semibold text-gray-800">Eliminar usuario</h3>
+            </div>
+            <p class="text-sm text-gray-500 mb-6">
+                Al eliminar a <strong>{{ $registro->nombre ?? 'este usuario' }}</strong> se le bloqueará el acceso a la aplicación. ¿Continuar?
+            </p>
+            <div class="flex justify-end gap-2">
+                <button onclick="cerrarModalArchivar()" class="px-4 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">Cancelar</button>
+                <button onclick="document.getElementById('form-destroy').submit()"
+                        class="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors">Eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
+
 <script>
 const BG_READONLY = '#f3f4f6'; // gray-100
 
@@ -342,9 +401,20 @@ function toggleEdit() {
 function confirmarEliminar() {
     document.getElementById('modal-eliminar').classList.remove('hidden');
 }
-
 function cerrarModalEliminar() {
     document.getElementById('modal-eliminar').classList.add('hidden');
+}
+function confirmarOcultar() {
+    document.getElementById('modal-ocultar').classList.remove('hidden');
+}
+function cerrarModalOcultar() {
+    document.getElementById('modal-ocultar').classList.add('hidden');
+}
+function confirmarArchivar() {
+    document.getElementById('modal-archivar').classList.remove('hidden');
+}
+function cerrarModalArchivar() {
+    document.getElementById('modal-archivar').classList.add('hidden');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -357,7 +427,11 @@ document.addEventListener('DOMContentLoaded', () => {
     @endif
 
     document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') cerrarModalEliminar();
+        if (e.key === 'Escape') {
+            cerrarModalEliminar();
+            cerrarModalOcultar();
+            cerrarModalArchivar();
+        }
     });
 });
 </script>
