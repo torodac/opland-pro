@@ -99,17 +99,18 @@ class FichaController extends Controller
             : $projectTable->fields;
 
         return view('ficha', [
-            'project'       => $project,
-            'projectTable'  => $projectTable,
-            'campos'        => $camposFicha,
-            'registro'      => null,
-            'prefill'       => $prefill,
-            'fkOptions'     => $this->loadFkOptions($project, $projectTable),
-            'tabs'          => [],
-            'usuariosMap'   => $this->loadUsuariosMap($project),
-            'projectTables' => $project->tables()->where('admin_only', false)->orderBy('order')->get(),
-            'createUser'    => null,
-            'updateUser'    => null,
+            'project'        => $project,
+            'projectTable'   => $projectTable,
+            'campos'         => $camposFicha,
+            'registro'       => null,
+            'prefill'        => $prefill,
+            'fkOptions'      => $this->loadFkOptions($project, $projectTable),
+            'tabs'           => [],
+            'usuariosMap'    => $this->loadUsuariosMap($project),
+            'projectUsuarios' => $this->loadUsuarios($project),
+            'projectTables'  => $project->tables()->where('admin_only', false)->orderBy('order')->get(),
+            'createUser'     => null,
+            'updateUser'     => null,
             'breadcrumb'    => [
                 ['label' => $projectTable->label, 'url' => route('listado', [$project->slug, $table])],
                 ['label' => 'Nuevo',              'url' => ''],
@@ -296,7 +297,8 @@ class FichaController extends Controller
         if (!\Illuminate\Support\Facades\Schema::hasTable($table)) return [];
 
         return DB::table($table)
-            ->whereNull('deleted')->orWhere('deleted', 0)
+            ->where(fn($q) => $q->whereNull('deleted')->orWhere('deleted', 0))
+            ->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))
             ->get(['id', 'nombre'])
             ->map(fn($u) => ['id' => $u->id, 'label' => $u->nombre ?? "#{$u->id}"])
             ->values()
