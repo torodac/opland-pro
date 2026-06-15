@@ -146,20 +146,19 @@ class ProjectTable extends Model
                         $parts[] = $value;
                     }
                 } elseif ($field && $field->type === 'multiusuario') {
-                    // Multiusuario: valor almacenado como JSON array
+                    // Multiusuario: valor almacenado como JSON array de IDs
                     $ids    = array_filter((array) json_decode((string) $value, true));
                     $names  = \DB::table('admin_users')->whereIn('id', $ids)->pluck('name')->toArray();
                     $parts[] = implode(', ', $names);
-                } else {
-                    // Si el valor parece un array JSON, intentar resolverlo como IDs de usuarios
-                    $decoded = json_decode((string) $value, true);
-                    if (is_array($decoded)) {
-                        $ids = array_filter($decoded);
-                        $names = \DB::table('admin_users')->whereIn('id', $ids)->pluck('name')->toArray();
-                        $parts[] = $names ? implode(', ', $names) : $value;
-                    } else {
+                } elseif ($field && $field->type === 'fecha') {
+                    // Fecha: formatear como aaaa.mm.dd
+                    try {
+                        $parts[] = \Carbon\Carbon::parse($value)->format('Y.m.d');
+                    } catch (\Exception $e) {
                         $parts[] = $value;
                     }
+                } else {
+                    $parts[] = $value;
                 }
             }
         }
