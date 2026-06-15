@@ -73,9 +73,8 @@ class ListadoController extends Controller
         // Opciones para campos FK (type='id')
         $fkOptions = [];
         foreach ($projectTable->listFields as $field) {
-            $refTable = $field->getRefTable();
-            if (!$refTable) continue;
-            $fullRef = $project->slug . '_' . $refTable;
+            $fullRef = $field->getRefFullTable($project->slug);
+            if (!$fullRef) continue;
             $fkOptions[$field->name] = DB::table($fullRef)
                 ->where('deleted', 0)
                 ->orderBy('nombre')

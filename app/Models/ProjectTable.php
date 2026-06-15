@@ -136,10 +136,9 @@ class ProjectTable extends Model
                 }
 
                 if ($field && $field->type === 'id') {
-                    // Desplegable: resolver id → nombre en tabla referenciada
-                    $refTable = $field->getRefTable();
-                    if ($refTable) {
-                        $refFull = $this->project->slug . '_' . $refTable;
+                    // Desplegable: resolver id → nombre en tabla referenciada (admite ref:master.estados)
+                    $refFull = $field->getRefFullTable($this->project->slug);
+                    if ($refFull) {
                         $nombre  = \DB::table($refFull)->where('id', $value)->value('nombre');
                         $parts[] = $nombre ?? $value;
                     } else {

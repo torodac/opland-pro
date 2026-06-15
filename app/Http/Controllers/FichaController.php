@@ -213,9 +213,8 @@ class FichaController extends Controller
     {
         $options = [];
         foreach ($projectTable->fields as $field) {
-            $refTable = $field->getRefTable();
-            if (!$refTable) continue;
-            $fullRef = $project->slug . '_' . $refTable;
+            $fullRef = $field->getRefFullTable($project->slug);
+            if (!$fullRef) continue;
             $options[$field->name] = DB::table($fullRef)
                 ->where('deleted', 0)
                 ->orderBy('nombre')
@@ -253,9 +252,9 @@ class FichaController extends Controller
             // FK options para las celdas de la tabla relacionada
             $tabFkOptions = [];
             foreach ($relTable->fields as $field) {
-                $ref = $field->getRefTable();
-                if (!$ref) continue;
-                $tabFkOptions[$field->name] = DB::table($project->slug . '_' . $ref)
+                $fullRef = $field->getRefFullTable($project->slug);
+                if (!$fullRef) continue;
+                $tabFkOptions[$field->name] = DB::table($fullRef)
                     ->where('deleted', 0)->orderBy('nombre')
                     ->pluck('nombre', 'id')->toArray();
             }

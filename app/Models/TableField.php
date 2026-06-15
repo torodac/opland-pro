@@ -97,11 +97,24 @@ class TableField extends Model
         return $this->type === 'id';
     }
 
-    // Nombre de la tabla referenciada, extraído de extras "ref:socios" → "socios"
+    // Nombre corto de la tabla referenciada: "ref:socios" → "socios", "ref:master.estados" → "estados"
     public function getRefTable(): ?string
     {
         if (!str_starts_with($this->extras ?? '', 'ref:')) return null;
-        return substr($this->extras, 4);
+        $ref = substr($this->extras, 4);
+        return str_contains($ref, '.') ? explode('.', $ref, 2)[1] : $ref;
+    }
+
+    // Nombre completo en BD: "ref:socios" → "{slug}_socios", "ref:master.estados" → "master_estados"
+    public function getRefFullTable(string $currentSlug): string
+    {
+        if (!str_starts_with($this->extras ?? '', 'ref:')) return '';
+        $ref = substr($this->extras, 4);
+        if (str_contains($ref, '.')) {
+            [$slug, $table] = explode('.', $ref, 2);
+            return $slug . '_' . $table;
+        }
+        return $currentSlug . '_' . $ref;
     }
 
     // ¿Es readonly (calculado automáticamente)?
