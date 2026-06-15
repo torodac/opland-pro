@@ -145,9 +145,10 @@ class ProjectTable extends Model
                         $parts[] = $value;
                     }
                 } elseif ($field && $field->type === 'multiusuario') {
-                    // Multiusuario: valor almacenado como JSON array de IDs
+                    // Multiusuario: IDs de {slug}_usuarios (no admin_users)
                     $ids    = array_filter((array) json_decode((string) $value, true));
-                    $names  = \DB::table('admin_users')->whereIn('id', $ids)->pluck('name')->toArray();
+                    $names  = \DB::table($this->project->slug . '_usuarios')
+                                ->whereIn('id', $ids)->pluck('nombre')->toArray();
                     $parts[] = implode(', ', $names);
                 } elseif ($field && $field->type === 'fecha') {
                     // Fecha: formatear como aaaa.mm.dd
