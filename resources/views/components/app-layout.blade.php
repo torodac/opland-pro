@@ -57,7 +57,10 @@
                         !$i->projectTable?->admin_only &&
                         $authUser?->canViewTable($project, $i->projectTable?->name ?? '')
                     );
-                    $configItems    = $allItems->filter(fn($i) => $i->projectTable?->admin_only);
+                    $configItems    = $allItems->filter(fn($i) =>
+                        $i->projectTable?->admin_only &&
+                        $authUser?->canViewTable($project, $i->projectTable?->name ?? '')
+                    );
                     $isProjectAdmin = $authUser?->isProjectAdmin($project);
                 @endphp
 
@@ -95,8 +98,8 @@
                     @endif
                 @endforeach
 
-                {{-- Submenú Configuración: solo para admins del proyecto --}}
-                @if($isProjectAdmin && $configItems->count())
+                {{-- Submenú Configuración --}}
+                @if($configItems->count())
                     @php
                         $currentUrl   = request()->url();
                         $configActive = $configItems->contains(fn($i) => str_starts_with($currentUrl, $i->resolveUrl()));

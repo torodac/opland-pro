@@ -23,10 +23,6 @@ class CheckProjectAccess
         if ($tableName && !$user->isProjectAdmin($project)) {
             $projectTable = $project->tables()->where('name', $tableName)->first();
 
-            if ($projectTable?->admin_only) {
-                abort(403, 'No tienes permisos para acceder a esta sección.');
-            }
-
             if ($projectTable && !$user->canViewTable($project, $tableName)) {
                 abort(403, 'No tienes permisos para ver esta tabla.');
             }
