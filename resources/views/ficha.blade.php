@@ -190,8 +190,9 @@
                             <i class="fas fa-trash text-[10px]"></i> Borrado
                         </span>
                     @endif
-                    @if(auth()->user()?->isProjectAdmin($project) && !($canEdit ?? true))
+                    @if(auth()->user()?->isProjectAdmin($project))
                         <a href="{{ route('config.projects.tables.fields.index', [$project, $projectTable]) }}"
+                           id="btn-config-tabla"
                            title="Configurar campos de {{ $projectTable->label }}"
                            class="ml-auto hover:text-orange-500 transition-colors">
                             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
@@ -329,11 +330,13 @@ function setFieldsReadonly(readonly) {
 function toggleEdit() {
     const grupoVer    = document.getElementById('grupo-ver');
     const grupoEditar = document.getElementById('grupo-editar');
+    const btnConfig   = document.getElementById('btn-config-tabla');
     const isEditing   = grupoEditar.style.display === 'none';
 
     setFieldsReadonly(!isEditing);
     grupoVer.style.display    = isEditing ? 'none' : '';
     grupoEditar.style.display = isEditing ? '' : 'none';
+    if (btnConfig) btnConfig.style.display = isEditing ? 'none' : '';
 }
 
 function confirmarEliminar() {
