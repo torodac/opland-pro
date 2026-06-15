@@ -20,10 +20,10 @@ class TableController extends Controller
 
     public function patch(Request $request, Project $project, ProjectTable $table)
     {
-        $allowed = ['label', 'icon', 'admin_only', 'active'];
+        $allowed = ['label', 'icon', 'admin_only', 'active', 'nombre_formula', 'nombre_ocultar_ficha', 'nombre_ocultar_listado'];
         $data    = $request->only($allowed);
 
-        foreach (['admin_only', 'active'] as $bool) {
+        foreach (['admin_only', 'active', 'nombre_ocultar_ficha', 'nombre_ocultar_listado'] as $bool) {
             if (array_key_exists($bool, $data)) {
                 $data[$bool] = filter_var($data[$bool], FILTER_VALIDATE_BOOLEAN);
             }

@@ -42,6 +42,40 @@
            class="text-xs text-orange-500 hover:underline shrink-0">Ver iconos</a>
     </div>
 
+    {{-- Configuración nombre --}}
+    <div class="mb-4 px-5 py-3.5 bg-white rounded-xl border border-gray-200 text-sm text-gray-600"
+         x-data="{
+             formula: {{ json_encode($table->nombre_formula ?? '') }},
+             ocultarFicha: {{ $table->nombre_ocultar_ficha ?? true ? 'true' : 'false' }},
+             ocultarListado: {{ $table->nombre_ocultar_listado ?? true ? 'true' : 'false' }},
+             saving: false,
+             save() {
+                 this.saving = true;
+                 fetch('{{ $patchTableUrl }}', {
+                     method: 'PATCH',
+                     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                     body: JSON.stringify({ nombre_formula: this.formula, nombre_ocultar_ficha: this.ocultarFicha, nombre_ocultar_listado: this.ocultarListado })
+                 }).finally(() => { setTimeout(() => this.saving = false, 600) });
+             }
+         }">
+        <div class="flex items-center gap-4 flex-wrap">
+            <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide shrink-0">Configuración nombre</span>
+            <input type="text" x-model="formula" @change="save()" @blur="save()"
+                   placeholder='campo1+"_"+campo2'
+                   class="text-sm border border-gray-200 rounded-lg px-2.5 py-1 w-80 focus:outline-none focus:ring-2 focus:ring-orange-300 font-mono">
+            <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-500">
+                <input type="checkbox" x-model="ocultarFicha" @change="save()" class="rounded">
+                Ocultar en ficha
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-500">
+                <input type="checkbox" x-model="ocultarListado" @change="save()" class="rounded">
+                Ocultar en listado
+            </label>
+            <span x-show="saving" class="text-xs text-gray-400" x-cloak>Guardando…</span>
+        </div>
+        <p class="text-xs text-gray-400 mt-1.5">Ej: <span class="font-mono">fecha_inicio+"_"+responsable</span> — los desplegables se resuelven a su nombre.</p>
+    </div>
+
     <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div class="overflow-x-auto">
             <table class="w-full text-sm">

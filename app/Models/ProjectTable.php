@@ -17,15 +17,18 @@ class ProjectTable extends Model
     protected $fillable = [
         'project_id', 'name', 'label', 'icon', 'order',
         'has_kanban', 'has_calendar', 'has_matrix', 'active', 'admin_only', 'tab_tables',
+        'nombre_formula', 'nombre_ocultar_ficha', 'nombre_ocultar_listado',
     ];
 
     protected $casts = [
-        'has_kanban'   => 'boolean',
-        'has_calendar' => 'boolean',
-        'has_matrix'   => 'boolean',
-        'active'       => 'boolean',
-        'admin_only'   => 'boolean',
-        'tab_tables'   => 'array',
+        'has_kanban'              => 'boolean',
+        'has_calendar'            => 'boolean',
+        'has_matrix'              => 'boolean',
+        'active'                  => 'boolean',
+        'admin_only'              => 'boolean',
+        'tab_tables'              => 'array',
+        'nombre_ocultar_ficha'    => 'boolean',
+        'nombre_ocultar_listado'  => 'boolean',
     ];
 
     // Tablas del mismo proyecto que referencian a esta tabla mediante un campo FK
@@ -106,5 +109,53 @@ class ProjectTable extends Model
                 $this->fields()->create($f);
             }
         }
+    }
+
+    // Evalúa nombre_formula sobre un array de datos de fila y devuelve el nombre calculado
+    public function resolveNombre(array $rowData): string
+    {
+        $formula = $this->nombre_formula;
+        if (!$formula) return $rowData['nombre'] ?? '';
+
+        // Tokenizar: "literal" o nombre_campo
+        preg_match_all('/"([^"]*)"|([A-Za-z0-9_]+)/', $formula, $matches, PREG_SET_ORDER);
+
+        $parts = [];
+        foreach ($matches as $match) {
+            if ($match[1] !== '') {
+                // Literal entre comillas
+                $parts[] = $match[1];
+            } else {
+                $fieldName = $match[2];
+                $field     = $this->fields->firstWhere('name', $fieldName);
+                $value     = $rowData[$fieldName] ?? null;
+
+                if ($value === null || $value === '') {
+                    $parts[] = '';
+                    continue;
+                }
+
+                if ($field && $field->type === 'id') {
+                    // Desplegable: resolver id → nombre en tabla referenciada
+                    $refTable = $field->getRefTable();
+                    if ($refTable) {
+                        $refFull = $this->project->slug . '_' . $refTable;
+                        $nombre  = \DB::table($refFull)->where('id', $value)->value('nombre');
+                        $parts[] = $nombre ?? $value;
+                    } else {
+                        $parts[] = $value;
+                    }
+                } elseif ($field && $field->type === 'multiusuario') {
+                    // Multiusuario: ids separados por coma → nombres de usuarios
+                    $ids    = array_filter(explode(',', (string) $value));
+                    $names  = \DB::table('admin_users')->whereIn('id', $ids)->pluck('name')->toArray();
+                    $parts[] = implode(', ', $names);
+                } else {
+                    $parts[] = $value;
+                }
+            }
+        }
+
+        return implode('', $parts);
     }
 }

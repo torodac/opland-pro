@@ -61,10 +61,14 @@ class FichaController extends Controller
         $canEdit    = Auth::user()?->canEditTable($project, $projectTable->name) ?? false;
         $usuariosMap = $this->loadUsuariosMap($project);
 
+        $camposFicha = ($projectTable->nombre_ocultar_ficha && $projectTable->nombre_formula)
+            ? $projectTable->fields->where('name', '!=', 'nombre')->values()
+            : $projectTable->fields;
+
         return view('ficha', [
             'project'        => $project,
             'projectTable'   => $projectTable,
-            'campos'         => $projectTable->fields,
+            'campos'         => $camposFicha,
             'registro'       => $registro,
             'fkOptions'      => $fkOptions,
             'tabs'           => $tabs,
@@ -89,10 +93,14 @@ class FichaController extends Controller
         // Prerellenar campos desde query string (ej: al crear desde pestaña de tabla relacionada)
         $prefill = request()->only($projectTable->fields->pluck('name')->toArray());
 
+        $camposFicha = ($projectTable->nombre_ocultar_ficha && $projectTable->nombre_formula)
+            ? $projectTable->fields->where('name', '!=', 'nombre')->values()
+            : $projectTable->fields;
+
         return view('ficha', [
             'project'       => $project,
             'projectTable'  => $projectTable,
-            'campos'        => $projectTable->fields,
+            'campos'        => $camposFicha,
             'registro'      => null,
             'prefill'       => $prefill,
             'fkOptions'     => $this->loadFkOptions($project, $projectTable),
@@ -117,6 +125,10 @@ class FichaController extends Controller
         $data['updateuser'] = $this->currentUserId();
         $data['createdat']  = now();
         $data['updatedat']  = now();
+        if ($projectTable->nombre_formula) {
+            $projectTable->load('fields');
+            $data['nombre'] = $projectTable->resolveNombre($data);
+        }
 
         $id = DB::table($projectTable->getFullTableName())->insertGetId($data);
 
@@ -138,6 +150,10 @@ class FichaController extends Controller
         $data = $this->filterData($request, $projectTable);
         $data['updateuser'] = $this->currentUserId() ?? DB::table($projectTable->getFullTableName())->where('id', $id)->value('updateuser');
         $data['updatedat']  = now();
+        if ($projectTable->nombre_formula) {
+            $projectTable->load('fields');
+            $data['nombre'] = $projectTable->resolveNombre($data);
+        }
 
         DB::table($projectTable->getFullTableName())->where('id', $id)->update($data);
 

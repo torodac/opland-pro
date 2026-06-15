@@ -111,7 +111,9 @@ class ListadoController extends Controller
             'canEdit'           => $canEdit,
             'project'           => $project,
             'projectTable'      => $projectTable,
-            'campos'            => $projectTable->listFields,
+            'campos'            => $projectTable->nombre_ocultar_listado && $projectTable->nombre_formula
+                                    ? $projectTable->listFields->where('name', '!=', 'nombre')->values()
+                                    : $projectTable->listFields,
             'registros'         => $registros,
             'fkOptions'         => $fkOptions,
             'usuariosMap'       => $usuariosMap,
