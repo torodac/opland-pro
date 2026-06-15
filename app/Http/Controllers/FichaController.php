@@ -287,7 +287,6 @@ class FichaController extends Controller
 
             $query = DB::table($fullRef)
                 ->where(fn($q) => $q->whereNull('deleted')->orWhere('deleted', 0))
-                ->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))
                 ->orderBy('nombre');
 
             // Si es control_user como desplegable y el rol está restringido, solo el propio usuario
@@ -332,7 +331,6 @@ class FichaController extends Controller
                 if (!$fullRef) continue;
                 $tabFkOptions[$field->name] = DB::table($fullRef)
                     ->where(fn($q) => $q->whereNull('deleted')->orWhere('deleted', 0))
-                    ->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))
                     ->orderBy('nombre')
                     ->pluck('nombre', 'id')->toArray();
             }
