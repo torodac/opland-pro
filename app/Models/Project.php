@@ -108,7 +108,7 @@ class Project extends Model
 
         $projectTable = $this->tables()->firstOrCreate(
             ['name' => 'usuarios'],
-            ['label' => 'Usuarios', 'icon' => 'fa-users', 'order' => 901, 'active' => true, 'admin_only' => true]
+            ['label' => 'Usuarios', 'icon' => 'fa-users', 'order' => 901, 'active' => true, 'admin_only' => false]
         );
 
         if (!Schema::hasTable($tableName)) {
