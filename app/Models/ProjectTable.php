@@ -146,12 +146,20 @@ class ProjectTable extends Model
                         $parts[] = $value;
                     }
                 } elseif ($field && $field->type === 'multiusuario') {
-                    // Multiusuario: ids separados por coma → nombres de usuarios
-                    $ids    = array_filter(explode(',', (string) $value));
+                    // Multiusuario: valor almacenado como JSON array
+                    $ids    = array_filter((array) json_decode((string) $value, true));
                     $names  = \DB::table('admin_users')->whereIn('id', $ids)->pluck('name')->toArray();
                     $parts[] = implode(', ', $names);
                 } else {
-                    $parts[] = $value;
+                    // Si el valor parece un array JSON, intentar resolverlo como IDs de usuarios
+                    $decoded = json_decode((string) $value, true);
+                    if (is_array($decoded)) {
+                        $ids = array_filter($decoded);
+                        $names = \DB::table('admin_users')->whereIn('id', $ids)->pluck('name')->toArray();
+                        $parts[] = $names ? implode(', ', $names) : $value;
+                    } else {
+                        $parts[] = $value;
+                    }
                 }
             }
         }
