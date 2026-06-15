@@ -31,9 +31,20 @@ class TablaImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
         $this->buildRefCache();
     }
 
-    // Convierte dd/mm/aaaa [hh:MM[:ss]] → aaaa-mm-dd [hh:MM:ss]
+    // Convierte valores de fecha/timestamp de Excel a formato BD
+    // Soporta: serial numérico de Excel, dd/mm/aaaa [hh:MM[:ss]], aaaa-mm-dd
     private function normalizeDateValue(string $val, string $type): string
     {
+        // Serial numérico de Excel (entero o decimal en rango de fechas plausible)
+        if (is_numeric($val)) {
+            $serial = (float) $val;
+            if ($serial > 1 && $serial < 109574) { // 1900-01-01 → 2199-12-31
+                $dt = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($serial);
+                return $type === 'fecha'
+                    ? $dt->format('Y-m-d')
+                    : $dt->format('Y-m-d H:i:s');
+            }
+        }
         // Formato dd/mm/aaaa hh:MM[:ss]
         if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/', $val, $m)) {
             $date = sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]);

@@ -78,10 +78,14 @@ class TablaFromExcelImport implements ToCollection, WithHeadingRow, SkipsEmptyRo
                                     ? "Solo acepta 0/1 (valor: «{$val}»)" : null,
                     'decimal' => (!preg_match('/^-?\d+([.,]\d+)?$/', $val))
                                     ? 'No es un número decimal válido' : null,
-                    'fecha'     => (!preg_match('/^(\d{1,2}\/\d{1,2}\/\d{4}|\d{2,4}[-]\d{2}[-]\d{2,4})$/', $val))
-                                    ? 'Formato de fecha no reconocido (esperado dd/mm/aaaa o aaaa-mm-dd)' : null,
-                    'timestamp' => (!preg_match('/^(\d{1,2}\/\d{1,2}\/\d{4}( \d{1,2}:\d{2}(:\d{2})?)?|\d{4}-\d{2}-\d{2}( \d{2}:\d{2}(:\d{2})?)?)$/', $val))
-                                    ? 'Formato de timestamp no reconocido (esperado dd/mm/aaaa hh:MM o aaaa-mm-dd hh:MM:ss)' : null,
+                    'fecha'     => (!(
+                                        (is_numeric($val) && (float)$val > 1 && (float)$val < 109574) ||
+                                        preg_match('/^(\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2})$/', $val)
+                                    )) ? 'Formato de fecha no reconocido (esperado serial Excel, dd/mm/aaaa o aaaa-mm-dd)' : null,
+                    'timestamp' => (!(
+                                        (is_numeric($val) && (float)$val > 1 && (float)$val < 109574) ||
+                                        preg_match('/^(\d{1,2}\/\d{1,2}\/\d{4}( \d{1,2}:\d{2}(:\d{2})?)?|\d{4}-\d{2}-\d{2}( \d{2}:\d{2}(:\d{2})?)?)$/', $val)
+                                    )) ? 'Formato de timestamp no reconocido (esperado serial Excel, dd/mm/aaaa hh:MM o aaaa-mm-dd hh:MM:ss)' : null,
                     'email'   => (!filter_var($val, FILTER_VALIDATE_EMAIL))
                                     ? 'No es un email válido' : null,
                     'string'  => (mb_strlen($val) > 255)
@@ -121,18 +125,18 @@ class TablaFromExcelImport implements ToCollection, WithHeadingRow, SkipsEmptyRo
         $allDecimal = $values->every(fn($v) => preg_match('/^\d+([.,]\d+)?$/', (string) $v));
         if ($allDecimal) return 'decimal';
 
-        // Timestamp: dd/mm/aaaa hh:MM o aaaa-mm-dd hh:MM:ss
+        // Timestamp: dd/mm/aaaa hh:MM, aaaa-mm-dd hh:MM:ss, o decimal de Excel con parte horaria
         $allTimestamp = $values->every(fn($v) => preg_match(
-            '/^(\d{1,2}\/\d{1,2}\/\d{4} \d{1,2}:\d{2}|\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2})/',
+            '/^(\d{1,2}\/\d{1,2}\/\d{4} \d{1,2}:\d{2}|\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}|\d{5,}\.\d+)/',
             (string) $v
         ));
         if ($allTimestamp) return 'timestamp';
 
-        // Fecha: dd/mm/aaaa o aaaa-mm-dd
-        $allDate = $values->every(fn($v) => preg_match(
-            '/^(\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2})$/',
-            (string) $v
-        ));
+        // Fecha: dd/mm/aaaa, aaaa-mm-dd, o serial entero de Excel (rango 1927-2173 ≈ 10000-109574)
+        $allDate = $values->every(fn($v) =>
+            preg_match('/^(\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2})$/', (string) $v) ||
+            (is_numeric($v) && floor((float)$v) == (float)$v && (float)$v >= 10000 && (float)$v <= 109574)
+        );
         if ($allDate) return 'fecha';
 
         $allEmail = $values->every(fn($v) => filter_var($v, FILTER_VALIDATE_EMAIL));
