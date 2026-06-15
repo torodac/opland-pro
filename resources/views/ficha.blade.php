@@ -190,7 +190,7 @@
                             <i class="fas fa-trash text-[10px]"></i> Borrado
                         </span>
                     @endif
-                    @if(auth()->user()?->isProjectAdmin($project))
+                    @if(auth()->user()?->isProjectAdmin($project) && !($canEdit ?? true))
                         <a href="{{ route('config.projects.tables.fields.index', [$project, $projectTable]) }}"
                            title="Configurar campos de {{ $projectTable->label }}"
                            class="ml-auto hover:text-orange-500 transition-colors">
