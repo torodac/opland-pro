@@ -138,7 +138,13 @@ class ListadoController extends Controller
         $role = $this->getUserProjectRole($project, $projectUserId);
         if (!$role || $role->todos_registros) return;
 
-        $query->whereRaw("control_user LIKE ?", ["%\"{$projectUserId}\"%"]);
+        $isPgsql = DB::connection()->getDriverName() === 'pgsql';
+        $cast    = $isPgsql ? '::text' : '';
+        $query->where(function ($q) use ($projectUserId, $cast) {
+            $q->whereNull('control_user')
+              ->orWhereRaw("control_user{$cast} = '[]'")
+              ->orWhereRaw("control_user{$cast} LIKE ?", ["%\"{$projectUserId}\"%"]);
+        });
     }
 
     // Comprueba si el usuario puede editar registros de esta tabla según su rol

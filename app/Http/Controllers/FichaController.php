@@ -31,6 +31,7 @@ class FichaController extends Controller
         if (!$role || $role->todos_registros) return;
 
         $ids = json_decode($registro->control_user ?? '[]', true) ?? [];
+        if (empty($ids)) return; // sin restricción cuando control_user es null o []
         $ids = array_map('strval', $ids);
 
         abort_if(!in_array((string) $projectUserId, $ids), 403);
