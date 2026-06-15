@@ -29,50 +29,57 @@ Route::middleware('auth')->group(function () {
 
     // Panel de administración
     Route::prefix('config')->name('config.')->group(function () {
-        // Proyectos: show reemplazado por TableController@index en /config/projects/{project}
-        Route::resource('projects', App\Http\Controllers\Admin\ProjectController::class)
-            ->except(['show']);
-        Route::get('projects/{project}',
-            [App\Http\Controllers\Admin\TableController::class, 'index'])
-            ->name('projects.tables.index')->scopeBindings();
 
-        // Tablas: CRUD sin index (el index vive en projects/{project})
-        Route::patch('projects/{project}/tables/reorder',
-            [App\Http\Controllers\Admin\TableController::class, 'reorder'])
-            ->name('projects.tables.reorder')->scopeBindings();
-        Route::resource('projects.tables', App\Http\Controllers\Admin\TableController::class)
-            ->scoped(['table' => 'name'])->except(['index']);
-        Route::patch('projects/{project}/tables/{table}/patch',
-            [App\Http\Controllers\Admin\TableController::class, 'patch'])
-            ->name('projects.tables.patch')->scopeBindings();
-        Route::patch('projects/{project}/tables/{table}/tabs',
-            [App\Http\Controllers\Admin\TableController::class, 'updateTabs'])
-            ->name('projects.tables.tabs')->scopeBindings();
+        // ── Gestión de usuarios: solo role admin global ──
+        Route::middleware('role.admin')->group(function () {
+            Route::post('users/stop-impersonating', [App\Http\Controllers\Admin\UserController::class, 'stopImpersonating'])->name('users.stop-impersonating');
+            Route::post('users/{user}/impersonate', [App\Http\Controllers\Admin\UserController::class, 'impersonate'])->name('users.impersonate');
+            Route::resource('users', App\Http\Controllers\Admin\UserController::class);
+        });
 
-        // Excel: crear tabla desde Excel (debe ir ANTES de projects/{project}/{table})
-        Route::get('projects/{project}/import-excel', [ExcelController::class, 'createFromExcelForm'])
-            ->name('projects.import-excel.form');
-        Route::post('projects/{project}/import-excel/preview', [ExcelController::class, 'createFromExcelPreview'])
-            ->name('projects.import-excel.preview');
-        Route::post('projects/{project}/import-excel/confirm', [ExcelController::class, 'createFromExcel'])
-            ->name('projects.import-excel.confirm');
+        // ── Administrar proyecto: role admin o admin_{slug} ──
+        Route::middleware('role.project-admin')->group(function () {
+            // Proyectos: show reemplazado por TableController@index en /config/projects/{project}
+            Route::resource('projects', App\Http\Controllers\Admin\ProjectController::class)
+                ->except(['show']);
+            Route::get('projects/{project}',
+                [App\Http\Controllers\Admin\TableController::class, 'index'])
+                ->name('projects.tables.index')->scopeBindings();
 
-        // Campos: index en /config/projects/{project}/{table}, resto en /tables/{table}/fields/...
-        Route::get('projects/{project}/{table}',
-            [App\Http\Controllers\Admin\FieldController::class, 'index'])
-            ->name('projects.tables.fields.index')->scopeBindings();
-        Route::patch('projects/{project}/tables/{table}/fields/reorder',
-            [App\Http\Controllers\Admin\FieldController::class, 'reorder'])
-            ->name('projects.tables.fields.reorder')->scopeBindings();
-        Route::patch('projects/{project}/tables/{table}/fields/{field}/patch',
-            [App\Http\Controllers\Admin\FieldController::class, 'patch'])
-            ->name('projects.tables.fields.patch')->scopeBindings();
-        Route::resource('projects.tables.fields', App\Http\Controllers\Admin\FieldController::class)
-            ->scoped(['table' => 'name', 'field' => 'name'])->except(['index']);
+            // Tablas
+            Route::patch('projects/{project}/tables/reorder',
+                [App\Http\Controllers\Admin\TableController::class, 'reorder'])
+                ->name('projects.tables.reorder')->scopeBindings();
+            Route::resource('projects.tables', App\Http\Controllers\Admin\TableController::class)
+                ->scoped(['table' => 'name'])->except(['index']);
+            Route::patch('projects/{project}/tables/{table}/patch',
+                [App\Http\Controllers\Admin\TableController::class, 'patch'])
+                ->name('projects.tables.patch')->scopeBindings();
+            Route::patch('projects/{project}/tables/{table}/tabs',
+                [App\Http\Controllers\Admin\TableController::class, 'updateTabs'])
+                ->name('projects.tables.tabs')->scopeBindings();
 
-        Route::post('users/stop-impersonating', [App\Http\Controllers\Admin\UserController::class, 'stopImpersonating'])->name('users.stop-impersonating');
-        Route::post('users/{user}/impersonate', [App\Http\Controllers\Admin\UserController::class, 'impersonate'])->name('users.impersonate');
-        Route::resource('users', App\Http\Controllers\Admin\UserController::class);
+            // Excel: crear tabla desde Excel
+            Route::get('projects/{project}/import-excel', [ExcelController::class, 'createFromExcelForm'])
+                ->name('projects.import-excel.form');
+            Route::post('projects/{project}/import-excel/preview', [ExcelController::class, 'createFromExcelPreview'])
+                ->name('projects.import-excel.preview');
+            Route::post('projects/{project}/import-excel/confirm', [ExcelController::class, 'createFromExcel'])
+                ->name('projects.import-excel.confirm');
+
+            // Campos
+            Route::get('projects/{project}/{table}',
+                [App\Http\Controllers\Admin\FieldController::class, 'index'])
+                ->name('projects.tables.fields.index')->scopeBindings();
+            Route::patch('projects/{project}/tables/{table}/fields/reorder',
+                [App\Http\Controllers\Admin\FieldController::class, 'reorder'])
+                ->name('projects.tables.fields.reorder')->scopeBindings();
+            Route::patch('projects/{project}/tables/{table}/fields/{field}/patch',
+                [App\Http\Controllers\Admin\FieldController::class, 'patch'])
+                ->name('projects.tables.fields.patch')->scopeBindings();
+            Route::resource('projects.tables.fields', App\Http\Controllers\Admin\FieldController::class)
+                ->scoped(['table' => 'name', 'field' => 'name'])->except(['index']);
+        });
     });
 
     // Perfil de usuario
@@ -87,11 +94,15 @@ Route::middleware('auth')->group(function () {
 
         Route::get('{table}', [ListadoController::class, 'index'])->name('listado');
 
-        // Excel export/import sobre tabla existente
+        // Excel export: disponible para todos
         Route::get('{table}/export', [ExcelController::class, 'export'])->name('excel.export');
-        Route::get('{table}/import', [ExcelController::class, 'importForm'])->name('excel.import-form');
-        Route::post('{table}/import/preview', [ExcelController::class, 'importPreview'])->name('excel.import-preview');
-        Route::post('{table}/import/confirm', [ExcelController::class, 'import'])->name('excel.import');
+
+        // Excel import: solo admin del proyecto
+        Route::middleware('role.project-admin')->group(function () {
+            Route::get('{table}/import', [ExcelController::class, 'importForm'])->name('excel.import-form');
+            Route::post('{table}/import/preview', [ExcelController::class, 'importPreview'])->name('excel.import-preview');
+            Route::post('{table}/import/confirm', [ExcelController::class, 'import'])->name('excel.import');
+        });
 
         Route::get('{table}/nuevo', [FichaController::class, 'create'])->name('ficha.create');
         Route::post('{table}', [FichaController::class, 'store'])->name('ficha.store');

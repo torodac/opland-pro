@@ -15,8 +15,10 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
         $middleware->alias([
-            'project.access' => \App\Http\Middleware\CheckProjectAccess::class,
-            'auth.api'       => \App\Http\Middleware\ApiTokenAuth::class,
+            'project.access'     => \App\Http\Middleware\CheckProjectAccess::class,
+            'auth.api'           => \App\Http\Middleware\ApiTokenAuth::class,
+            'role.admin'         => \App\Http\Middleware\EnsureAdmin::class,
+            'role.project-admin' => \App\Http\Middleware\EnsureProjectAdmin::class,
         ]);
         $middleware->appendToGroup('web', \App\Http\Middleware\ForcePasswordChange::class);
     })

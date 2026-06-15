@@ -58,12 +58,14 @@
             </div>
         </div>
 
-        {{-- Excel importar --}}
+        {{-- Excel importar: solo admin del proyecto --}}
+        @if(auth()->user()?->isProjectAdmin($project))
         <a href="{{ route('excel.import-form', [$project->slug, $projectTable->name]) }}"
            class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
             <i class="fas fa-file-upload text-blue-500"></i>
             Importar
         </a>
+        @endif
     </x-slot>
 
     @php
