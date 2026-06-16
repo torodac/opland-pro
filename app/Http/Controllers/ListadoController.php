@@ -78,28 +78,10 @@ class ListadoController extends Controller
             }
         }
 
-        // Filtros de columna (col_*)
-        foreach ($projectTable->listFields as $field) {
-            $val = $request->input('col_' . $field->name);
-            if ($val !== null && $val !== '') {
-                $query->where($field->name, $val);
-            }
-        }
-
         // Filtro control_user: si el usuario no tiene acceso a todos los registros
         $this->applyControlUserFilter($query, $project, $fullTable);
 
-        // Ordenación
-        $sortField = $request->input('sort');
-        $sortDir   = $request->input('dir', 'asc') === 'desc' ? 'desc' : 'asc';
-        $sortableNames = $projectTable->listFields->pluck('name')->toArray();
-        if ($sortField && in_array($sortField, $sortableNames)) {
-            $query->orderBy($sortField, $sortDir);
-        } else {
-            $query->orderByDesc('id');
-        }
-
-        $registros = $query->paginate(50)->withQueryString();
+        $registros = $query->orderByDesc('id')->paginate(50)->withQueryString();
 
         // Opciones para campos FK (type='id'/'desplegable')
         $restricted   = !$this->userCanSeeAllRecords($project);
@@ -197,15 +179,6 @@ class ListadoController extends Controller
             'fkRefTablas'       => $fkRefTablas,
             'camposFiltrablesGaleria' => $projectTable->listFields->filter(fn($f) => in_array($f->type, ['id', 'desplegable']) && $f->getRefTable()),
             'tablStats'         => $tablStats,
-            'sortField'         => $sortField ?? null,
-            'sortDir'           => $sortDir,
-            'colUniqueValues'   => $projectTable->listFields
-                ->filter(fn($f) => !in_array($f->type, ['multiusuario', 'multitabla', 'text', 'file']))
-                ->mapWithKeys(fn($f) => [
-                    $f->name => DB::table($fullTable)
-                        ->whereNotNull($f->name)->whereRaw("CAST({$f->name} AS TEXT) != ''")
-                        ->distinct()->orderBy($f->name)->limit(200)->pluck($f->name)
-                ])->toArray(),
             'breadcrumb'        => [
                 ['label' => $projectTable->label, 'url' => ''],
             ],
