@@ -36,7 +36,7 @@ class ProjectTable extends Model
     {
         return $this->project->tables()
             ->where('id', '!=', $this->id)
-            ->whereHas('fields', fn($q) => $q->where('type', 'id')->where('extras', 'ref:' . $this->name))
+            ->whereHas('fields', fn($q) => $q->whereIn('type', ['id', 'desplegable'])->where('extras', 'ref:' . $this->name))
             ->get();
     }
 

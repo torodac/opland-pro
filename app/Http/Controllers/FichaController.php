@@ -315,7 +315,7 @@ class FichaController extends Controller
 
             // Encontrar el campo FK que apunta a esta tabla
             $fkField = $relTable->fields
-                ->first(fn($f) => $f->type === 'id' && $f->getRefTable() === $projectTable->name);
+                ->first(fn($f) => in_array($f->type, ['id', 'desplegable']) && $f->getRefTable() === $projectTable->name);
             if (!$fkField) continue;
 
             $rows = DB::table($relTable->getFullTableName())
