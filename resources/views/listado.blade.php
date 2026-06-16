@@ -366,7 +366,17 @@
                             $uniqueVals = $colUniqueValues[$campo->name] ?? [];
                         @endphp
                             <th class="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
-                                <div class="flex items-center gap-1" x-data="{ open: false }" @click.outside="open = false">
+                                <div class="flex items-center gap-1"
+                                     x-data="{
+                                         open: false, x: 0, y: 0,
+                                         toggle(btn) {
+                                             if (this.open) { this.open = false; return; }
+                                             const r = btn.getBoundingClientRect();
+                                             this.x = r.left; this.y = r.bottom + 4;
+                                             this.open = true;
+                                         }
+                                     }"
+                                     @click.outside="open = false">
                                     {{-- Orden por columna --}}
                                     <a href="{{ $sortUrl }}" class="hover:text-gray-600 transition-colors {{ $isSorted ? 'text-orange-500' : '' }}">
                                         {{ $campo->label }}
@@ -381,14 +391,14 @@
                                         </a>
                                     @endif
                                     {{-- Filtro de columna --}}
-                                    <button type="button" @click.stop="open = !open"
+                                    <button type="button" @click.stop="toggle($el)"
                                             class="ml-0.5 transition-colors {{ $colActive ? 'text-orange-500' : 'text-gray-300 hover:text-gray-500' }}">
                                         <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M3 4h18v2.172a2 2 0 01-.586 1.414L14 14v6l-4-2v-4L3.586 7.586A2 2 0 013 6.172V4z"/></svg>
                                     </button>
-                                    {{-- Dropdown valores únicos --}}
+                                    {{-- Dropdown fixed para escapar overflow de la tabla --}}
                                     <div x-show="open" x-cloak
-                                         class="absolute mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-30 py-1 text-xs font-normal normal-case tracking-normal min-w-36 max-h-60 overflow-y-auto"
-                                         style="top: 100%">
+                                         :style="`position:fixed;left:${x}px;top:${y}px;z-index:9999`"
+                                         class="bg-white border border-gray-200 rounded-xl shadow-lg py-1 text-xs font-normal normal-case tracking-normal min-w-36 max-h-60 overflow-y-auto">
                                         <a href="{{ request()->fullUrlWithQuery(['col_' . $campo->name => null, 'page' => null]) }}"
                                            class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 {{ !$colActive ? 'text-orange-500 font-medium' : 'text-gray-500' }}">
                                             Todos
