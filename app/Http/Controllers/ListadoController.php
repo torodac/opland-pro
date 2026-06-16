@@ -199,11 +199,13 @@ class ListadoController extends Controller
             'tablStats'         => $tablStats,
             'sortField'         => $sortField ?? null,
             'sortDir'           => $sortDir,
-            'colUniqueValues'   => $projectTable->listFields->mapWithKeys(fn($f) => [
-                $f->name => DB::table($fullTable)
-                    ->whereNotNull($f->name)->where($f->name, '!=', '')
-                    ->distinct()->orderBy($f->name)->limit(200)->pluck($f->name)
-            ])->toArray(),
+            'colUniqueValues'   => $projectTable->listFields
+                ->filter(fn($f) => !in_array($f->type, ['multiusuario', 'multitabla', 'text', 'file']))
+                ->mapWithKeys(fn($f) => [
+                    $f->name => DB::table($fullTable)
+                        ->whereNotNull($f->name)->whereRaw("CAST({$f->name} AS TEXT) != ''")
+                        ->distinct()->orderBy($f->name)->limit(200)->pluck($f->name)
+                ])->toArray(),
             'breadcrumb'        => [
                 ['label' => $projectTable->label, 'url' => ''],
             ],
