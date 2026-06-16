@@ -29,7 +29,7 @@
                 @endif
                 {{-- Clonar --}}
                 @if($canEdit ?? true)
-                <a href="{{ route('ficha.create', [$project->slug, $projectTable->name]) }}?{{ http_build_query(collect($projectTable->fields)->filter(fn($f) => $f->in_form)->mapWithKeys(fn($f) => [$f->name => $registro->{$f->name} ?? ''])->toArray()) }}"
+                <a href="{{ route('ficha.create', [$project->slug, $projectTable->name]) }}?{{ http_build_query(collect($projectTable->fields)->filter(fn($f) => $f->in_form && $f->type !== 'file')->mapWithKeys(fn($f) => [$f->name => $registro->{$f->name} ?? ''])->toArray()) }}"
                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>

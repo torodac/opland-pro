@@ -265,6 +265,16 @@ class FichaController extends Controller
             'updatedat'  => now(),
         ]);
 
+        // Al marcar como eliminado, borrar archivos del storage
+        if ($newDeleted === 1) {
+            foreach ($projectTable->fields->where('type', 'file') as $field) {
+                $path = $registro->{$field->name} ?? null;
+                if ($path) {
+                    Storage::disk('public')->delete($path);
+                }
+            }
+        }
+
         if ($projectTable->name === 'usuarios') {
             $deactivate = $newDeleted === 1 || (bool) $registro->hidden;
             DB::table($fullTable)->where('id', $id)
