@@ -244,8 +244,16 @@
     @case('file')
         <div class="space-y-2">
             @if($valor)
-                <a href="{{ asset($valor) }}" target="_blank"
-                   class="text-xs text-blue-500 hover:underline block">Ver archivo actual</a>
+                @php $esImagen = preg_match('/\.(jpe?g|png|gif|webp|bmp)$/i', $valor); @endphp
+                @if($esImagen)
+                    <a href="{{ Storage::url($valor) }}" target="_blank">
+                        <img src="{{ Storage::url($valor) }}" alt="foto"
+                             class="h-32 w-32 object-cover rounded border border-gray-200 hover:opacity-80 transition-opacity">
+                    </a>
+                @else
+                    <a href="{{ Storage::url($valor) }}" target="_blank"
+                       class="text-xs text-blue-500 hover:underline block">Ver archivo actual</a>
+                @endif
             @endif
             <input type="file" id="campo_{{ $campo->name }}" name="{{ $campo->name }}"
                    class="text-sm text-gray-500 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100">

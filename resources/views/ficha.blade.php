@@ -139,7 +139,8 @@
                   action="{{ $registro
                     ? route('ficha.update', [$project->slug, $projectTable->name, $registro->id])
                     : route('ficha.store',  [$project->slug, $projectTable->name]) }}"
-                  id="ficha-form">
+                  id="ficha-form"
+                  enctype="multipart/form-data">
                 @csrf
                 @if($registro) @method('PUT') @endif
 

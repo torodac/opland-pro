@@ -32,9 +32,17 @@
 
     @case('file')
         @if($valor)
-            <a href="{{ asset($valor) }}" target="_blank" class="text-blue-500 hover:underline text-xs" onclick="event.stopPropagation()">
-                Ver archivo
-            </a>
+            @php $esImagen = preg_match('/\.(jpe?g|png|gif|webp|bmp)$/i', $valor); @endphp
+            @if($esImagen)
+                <a href="{{ Storage::url($valor) }}" target="_blank" onclick="event.stopPropagation()">
+                    <img src="{{ Storage::url($valor) }}" alt="foto"
+                         class="h-16 w-16 object-cover rounded border border-gray-200 hover:opacity-80 transition-opacity">
+                </a>
+            @else
+                <a href="{{ Storage::url($valor) }}" target="_blank" class="text-blue-500 hover:underline text-xs" onclick="event.stopPropagation()">
+                    Ver archivo
+                </a>
+            @endif
         @endif
         @break
 

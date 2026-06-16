@@ -9,6 +9,7 @@ use App\Models\UserRole;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -65,7 +66,7 @@ class FichaController extends Controller
     {
         return $project->tables()
             ->where('name', $table)
-            ->with('fields')
+            ->with(['fields', 'project'])
             ->firstOrFail();
     }
 
@@ -471,6 +472,19 @@ class FichaController extends Controller
         // Campos JSON múltiple: llegan como array, guardar como JSON
         foreach ($projectTable->fields->whereIn('type', ['multitabla', 'multiusuario']) as $field) {
             $data[$field->name] = json_encode($request->input($field->name, []));
+        }
+
+        // Campos file: guardar el archivo subido; si no se sube nada, no sobreescribir
+        foreach ($projectTable->fields->where('type', 'file') as $field) {
+            if ($request->hasFile($field->name)) {
+                $path = $request->file($field->name)->store(
+                    $projectTable->project->slug . '/' . $projectTable->name,
+                    'public'
+                );
+                $data[$field->name] = $path;
+            } else {
+                unset($data[$field->name]);
+            }
         }
 
         return $data;
