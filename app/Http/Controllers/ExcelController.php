@@ -95,12 +95,14 @@ class ExcelController extends Controller
 
         session(['excel_import_path' => $path]);
 
-        $headings  = $importer->rows->isNotEmpty() ? array_keys($importer->rows->first()->toArray()) : [];
-        $preview   = $importer->rows;
+        $headings      = $importer->rows->isNotEmpty() ? array_keys($importer->rows->first()->toArray()) : [];
+        $preview       = $importer->rows;
         $listFields    = $projectTable->fields->where('in_list', true)->pluck('name')->toArray();
         $projectTables = $project->tables()->pluck('name')->toArray();
+        $dbFields      = $projectTable->fields->pluck('name')->toArray();
+        $keyHeadings   = array_values(array_intersect($headings, $dbFields));
 
-        return view('excel.import-preview', compact('project', 'projectTable', 'headings', 'preview', 'listFields', 'projectTables'));
+        return view('excel.import-preview', compact('project', 'projectTable', 'headings', 'preview', 'listFields', 'projectTables', 'keyHeadings'));
     }
 
     public function import(Request $request, Project $project, string $table)

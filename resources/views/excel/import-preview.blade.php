@@ -24,7 +24,7 @@
             <div x-show="dupMode !== 'insert'" x-cloak class="mt-3">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Campos clave <span class="text-xs text-red-400 font-normal">* obligatorio</span></label>
                 <div class="flex flex-wrap gap-x-5 gap-y-2">
-                    @foreach($headings as $h)
+                    @foreach($keyHeadings as $h)
                     <label class="flex items-center gap-2 cursor-pointer">
                         <input type="checkbox" name="key_fields[]" value="{{ $h }}"
                                class="accent-orange-500 w-4 h-4"
@@ -33,6 +33,9 @@
                     </label>
                     @endforeach
                 </div>
+                @if(empty($keyHeadings))
+                    <p class="text-xs text-red-400 mt-1">Ninguna columna del Excel coincide con los campos de la tabla.</p>
+                @endif
                 <p x-show="keyCount === 0" class="text-xs text-red-400 mt-2">Debes marcar al menos un campo clave para poder comparar.</p>
             </div>
         </div>
