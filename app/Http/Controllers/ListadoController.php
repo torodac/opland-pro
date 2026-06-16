@@ -22,15 +22,28 @@ class ListadoController extends Controller
 
         $query = DB::table($fullTable);
 
-        // Borrados / archivados
-        if ($request->boolean('borrados')) {
-            $query->where('deleted', 1);
+        // Filtro stat (específico de vm_propiedades)
+        $stat = $request->input('stat');
+        if ($fullTable === 'vm_propiedades' && $stat) {
+            $ayer = now()->subDay()->toDateString();
+            $hoy  = now()->toDateString();
+            match ($stat) {
+                'pte_info'        => $query->where('deleted', 0)->whereNull('fecha_inicio'),
+                'posibles_bajas'  => $query->where('deleted', 0)->whereDate('icnea_updatedat', '<', $ayer),
+                'revisar_borrado' => $query->where('deleted', 1)->whereDate('icnea_updatedat', $hoy),
+                default           => null,
+            };
         } else {
-            $query->where('deleted', 0);
-            if ($request->boolean('ocultos')) {
-                $query->where('hidden', 1);
+            // Borrados / archivados
+            if ($request->boolean('borrados')) {
+                $query->where('deleted', 1);
             } else {
-                $query->where('hidden', 0);
+                $query->where('deleted', 0);
+                if ($request->boolean('ocultos')) {
+                    $query->where('hidden', 1);
+                } else {
+                    $query->where('hidden', 0);
+                }
             }
         }
 
@@ -133,6 +146,18 @@ class ListadoController extends Controller
             }
         }
 
+        // Stats específicas de vm_propiedades
+        $tablStats = null;
+        if ($fullTable === 'vm_propiedades') {
+            $ayer = now()->subDay()->toDateString();
+            $hoy  = now()->toDateString();
+            $tablStats = [
+                'pte_info'      => DB::table($fullTable)->where('deleted', 0)->whereNull('fecha_inicio')->count(),
+                'posibles_bajas' => DB::table($fullTable)->where('deleted', 0)->whereDate('icnea_updatedat', '<', $ayer)->count(),
+                'revisar_borrado' => DB::table($fullTable)->where('deleted', 1)->whereDate('icnea_updatedat', $hoy)->count(),
+            ];
+        }
+
         return view('listado', [
             'canEdit'           => $canEdit,
             'project'           => $project,
@@ -153,6 +178,7 @@ class ListadoController extends Controller
             'campoFile'         => $campoFile,
             'fkRefTablas'       => $fkRefTablas,
             'camposFiltrablesGaleria' => $projectTable->listFields->filter(fn($f) => in_array($f->type, ['id', 'desplegable']) && $f->getRefTable()),
+            'tablStats'         => $tablStats,
             'breadcrumb'        => [
                 ['label' => $projectTable->label, 'url' => ''],
             ],

@@ -33,6 +33,7 @@
             @endif
         </a>
 
+        @if(auth()->user()?->isProjectAdmin($project))
         <a href="{{ route('ficha.create', [$project->slug, $projectTable->name]) }}"
            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -40,6 +41,7 @@
             </svg>
             Nuevo
         </a>
+        @endif
         @endif
 
         {{-- Excel exportar (dropdown) --}}
@@ -84,8 +86,36 @@
 
     @php
         $camposFiltrables = $campos->filter(fn($c) => in_array($c->type, ['select','tinyint','fecha']));
-        $filtrosActivos   = collect(request()->except(['q','ocultos','borrados','page','modo']))->filter()->isNotEmpty();
+        $filtrosActivos   = collect(request()->except(['q','ocultos','borrados','page','modo','stat']))->filter()->isNotEmpty();
     @endphp
+
+    {{-- Stats vm_propiedades --}}
+    @if($tablStats)
+    @php $statActiva = request('stat'); @endphp
+    <div class="flex gap-3 mb-4 flex-wrap">
+        @php
+        $stats = [
+            'pte_info'        => ['label' => 'Pte. información', 'color' => 'yellow', 'count' => $tablStats['pte_info']],
+            'posibles_bajas'  => ['label' => 'Posibles bajas',   'color' => 'red',    'count' => $tablStats['posibles_bajas']],
+            'revisar_borrado' => ['label' => 'Revisar borrado',  'color' => 'blue',   'count' => $tablStats['revisar_borrado']],
+        ];
+        $colorMap = [
+            'yellow' => ['bg' => '#fefce8', 'border' => '#fde047', 'text' => '#854d0e', 'num' => '#a16207', 'active_bg' => '#fef08a'],
+            'red'    => ['bg' => '#fef2f2', 'border' => '#fca5a5', 'text' => '#991b1b', 'num' => '#b91c1c', 'active_bg' => '#fecaca'],
+            'blue'   => ['bg' => '#eff6ff', 'border' => '#93c5fd', 'text' => '#1e40af', 'num' => '#1d4ed8', 'active_bg' => '#bfdbfe'],
+        ];
+        @endphp
+        @foreach($stats as $key => $stat)
+        @php $c = $colorMap[$stat['color']]; $activa = $statActiva === $key; @endphp
+        <a href="{{ request()->fullUrlWithQuery(['stat' => $activa ? null : $key, 'page' => null]) }}"
+           style="background:{{ $activa ? $c['active_bg'] : $c['bg'] }};border:1px solid {{ $c['border'] }};border-radius:0.75rem;padding:0.625rem 1rem;display:flex;align-items:center;gap:0.625rem;text-decoration:none;transition:opacity .15s"
+           class="hover:opacity-80">
+            <span style="font-size:1.25rem;font-weight:700;color:{{ $c['num'] }}">{{ $stat['count'] }}</span>
+            <span style="font-size:0.75rem;font-weight:500;color:{{ $c['text'] }}">{{ $stat['label'] }}</span>
+        </a>
+        @endforeach
+    </div>
+    @endif
 
     {{-- Barra de búsqueda --}}
     <form method="GET" id="form-listado" class="flex gap-2 mb-4" x-data="{ modalFiltros: false }">
