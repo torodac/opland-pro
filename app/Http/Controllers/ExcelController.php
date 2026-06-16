@@ -28,8 +28,8 @@ class ExcelController extends Controller
         $query = DB::table($fullTable);
 
         if ($tipo === 'tabla') {
-            // Todas las columnas, todos los registros activos
-            $query->where('deleted', 0)->orderByDesc('id');
+            // Todas las columnas, todos los registros (sin ningún filtro)
+            $query->orderByDesc('id');
             $usarCampos = $projectTable->fields; // todos los campos
         } else {
             // Mismos filtros que el listado actual

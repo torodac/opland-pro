@@ -120,9 +120,11 @@ class TablaImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
                         continue;
                     }
                     if ($this->dupMode === 'update') {
+                        // Solo actualizar columnas que tienen valor — no borrar datos existentes
+                        $updateData = array_filter($rowData, fn($v) => $v !== null);
                         DB::table($fullTable)
                             ->where('id', $exists->id)
-                            ->update(array_merge($rowData, ['updatedat' => $now, 'updateuser' => $this->userId]));
+                            ->update(array_merge($updateData, ['updatedat' => $now, 'updateuser' => $this->userId]));
                         $this->updated++;
                         continue;
                     }
