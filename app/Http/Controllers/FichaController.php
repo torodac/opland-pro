@@ -9,6 +9,7 @@ use App\Models\UserRole;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -516,8 +517,16 @@ class FichaController extends Controller
     // Solo permite guardar los campos definidos en table_fields (evita mass assignment en tablas dinámicas)
     private function filterData(Request $request, ProjectTable $projectTable): array
     {
-        $allowed = $projectTable->fields->pluck('name')->toArray();
-        $data    = $request->only($allowed);
+        $fullTable = $projectTable->getFullTableName();
+        $allowed   = $projectTable->fields->pluck('name')
+            ->filter(fn($name) => Schema::hasColumn($fullTable, $name))
+            ->toArray();
+        $data = $request->only($allowed);
+
+        // Si la tabla tiene fórmula de nombre, no incluir nombre del form (se calcula luego)
+        if ($projectTable->nombre_formula) {
+            unset($data['nombre']);
+        }
 
         // Campos JSON múltiple: llegan como array, guardar como JSON
         foreach ($projectTable->fields->whereIn('type', ['multitabla', 'multiusuario']) as $field) {
