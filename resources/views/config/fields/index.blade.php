@@ -242,15 +242,26 @@
                             </td>
 
                             {{-- Acciones --}}
-                            <td class="px-2 py-2 text-right" x-data="{ open: false }">
-                                <button @click="open = !open" @click.outside="open = false"
+                            <td class="px-2 py-2 text-right"
+                                x-data="{
+                                    open: false, x: 0, y: 0,
+                                    toggle(btn) {
+                                        if (this.open) { this.open = false; return; }
+                                        const r = btn.getBoundingClientRect();
+                                        this.x = r.right - 144; this.y = r.bottom + 4;
+                                        this.open = true;
+                                    }
+                                }"
+                                @click.outside="open = false">
+                                <button @click="toggle($el)"
                                         class="p-1 rounded text-gray-300 hover:text-gray-600 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                                         <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
                                     </svg>
                                 </button>
-                                <div x-show="open"
-                                     class="absolute right-6 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 text-sm">
+                                <div x-show="open" x-cloak
+                                     :style="`position:fixed;left:${x}px;top:${y}px;z-index:9999`"
+                                     class="w-36 bg-white border border-gray-200 rounded-lg shadow-lg py-1 text-sm">
                                     <a href="{{ route('config.projects.tables.fields.edit', [$project, $table, $field]) }}"
                                        class="flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50">
                                         Editar avanzado
