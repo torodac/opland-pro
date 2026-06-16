@@ -188,7 +188,9 @@ class FichaController extends Controller
         $data['updatedat']  = now();
         if ($projectTable->nombre_formula) {
             $projectTable->load('fields');
-            $data['nombre'] = $projectTable->resolveNombre($data);
+            $registro = DB::table($projectTable->getFullTableName())->find($id);
+            $rowData  = array_merge((array) $registro, $data);
+            $data['nombre'] = $projectTable->resolveNombre($rowData);
         }
 
         DB::table($projectTable->getFullTableName())->where('id', $id)->update($data);
