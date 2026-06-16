@@ -111,7 +111,15 @@ class TablaImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
             }
 
             // Deduplicación
-            $hasKeys = !empty($this->keyFields) && collect($this->keyFields)->every(fn($k) => array_key_exists($k, $rowData) && $rowData[$k] !== null);
+            if (!empty($this->keyFields)) {
+                $missingKey = collect($this->keyFields)->contains(fn($k) => !array_key_exists($k, $rowData) || $rowData[$k] === null);
+                if ($missingKey) {
+                    $this->skipped++;
+                    continue;
+                }
+            }
+
+            $hasKeys = !empty($this->keyFields);
             if ($hasKeys) {
                 $q = DB::table($fullTable);
                 foreach ($this->keyFields as $k) {
