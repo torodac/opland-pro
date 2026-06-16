@@ -80,13 +80,12 @@
         <p class="text-xs text-gray-300 mt-1.5">Ej: <span class="font-mono">fecha_inicio+"_"+responsable</span> — los desplegables se resuelven a su nombre.</p>
     </div>
 
-    {{-- Vistas y opciones de tabla --}}
+    {{-- Vistas adicionales --}}
     <div class="mb-4 px-5 py-3.5 bg-white rounded-xl border border-gray-200 text-sm text-gray-600"
          x-data="{
-             hasKanban:       {{ $table->has_kanban    ? 'true' : 'false' }},
-             hasCalendar:     {{ $table->has_calendar  ? 'true' : 'false' }},
-             hasMatrix:       {{ $table->has_matrix    ? 'true' : 'false' }},
-             permiteEliminar: {{ $table->permite_eliminar ? 'true' : 'false' }},
+             hasKanban:   {{ $table->has_kanban   ? 'true' : 'false' }},
+             hasCalendar: {{ $table->has_calendar ? 'true' : 'false' }},
+             hasMatrix:   {{ $table->has_matrix   ? 'true' : 'false' }},
              saving: false,
              save(field, val) {
                  this.saving = true;
@@ -111,10 +110,29 @@
                 <input type="checkbox" x-model="hasMatrix" @change="save('has_matrix', hasMatrix)" class="w-4 h-4 accent-orange-500">
                 Matriz
             </label>
-            <span class="text-gray-200">|</span>
+            <span x-show="saving" class="text-xs text-gray-400" x-cloak>Guardando…</span>
+        </div>
+    </div>
+
+    {{-- Permisos de tabla --}}
+    <div class="mb-4 px-5 py-3.5 bg-white rounded-xl border border-gray-200 text-sm text-gray-600"
+         x-data="{
+             permiteEliminar: {{ $table->permite_eliminar ? 'true' : 'false' }},
+             saving: false,
+             save(field, val) {
+                 this.saving = true;
+                 fetch('{{ $patchTableUrl }}', {
+                     method: 'PATCH',
+                     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                     body: JSON.stringify({ [field]: val })
+                 }).finally(() => { setTimeout(() => this.saving = false, 600) });
+             }
+         }">
+        <div class="flex items-center gap-6 flex-wrap">
+            <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide shrink-0">Permisos</span>
             <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-600">
                 <input type="checkbox" x-model="permiteEliminar" @change="save('permite_eliminar', permiteEliminar)" class="w-4 h-4 accent-orange-500">
-                <span>Permite eliminar <span class="text-gray-400">(borrado permanente desde ficha y listado)</span></span>
+                Permite eliminar <span class="text-gray-400 ml-1">(borrado permanente desde ficha y listado)</span>
             </label>
             <span x-show="saving" class="text-xs text-gray-400" x-cloak>Guardando…</span>
         </div>
