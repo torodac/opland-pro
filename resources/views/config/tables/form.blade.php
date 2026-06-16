@@ -52,10 +52,14 @@
                 </div>
 
 
-                <div class="px-5 py-4">
+                <div class="px-5 py-4 space-y-3">
                     <label class="flex items-center gap-3 text-sm text-gray-600">
                         <input type="checkbox" name="admin_only" value="1" {{ old('admin_only', $table->admin_only) ? 'checked' : '' }} class="w-4 h-4 accent-orange-500">
                         <span><strong>Solo administradores</strong> — aparece en el submenú Configuración, oculto para usuarios normales</span>
+                    </label>
+                    <label class="flex items-center gap-3 text-sm text-gray-600">
+                        <input type="checkbox" name="permite_eliminar" value="1" {{ old('permite_eliminar', $table->permite_eliminar) ? 'checked' : '' }} class="w-4 h-4 accent-orange-500">
+                        <span><strong>Permite eliminar</strong> — muestra el botón "Eliminar" (borrado permanente) en fichas y listados</span>
                     </label>
                 </div>
 

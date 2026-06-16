@@ -93,20 +93,22 @@ class FichaController extends Controller
             : $projectTable->fields;
 
         return view('ficha', [
-            'project'        => $project,
-            'projectTable'   => $projectTable,
-            'campos'         => $camposFicha,
-            'registro'       => $registro,
-            'fkOptions'      => $fkOptions,
-            'tabs'           => $tabs,
-            'prefill'        => [],
-            'canEdit'        => $canEdit,
-            'usuariosMap'    => $usuariosMap,
-            'projectTables'   => $project->tables()->where('admin_only', false)->orderBy('order')->get(),
-            'projectUsuarios' => $this->loadUsuariosForForm($project),
-            'createUser'     => $usuarios[(int) $registro->createuser] ?? null,
-            'updateUser'     => $usuarios[(int) $registro->updateuser] ?? null,
-            'breadcrumb'     => [
+            'project'          => $project,
+            'projectTable'     => $projectTable,
+            'campos'           => $camposFicha,
+            'registro'         => $registro,
+            'fkOptions'        => $fkOptions,
+            'tabs'             => $tabs,
+            'prefill'          => [],
+            'canEdit'          => $canEdit,
+            'usuariosMap'      => $usuariosMap,
+            'tieneDeleted'     => \Illuminate\Support\Facades\Schema::hasColumn($fullTable, 'deleted'),
+            'tieneHidden'      => \Illuminate\Support\Facades\Schema::hasColumn($fullTable, 'hidden'),
+            'projectTables'    => $project->tables()->where('admin_only', false)->orderBy('order')->get(),
+            'projectUsuarios'  => $this->loadUsuariosForForm($project),
+            'createUser'       => $usuarios[(int) $registro->createuser] ?? null,
+            'updateUser'       => $usuarios[(int) $registro->updateuser] ?? null,
+            'breadcrumb'       => [
                 ['label' => $projectTable->label,  'url' => route('listado', [$project->slug, $table])],
                 ['label' => $registro->nombre ?? "#{$id}", 'url' => ''],
             ],
@@ -124,20 +126,24 @@ class FichaController extends Controller
             ? $projectTable->fields->where('name', '!=', 'nombre')->values()
             : $projectTable->fields;
 
+        $fullTable = $projectTable->getFullTableName();
+
         return view('ficha', [
-            'project'        => $project,
-            'projectTable'   => $projectTable,
-            'campos'         => $camposFicha,
-            'registro'       => null,
-            'prefill'        => $prefill,
-            'fkOptions'      => $this->loadFkOptions($project, $projectTable),
-            'tabs'           => [],
-            'usuariosMap'    => $this->loadUsuariosMap($project),
-            'projectUsuarios' => $this->loadUsuariosForForm($project),
-            'projectTables'  => $project->tables()->where('admin_only', false)->orderBy('order')->get(),
-            'createUser'     => null,
-            'updateUser'     => null,
-            'breadcrumb'    => [
+            'project'          => $project,
+            'projectTable'     => $projectTable,
+            'campos'           => $camposFicha,
+            'registro'         => null,
+            'prefill'          => $prefill,
+            'fkOptions'        => $this->loadFkOptions($project, $projectTable),
+            'tabs'             => [],
+            'usuariosMap'      => $this->loadUsuariosMap($project),
+            'tieneDeleted'     => \Illuminate\Support\Facades\Schema::hasColumn($fullTable, 'deleted'),
+            'tieneHidden'      => \Illuminate\Support\Facades\Schema::hasColumn($fullTable, 'hidden'),
+            'projectUsuarios'  => $this->loadUsuariosForForm($project),
+            'projectTables'    => $project->tables()->where('admin_only', false)->orderBy('order')->get(),
+            'createUser'       => null,
+            'updateUser'       => null,
+            'breadcrumb'       => [
                 ['label' => $projectTable->label, 'url' => route('listado', [$project->slug, $table])],
                 ['label' => 'Nuevo',              'url' => ''],
             ],
@@ -252,7 +258,8 @@ class FichaController extends Controller
         return back();
     }
 
-    public function destroy(Project $project, string $table, int $id)
+    // Borrar: soft delete (toggle deleted=0/1)
+    public function borrar(Project $project, string $table, int $id)
     {
         $projectTable = $this->resolveTable($project, $table);
         $fullTable    = $projectTable->getFullTableName();
@@ -265,13 +272,11 @@ class FichaController extends Controller
             'updatedat'  => now(),
         ]);
 
-        // Al marcar como eliminado, borrar archivos del storage
+        // Al borrar, limpiar archivos del storage
         if ($newDeleted === 1) {
             foreach ($projectTable->fields->where('type', 'file') as $field) {
                 $path = $registro->{$field->name} ?? null;
-                if ($path) {
-                    Storage::disk('public')->delete($path);
-                }
+                if ($path) Storage::disk('public')->delete($path);
             }
         }
 
@@ -282,6 +287,29 @@ class FichaController extends Controller
         }
 
         return back();
+    }
+
+    // Eliminar: hard DELETE de la base de datos (irreversible)
+    public function eliminar(Project $project, string $table, int $id)
+    {
+        $projectTable = $this->resolveTable($project, $table);
+        abort_unless($projectTable->permite_eliminar, 403);
+        abort_unless(Auth::user()?->canEditTable($project, $table), 403);
+
+        $fullTable = $projectTable->getFullTableName();
+        $registro  = DB::table($fullTable)->find($id);
+        abort_if(!$registro, 404);
+
+        // Borrar archivos del storage antes de eliminar el registro
+        foreach ($projectTable->fields->where('type', 'file') as $field) {
+            $path = $registro->{$field->name} ?? null;
+            if ($path) Storage::disk('public')->delete($path);
+        }
+
+        DB::table($fullTable)->where('id', $id)->delete();
+
+        return redirect()->route('listado', [$project->slug, $table])
+            ->with('success', 'Registro eliminado definitivamente.');
     }
 
     // Carga opciones [id => nombre] para cada campo FK (type='id'/'desplegable' con extras='ref:tabla')

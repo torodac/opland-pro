@@ -63,31 +63,44 @@
 
             {{-- Modo edición --}}
             <div id="grupo-editar" style="display:none" class="flex gap-2">
-                {{-- Ocultar --}}
-                @if($projectTable->name === 'usuarios' && !$registro->hidden)
-                    <button type="button" onclick="confirmarOcultar()"
-                            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors border-amber-300 text-amber-600 hover:bg-amber-50">
-                        <i class="fas fa-eye-slash text-xs"></i>
-                        <span class="hidden sm:inline">Ocultar</span>
-                    </button>
-                @else
-                    <form method="POST" action="{{ route('ficha.archive', [$project->slug, $projectTable->name, $registro->id]) }}">
-                        @csrf @method('PATCH')
-                        <button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors
-                            {{ $registro->hidden ? 'border-green-300 text-green-600 hover:bg-green-50' : 'border-amber-300 text-amber-600 hover:bg-amber-50' }}">
-                            <i class="fas {{ $registro->hidden ? 'fa-eye' : 'fa-eye-slash' }} text-xs"></i>
-                            <span class="hidden sm:inline">{{ $registro->hidden ? 'Mostrar' : 'Ocultar' }}</span>
+                {{-- Archivar (ocultar/mostrar): solo si la tabla tiene campo hidden --}}
+                @if($tieneHidden)
+                    @if($projectTable->name === 'usuarios' && !$registro->hidden)
+                        <button type="button" onclick="confirmarOcultar()"
+                                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors border-amber-300 text-amber-600 hover:bg-amber-50">
+                            <i class="fas fa-eye-slash text-xs"></i>
+                            <span class="hidden sm:inline">Archivar</span>
                         </button>
-                    </form>
+                    @else
+                        <form method="POST" action="{{ route('ficha.archive', [$project->slug, $projectTable->name, $registro->id]) }}">
+                            @csrf @method('PATCH')
+                            <button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors
+                                {{ $registro->hidden ? 'border-green-300 text-green-600 hover:bg-green-50' : 'border-amber-300 text-amber-600 hover:bg-amber-50' }}">
+                                <i class="fas {{ $registro->hidden ? 'fa-eye' : 'fa-eye-slash' }} text-xs"></i>
+                                <span class="hidden sm:inline">{{ $registro->hidden ? 'Mostrar' : 'Archivar' }}</span>
+                            </button>
+                        </form>
+                    @endif
                 @endif
 
-                {{-- Eliminar --}}
-                <button type="button" onclick="{{ $projectTable->name === 'usuarios' && !$registro->deleted ? 'confirmarArchivar()' : 'confirmarEliminar()' }}"
-                        class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors
-                            {{ $registro->deleted ? 'border-green-300 text-green-600 hover:bg-green-50' : 'border-red-300 text-red-500 hover:bg-red-50' }}">
-                    <i class="fas {{ $registro->deleted ? 'fa-trash-restore' : 'fa-trash' }} text-xs"></i>
-                    <span class="hidden sm:inline">{{ $registro->deleted ? 'Restaurar' : 'Eliminar' }}</span>
-                </button>
+                {{-- Borrar (soft delete): solo si la tabla tiene campo deleted --}}
+                @if($tieneDeleted)
+                    <button type="button" onclick="{{ $projectTable->name === 'usuarios' && !$registro->deleted ? 'confirmarArchivar()' : 'confirmarBorrar()' }}"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors
+                                {{ $registro->deleted ? 'border-green-300 text-green-600 hover:bg-green-50' : 'border-red-300 text-red-500 hover:bg-red-50' }}">
+                        <i class="fas {{ $registro->deleted ? 'fa-trash-restore' : 'fa-trash' }} text-xs"></i>
+                        <span class="hidden sm:inline">{{ $registro->deleted ? 'Restaurar' : 'Borrar' }}</span>
+                    </button>
+                @endif
+
+                {{-- Eliminar (hard delete): solo si la tabla lo permite --}}
+                @if($projectTable->permite_eliminar)
+                    <button type="button" onclick="confirmarEliminar()"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-red-400 text-red-600 hover:bg-red-50 transition-colors">
+                        <i class="fas fa-times-circle text-xs"></i>
+                        <span class="hidden sm:inline">Eliminar</span>
+                    </button>
+                @endif
 
                 {{-- Cancelar --}}
                 <button onclick="toggleEdit()"
@@ -215,10 +228,19 @@
             </form>
 
             @if($registro)
-                {{-- Form oculto para borrar/restaurar (disparado por el popup) --}}
-                <form id="form-destroy" method="POST" action="{{ route('ficha.destroy', [$project->slug, $projectTable->name, $registro->id]) }}" class="hidden">
+                {{-- Form oculto para borrar/restaurar (soft delete) --}}
+                @if($tieneDeleted)
+                <form id="form-borrar" method="POST" action="{{ route('ficha.borrar', [$project->slug, $projectTable->name, $registro->id]) }}" class="hidden">
+                    @csrf @method('PATCH')
+                </form>
+                @endif
+
+                {{-- Form oculto para eliminar definitivamente (hard delete) --}}
+                @if($projectTable->permite_eliminar)
+                <form id="form-eliminar" method="POST" action="{{ route('ficha.eliminar', [$project->slug, $projectTable->name, $registro->id]) }}" class="hidden">
                     @csrf @method('DELETE')
                 </form>
+                @endif
 
                 <div class="mt-6 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-gray-300">
                     @if($registro->createdat)
@@ -329,10 +351,10 @@
 
 </x-app-layout>
 
-{{-- Modal confirmación eliminar --}}
-@if($registro)
-<div id="modal-eliminar" class="fixed inset-0 z-50 hidden">
-    <div class="absolute inset-0 bg-black/40" onclick="cerrarModalEliminar()"></div>
+{{-- Modal confirmación borrar (soft delete) --}}
+@if($registro && $tieneDeleted)
+<div id="modal-borrar" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/40" onclick="cerrarModalBorrar()"></div>
     <div class="absolute inset-0 flex items-center justify-center p-4">
         <div class="relative bg-white rounded-xl shadow-xl w-1/3 min-w-80 p-6">
             <div class="flex items-center gap-3 mb-3">
@@ -340,25 +362,55 @@
                     <i class="fas fa-trash text-red-500"></i>
                 </div>
                 <h3 class="text-base font-semibold text-gray-800">
-                    {{ $registro->deleted ? 'Restaurar registro' : 'Eliminar registro' }}
+                    {{ $registro->deleted ? 'Restaurar registro' : 'Borrar registro' }}
                 </h3>
             </div>
             <p class="text-sm text-gray-500 mb-6">
                 @if($registro->deleted)
                     ¿Quieres restaurar <strong>{{ $registro->nombre ?? "este registro" }}</strong>?
                 @else
-                    ¿Seguro que quieres eliminar <strong>{{ $registro->nombre ?? "este registro" }}</strong>? Esta acción se puede deshacer desde la vista de borrados.
+                    ¿Seguro que quieres borrar <strong>{{ $registro->nombre ?? "este registro" }}</strong>? Podrás recuperarlo desde la vista de borrados.
                 @endif
+            </p>
+            <div class="flex justify-end gap-2">
+                <button onclick="cerrarModalBorrar()"
+                        class="px-4 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                    Cancelar
+                </button>
+                <button onclick="document.getElementById('form-borrar').submit()"
+                        class="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors
+                            {{ $registro->deleted ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600' }}">
+                    {{ $registro->deleted ? 'Restaurar' : 'Borrar' }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
+
+{{-- Modal confirmación eliminar (hard delete) --}}
+@if($registro && $projectTable->permite_eliminar)
+<div id="modal-eliminar" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/40" onclick="cerrarModalEliminar()"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="relative bg-white rounded-xl shadow-xl w-1/3 min-w-80 p-6">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-full bg-red-200 flex items-center justify-center shrink-0">
+                    <i class="fas fa-times-circle text-red-600"></i>
+                </div>
+                <h3 class="text-base font-semibold text-gray-800">Eliminar registro definitivamente</h3>
+            </div>
+            <p class="text-sm text-gray-500 mb-6">
+                ¿Seguro que quieres eliminar <strong>{{ $registro->nombre ?? "este registro" }}</strong> de forma permanente? <span class="text-red-600 font-medium">Esta acción no se puede deshacer.</span>
             </p>
             <div class="flex justify-end gap-2">
                 <button onclick="cerrarModalEliminar()"
                         class="px-4 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
                     Cancelar
                 </button>
-                <button onclick="document.getElementById('form-destroy').submit()"
-                        class="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors
-                            {{ $registro->deleted ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600' }}">
-                    {{ $registro->deleted ? 'Restaurar' : 'Eliminar' }}
+                <button onclick="document.getElementById('form-eliminar').submit()"
+                        class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors">
+                    Eliminar definitivamente
                 </button>
             </div>
         </div>
@@ -409,7 +461,7 @@
             </p>
             <div class="flex justify-end gap-2">
                 <button onclick="cerrarModalArchivar()" class="px-4 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">Cancelar</button>
-                <button onclick="document.getElementById('form-destroy').submit()"
+                <button onclick="document.getElementById('form-borrar').submit()"
                         class="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors">Eliminar</button>
             </div>
         </div>
@@ -448,6 +500,12 @@ function toggleEdit() {
     if (btnConfig) btnConfig.style.display = isEditing ? 'none' : '';
 }
 
+function confirmarBorrar() {
+    document.getElementById('modal-borrar').classList.remove('hidden');
+}
+function cerrarModalBorrar() {
+    document.getElementById('modal-borrar').classList.add('hidden');
+}
 function confirmarEliminar() {
     document.getElementById('modal-eliminar').classList.remove('hidden');
 }
@@ -478,6 +536,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
+            cerrarModalBorrar();
             cerrarModalEliminar();
             cerrarModalOcultar();
             cerrarModalArchivar();

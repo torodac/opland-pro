@@ -99,6 +99,8 @@ class ListadoController extends Controller
 
         $modoTabla         = $request->input('modo') === 'tabla' && $requiredHidden->isEmpty();
         $tablaNoDisponible = $request->input('modo') === 'tabla' && $requiredHidden->isNotEmpty();
+        $tieneDeleted      = Schema::hasColumn($fullTable, 'deleted');
+        $tieneHidden       = Schema::hasColumn($fullTable, 'hidden');
         $campoFile         = $projectTable->fields->firstWhere('type', 'file');
         $modoGaleria       = $request->input('modo') === 'galeria' && $campoFile !== null;
         // Para galería: mapa campo → tabla ref para construir URLs a fichas relacionadas
@@ -145,6 +147,8 @@ class ListadoController extends Controller
             'modoTabla'         => $modoTabla,
             'tablaNoDisponible' => $tablaNoDisponible,
             'requiredHidden'    => $requiredHidden,
+            'tieneDeleted'      => $tieneDeleted,
+            'tieneHidden'       => $tieneHidden,
             'modoGaleria'       => $modoGaleria,
             'campoFile'         => $campoFile,
             'fkRefTablas'       => $fkRefTablas,

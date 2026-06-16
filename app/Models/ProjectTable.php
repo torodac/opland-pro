@@ -16,7 +16,7 @@ class ProjectTable extends Model
 {
     protected $fillable = [
         'project_id', 'name', 'label', 'icon', 'order',
-        'has_kanban', 'has_calendar', 'has_matrix', 'active', 'admin_only', 'tab_tables',
+        'has_kanban', 'has_calendar', 'has_matrix', 'active', 'admin_only', 'permite_eliminar', 'tab_tables',
         'nombre_formula', 'nombre_ocultar_ficha', 'nombre_ocultar_listado',
     ];
 
@@ -26,6 +26,7 @@ class ProjectTable extends Model
         'has_matrix'              => 'boolean',
         'active'                  => 'boolean',
         'admin_only'              => 'boolean',
+        'permite_eliminar'        => 'boolean',
         'tab_tables'              => 'array',
         'nombre_ocultar_ficha'    => 'boolean',
         'nombre_ocultar_listado'  => 'boolean',

@@ -110,11 +110,12 @@ class TableController extends Controller
             'order'      => 'integer',
         ]);
 
-        $data['has_kanban']   = $request->boolean('has_kanban');
-        $data['has_calendar'] = $request->boolean('has_calendar');
-        $data['has_matrix']   = $request->boolean('has_matrix');
-        $data['active']       = $request->boolean('active');
-        $data['admin_only']   = $request->boolean('admin_only');
+        $data['has_kanban']      = $request->boolean('has_kanban');
+        $data['has_calendar']    = $request->boolean('has_calendar');
+        $data['has_matrix']      = $request->boolean('has_matrix');
+        $data['active']          = $request->boolean('active');
+        $data['admin_only']      = $request->boolean('admin_only');
+        $data['permite_eliminar'] = $request->boolean('permite_eliminar');
 
         $table->update($data);
 
