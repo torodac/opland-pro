@@ -86,7 +86,8 @@
 
     @php
         $camposFiltrables = $campos->filter(fn($c) => in_array($c->type, ['select','tinyint','fecha']));
-        $filtrosActivos   = collect(request()->except(['q','ocultos','borrados','page','modo','stat']))->filter()->isNotEmpty();
+        $colFiltrosActivos = collect(request()->all())->filter(fn($v, $k) => str_starts_with($k, 'col_') && $v !== '')->isNotEmpty();
+        $filtrosActivos   = $colFiltrosActivos || collect(request()->except(['q','ocultos','borrados','page','modo','stat','sort','dir']))->filter(fn($v, $k) => !str_starts_with($k, 'col_'))->isNotEmpty();
     @endphp
 
     {{-- Stats vm_propiedades --}}
@@ -355,8 +356,52 @@
                             <th class="w-8"></th>
                         @endif
                         @foreach($campos as $campo)
+                        @php
+                            $isSorted   = $sortField === $campo->name;
+                            $nextDir    = ($isSorted && $sortDir === 'asc') ? 'desc' : 'asc';
+                            $sortUrl    = request()->fullUrlWithQuery(['sort' => $campo->name, 'dir' => $nextDir, 'page' => null]);
+                            $clearSort  = request()->fullUrlWithQuery(['sort' => null, 'dir' => null, 'page' => null]);
+                            $colVal     = request('col_' . $campo->name);
+                            $colActive  = $colVal !== null && $colVal !== '';
+                            $uniqueVals = $colUniqueValues[$campo->name] ?? [];
+                        @endphp
                             <th class="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
-                                {{ $campo->label }}
+                                <div class="flex items-center gap-1" x-data="{ open: false }" @click.outside="open = false">
+                                    {{-- Orden por columna --}}
+                                    <a href="{{ $sortUrl }}" class="hover:text-gray-600 transition-colors {{ $isSorted ? 'text-orange-500' : '' }}">
+                                        {{ $campo->label }}
+                                    </a>
+                                    @if($isSorted)
+                                        <a href="{{ $clearSort }}" class="text-orange-400 hover:text-gray-400">
+                                            @if($sortDir === 'asc')
+                                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+                                            @else
+                                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                                            @endif
+                                        </a>
+                                    @endif
+                                    {{-- Filtro de columna --}}
+                                    <button type="button" @click.stop="open = !open"
+                                            class="ml-0.5 transition-colors {{ $colActive ? 'text-orange-500' : 'text-gray-300 hover:text-gray-500' }}">
+                                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M3 4h18v2.172a2 2 0 01-.586 1.414L14 14v6l-4-2v-4L3.586 7.586A2 2 0 013 6.172V4z"/></svg>
+                                    </button>
+                                    {{-- Dropdown valores únicos --}}
+                                    <div x-show="open" x-cloak
+                                         class="absolute mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-30 py-1 text-xs font-normal normal-case tracking-normal min-w-36 max-h-60 overflow-y-auto"
+                                         style="top: 100%">
+                                        <a href="{{ request()->fullUrlWithQuery(['col_' . $campo->name => null, 'page' => null]) }}"
+                                           class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 {{ !$colActive ? 'text-orange-500 font-medium' : 'text-gray-500' }}">
+                                            Todos
+                                        </a>
+                                        <div class="border-t border-gray-100 my-1"></div>
+                                        @foreach($uniqueVals as $uv)
+                                        <a href="{{ request()->fullUrlWithQuery(['col_' . $campo->name => $uv, 'page' => null]) }}"
+                                           class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 truncate max-w-48 {{ $colVal == $uv ? 'text-orange-500 font-medium' : 'text-gray-700' }}">
+                                            {{ isset($fkOptions[$campo->name][$uv]) ? $fkOptions[$campo->name][$uv] : ($uv === '' ? '(vacío)' : $uv) }}
+                                        </a>
+                                        @endforeach
+                                    </div>
+                                </div>
                             </th>
                         @endforeach
                         <th class="w-10"></th>
