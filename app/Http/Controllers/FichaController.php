@@ -487,13 +487,23 @@ class FichaController extends Controller
 
         abort_if(!in_array($fieldName, $allowed), 422, 'Campo no permitido.');
 
-        DB::table($projectTable->getFullTableName())->where('id', $id)->update([
+        $updateData = [
             $fieldName   => $request->input('value'),
             'updateuser' => $this->currentUserId() ?? DB::table($projectTable->getFullTableName())->where('id', $id)->value('updateuser'),
             'updatedat'  => now(),
-        ]);
+        ];
 
-        return response()->json(['ok' => true]);
+        // Recalcular nombre si la tabla tiene fórmula y el campo modificado forma parte de ella
+        if ($projectTable->nombre_formula && str_contains($projectTable->nombre_formula, $fieldName)) {
+            $projectTable->load('fields');
+            $registro   = DB::table($projectTable->getFullTableName())->where('id', $id)->first();
+            $rowData    = array_merge((array) $registro, [$fieldName => $request->input('value')]);
+            $updateData['nombre'] = $projectTable->resolveNombre($rowData);
+        }
+
+        DB::table($projectTable->getFullTableName())->where('id', $id)->update($updateData);
+
+        return response()->json(['ok' => true, 'nombre' => $updateData['nombre'] ?? null]);
     }
 
     private function currentUserId(): ?int
