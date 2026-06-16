@@ -6,6 +6,7 @@ use App\Models\Project;
 use App\Models\ProjectTable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Concerns\SkipsEmptyRows;
@@ -76,7 +77,11 @@ class TablaImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
     public function collection(Collection $rows): void
     {
         $fullTable    = $this->projectTable->getFullTableName();
-        $allowedNames = $this->projectTable->fields->pluck('name')->toArray();
+        $systemCols   = ['deleted', 'hidden', 'blocked'];
+        $allowedNames = array_merge(
+            $this->projectTable->fields->pluck('name')->toArray(),
+            array_filter($systemCols, fn($c) => Schema::hasColumn($fullTable, $c))
+        );
         $fieldTypes   = $this->projectTable->fields->pluck('type', 'name')->toArray();
         $now          = now();
 
