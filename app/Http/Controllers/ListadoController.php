@@ -99,6 +99,13 @@ class ListadoController extends Controller
 
         $modoTabla         = $request->input('modo') === 'tabla' && $requiredHidden->isEmpty();
         $tablaNoDisponible = $request->input('modo') === 'tabla' && $requiredHidden->isNotEmpty();
+        $campoFile         = $projectTable->fields->firstWhere('type', 'file');
+        $modoGaleria       = $request->input('modo') === 'galeria' && $campoFile !== null;
+        // Para galería: mapa campo → tabla ref para construir URLs a fichas relacionadas
+        $fkRefTablas       = $projectTable->listFields
+            ->filter(fn($f) => in_array($f->type, ['id', 'desplegable']) && $f->getRefTable())
+            ->mapWithKeys(fn($f) => [$f->name => $f->getRefTable()])
+            ->toArray();
 
         // Mapa id→nombre de usuarios del proyecto para campos multiusuario (display)
         $usuariosMap   = [];
@@ -138,6 +145,10 @@ class ListadoController extends Controller
             'modoTabla'         => $modoTabla,
             'tablaNoDisponible' => $tablaNoDisponible,
             'requiredHidden'    => $requiredHidden,
+            'modoGaleria'       => $modoGaleria,
+            'campoFile'         => $campoFile,
+            'fkRefTablas'       => $fkRefTablas,
+            'camposFiltrablesGaleria' => $projectTable->listFields->filter(fn($f) => in_array($f->type, ['id', 'desplegable']) && $f->getRefTable()),
             'breadcrumb'        => [
                 ['label' => $projectTable->label, 'url' => ''],
             ],

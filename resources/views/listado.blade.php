@@ -3,6 +3,20 @@
     {{-- Acciones del header --}}
     <x-slot name="actions">
         @if($canEdit)
+        {{-- Toggle vista galería (solo si hay campo file) --}}
+        @if($campoFile)
+        <a href="{{ request()->fullUrlWithQuery(['modo' => $modoGaleria ? 'lista' : 'galeria', 'page' => null]) }}"
+           title="{{ $modoGaleria ? 'Vista lista' : 'Vista galería' }}"
+           class="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors {{ $modoGaleria ? 'bg-orange-50 border-orange-300 text-orange-500' : '' }}">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                <rect x="3" y="3" width="5" height="5" rx="0.5"/><rect x="10" y="3" width="5" height="5" rx="0.5"/>
+                <rect x="17" y="3" width="4" height="5" rx="0.5"/><rect x="3" y="10" width="5" height="5" rx="0.5"/>
+                <rect x="10" y="10" width="5" height="5" rx="0.5"/><rect x="17" y="10" width="4" height="5" rx="0.5"/>
+                <rect x="3" y="17" width="5" height="4" rx="0.5"/><rect x="10" y="17" width="5" height="4" rx="0.5"/>
+                <rect x="17" y="17" width="4" height="4" rx="0.5"/>
+            </svg>
+        </a>
+        @endif
         {{-- Toggle vista tabla editable --}}
         <a href="{{ request()->fullUrlWithQuery(['modo' => $modoTabla ? 'lista' : 'tabla']) }}"
            title="{{ $modoTabla ? 'Vista lista' : 'Vista tabla editable' }}"
@@ -241,6 +255,62 @@
     </div>
     @endif
 
+    {{-- Vista galería --}}
+    @if($modoGaleria)
+    <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        @if($registros->isEmpty())
+            <div class="px-6 py-12 text-center text-sm text-gray-400">Sin registros</div>
+        @else
+            <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:1px; background:#e5e7eb;">
+                @foreach($registros as $registro)
+                    @php
+                        $fotoPath = $registro->{$campoFile->name} ?? null;
+                        $tareaLabel = null;
+                        $tareaUrl   = null;
+                        foreach($camposFiltrablesGaleria as $fkCampo) {
+                            $val = $registro->{$fkCampo->name} ?? null;
+                            if ($val && isset($fkOptions[$fkCampo->name][$val])) {
+                                $tareaLabel = $fkOptions[$fkCampo->name][$val];
+                                $tareaUrl   = route('ficha', [$project->slug, $fkRefTablas[$fkCampo->name], $val]);
+                                break;
+                            }
+                        }
+                    @endphp
+                    <div class="bg-white flex flex-col">
+                        @if($fotoPath)
+                            <a href="{{ Storage::url($fotoPath) }}" target="_blank" class="block overflow-hidden" style="height:150px;">
+                                <img src="{{ Storage::url($fotoPath) }}" alt="foto"
+                                     class="w-full h-full object-cover hover:scale-105 transition-transform duration-200">
+                            </a>
+                        @else
+                            <div class="flex items-center justify-center bg-gray-50 text-gray-300" style="height:150px;">
+                                <svg class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                </svg>
+                            </div>
+                        @endif
+                        <div class="px-2 py-1.5 text-center" style="min-height:36px;">
+                            @if($tareaLabel && $tareaUrl)
+                                <a href="{{ $tareaUrl }}"
+                                   class="text-xs text-blue-600 hover:text-blue-800 hover:underline line-clamp-2 leading-tight">
+                                    {{ $tareaLabel }}
+                                </a>
+                            @else
+                                <span class="text-xs text-gray-400">—</span>
+                            @endif
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+            {{-- Paginación --}}
+            @if($registros->hasPages())
+                <div class="px-4 py-3 border-t border-gray-100">
+                    {{ $registros->withQueryString()->links() }}
+                </div>
+            @endif
+        @endif
+    </div>
+    @else
     {{-- Tabla de datos --}}
     <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div class="overflow-x-auto" @if($modoTabla) x-data="newRowForm()" @endif>
@@ -547,6 +617,7 @@
             </div>
         @endif
     </div>
+    @endif {{-- fin @else modoGaleria --}}
 
 </x-app-layout>
 
