@@ -5,7 +5,7 @@
     <p class="text-sm text-gray-500 mb-6">Revisa las opciones antes de confirmar la importación.</p>
 
     <form action="{{ route('excel.import', [$project->slug, $projectTable->name]) }}"
-          method="POST" class="space-y-6" x-data="{ dupMode: 'insert' }">
+          method="POST" class="space-y-6" x-data="{ dupMode: 'insert', keyCount: 0 }">
         @csrf
 
         {{-- Opciones de deduplicación --}}
@@ -22,15 +22,18 @@
             </div>
 
             <div x-show="dupMode !== 'insert'" x-cloak class="mt-3">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Campos clave <span class="text-xs text-gray-400 font-normal">(marca uno o varios)</span></label>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Campos clave <span class="text-xs text-red-400 font-normal">* obligatorio</span></label>
                 <div class="flex flex-wrap gap-x-5 gap-y-2">
                     @foreach($headings as $h)
                     <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" name="key_fields[]" value="{{ $h }}" class="accent-orange-500 w-4 h-4">
+                        <input type="checkbox" name="key_fields[]" value="{{ $h }}"
+                               class="accent-orange-500 w-4 h-4"
+                               @change="keyCount = $el.closest('.flex').querySelectorAll(':checked').length">
                         <span class="text-sm text-gray-700 font-mono">{{ $h }}</span>
                     </label>
                     @endforeach
                 </div>
+                <p x-show="keyCount === 0" class="text-xs text-red-400 mt-2">Debes marcar al menos un campo clave para poder comparar.</p>
             </div>
         </div>
 
@@ -65,7 +68,10 @@
             <a href="{{ route('excel.import-form', [$project->slug, $projectTable->name]) }}"
                class="text-sm text-gray-500 hover:text-gray-700">← Volver</a>
             <button type="submit"
-                    class="px-5 py-2 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600">
+                    :disabled="dupMode !== 'insert' && keyCount === 0"
+                    :class="dupMode !== 'insert' && keyCount === 0
+                        ? 'px-5 py-2 bg-gray-200 text-gray-400 text-sm font-medium rounded-lg cursor-not-allowed'
+                        : 'px-5 py-2 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600'">
                 Confirmar importación
             </button>
         </div>

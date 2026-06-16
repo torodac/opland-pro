@@ -106,10 +106,14 @@ class ExcelController extends Controller
     public function import(Request $request, Project $project, string $table)
     {
         $request->validate([
-            'dup_mode'  => 'required|in:insert,update,skip',
+            'dup_mode'     => 'required|in:insert,update,skip',
             'key_fields'   => 'nullable|array',
             'key_fields.*' => 'string',
         ]);
+
+        if (in_array($request->input('dup_mode'), ['update', 'skip']) && empty(array_filter($request->input('key_fields', [])))) {
+            return back()->withErrors(['key_fields' => 'Debes seleccionar al menos un campo clave para usar este modo.']);
+        }
 
         $projectTable = $project->tables()->where('name', $table)->with('fields')->firstOrFail();
         $path = session('excel_import_path');
