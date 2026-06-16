@@ -138,8 +138,8 @@ class ProjectTable extends Model
                     continue;
                 }
 
-                if ($field && $field->type === 'id') {
-                    // Desplegable: resolver id → nombre en tabla referenciada (admite ref:master.estados)
+                if ($field && in_array($field->type, ['id', 'desplegable'])) {
+                    // FK: resolver id → nombre en tabla referenciada
                     $refFull = $field->getRefFullTable($this->project->slug);
                     if ($refFull) {
                         $nombre  = \DB::table($refFull)->where('id', $value)->value('nombre');
