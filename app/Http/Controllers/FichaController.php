@@ -106,7 +106,7 @@ class FichaController extends Controller
             'tieneDeleted'     => \Illuminate\Support\Facades\Schema::hasColumn($fullTable, 'deleted'),
             'tieneHidden'      => \Illuminate\Support\Facades\Schema::hasColumn($fullTable, 'hidden'),
             'projectTables'    => $project->tables()->where('admin_only', false)->orderBy('order')->get(),
-            'projectUsuarios'  => $this->loadUsuariosForForm($project),
+            'projectUsuarios'  => $this->loadUsuariosForForm($project, $projectTable),
             'createUser'       => $usuarios[(int) $registro->createuser] ?? null,
             'updateUser'       => $usuarios[(int) $registro->updateuser] ?? null,
             'breadcrumb'       => [
@@ -140,7 +140,7 @@ class FichaController extends Controller
             'usuariosMap'      => $this->loadUsuariosMap($project),
             'tieneDeleted'     => \Illuminate\Support\Facades\Schema::hasColumn($fullTable, 'deleted'),
             'tieneHidden'      => \Illuminate\Support\Facades\Schema::hasColumn($fullTable, 'hidden'),
-            'projectUsuarios'  => $this->loadUsuariosForForm($project),
+            'projectUsuarios'  => $this->loadUsuariosForForm($project, $projectTable),
             'projectTables'    => $project->tables()->where('admin_only', false)->orderBy('order')->get(),
             'createUser'       => null,
             'updateUser'       => null,
@@ -389,24 +389,42 @@ class FichaController extends Controller
         return $tabs;
     }
 
-    private function loadUsuarios(Project $project): array
+    private function loadUsuarios(Project $project, ?array $allowedRolIds = null): array
     {
         $table = $project->slug . '_usuarios';
         if (!\Illuminate\Support\Facades\Schema::hasTable($table)) return [];
 
-        return DB::table($table)
+        $q = DB::table($table)
             ->where(fn($q) => $q->whereNull('deleted')->orWhere('deleted', 0))
-            ->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))
-            ->get(['id', 'nombre'])
+            ->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0));
+
+        if ($allowedRolIds) {
+            $q->whereIn('id_rol', $allowedRolIds);
+        }
+
+        return $q->get(['id', 'nombre'])
             ->map(fn($u) => ['id' => $u->id, 'label' => $u->nombre ?? "#{$u->id}"])
             ->values()
             ->toArray();
     }
 
     // Devuelve solo el propio usuario si el rol no permite ver todos los registros
-    private function loadUsuariosForForm(Project $project): array
+    private function loadUsuariosForForm(Project $project, ?\App\Models\ProjectTable $projectTable = null): array
     {
-        $all = $this->loadUsuarios($project);
+        // Filtrar por roles si algún campo multiusuario tiene extras "roles:X,Y"
+        $allowedRolIds = null;
+        if ($projectTable) {
+            $rolesExtras = $projectTable->fields
+                ->where('type', 'multiusuario')
+                ->map(fn($f) => $f->extras)
+                ->filter(fn($e) => str_starts_with((string) $e, 'roles:'))
+                ->first();
+            if ($rolesExtras) {
+                $allowedRolIds = array_map('intval', explode(',', substr($rolesExtras, 6)));
+            }
+        }
+
+        $all = $this->loadUsuarios($project, $allowedRolIds);
         if ($this->userCanSeeAllRecords($project)) return $all;
 
         $ownId = Auth::user()?->projectUserId($project);

@@ -141,11 +141,22 @@ class ListadoController extends Controller
             $allUsuarios = DB::table($usuariosTable)
                 ->where(fn($q) => $q->whereNull('deleted')->orWhere('deleted', 0))
                 ->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))
-                ->get(['id', 'nombre']);
+                ->get(['id', 'nombre', 'id_rol']);
             $allUsuarios->each(function ($u) use (&$usuariosMap) {
                 $usuariosMap[(int) $u->id]    = $u->nombre;
                 $usuariosMap[(string) $u->id] = $u->nombre;
             });
+        }
+
+        // Filtrar por roles si algún campo multiusuario tiene extras "roles:X,Y"
+        $rolesExtras = $projectTable->fields
+            ->where('type', 'multiusuario')
+            ->map(fn($f) => $f->extras)
+            ->filter(fn($e) => str_starts_with((string) $e, 'roles:'))
+            ->first();
+        if ($rolesExtras) {
+            $allowedRolIds = array_map('intval', explode(',', substr($rolesExtras, 6)));
+            $allUsuarios   = $allUsuarios->filter(fn($u) => in_array((int) ($u->id_rol ?? 0), $allowedRolIds));
         }
 
         // Lista filtrada para el formulario: solo el propio usuario si el rol está restringido
