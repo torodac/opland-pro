@@ -29,7 +29,7 @@ class ListadoController extends Controller
             $hoy  = now()->toDateString();
             match ($stat) {
                 'pte_info'        => $query->where('deleted', 0)->whereNull('fecha_inicio'),
-                'posibles_bajas'  => $query->where('deleted', 0)->whereDate('icnea_updatedat', '<', $ayer),
+                'posibles_bajas'  => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('icnea_updatedat')->orWhereDate('icnea_updatedat', '<', $ayer)),
                 'revisar_borrado' => $query->where('deleted', 1)->whereDate('icnea_updatedat', $hoy),
                 default           => null,
             };
@@ -163,7 +163,7 @@ class ListadoController extends Controller
             $hoy  = now()->toDateString();
             $tablStats = [
                 'pte_info'      => DB::table($fullTable)->where('deleted', 0)->whereNull('fecha_inicio')->count(),
-                'posibles_bajas' => DB::table($fullTable)->where('deleted', 0)->whereDate('icnea_updatedat', '<', $ayer)->count(),
+                'posibles_bajas' => DB::table($fullTable)->where('deleted', 0)->where(fn($q) => $q->whereNull('icnea_updatedat')->orWhereDate('icnea_updatedat', '<', $ayer))->count(),
                 'revisar_borrado' => DB::table($fullTable)->where('deleted', 1)->whereDate('icnea_updatedat', $hoy)->count(),
             ];
         }
