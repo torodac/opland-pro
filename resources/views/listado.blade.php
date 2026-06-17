@@ -355,8 +355,28 @@
                             <th class="w-8"></th>
                         @endif
                         @foreach($campos as $campo)
-                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
-                                {{ $campo->label }}
+                            @php
+                                $isActive = $sortField === $campo->name;
+                                $nextDir  = ($isActive && $sortDir === 'asc') ? 'desc' : 'asc';
+                                $sortUrl  = request()->fullUrlWithQuery(['sort' => $campo->name, 'dir' => $nextDir, 'page' => null]);
+                            @endphp
+                            <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap">
+                                <a href="{{ $sortUrl }}" class="inline-flex items-center gap-1 {{ $isActive ? 'text-orange-500' : 'text-gray-400 hover:text-gray-600' }}">
+                                    {{ $campo->label }}
+                                    @if($isActive)
+                                        <svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                            @if($sortDir === 'asc')
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/>
+                                            @else
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                                            @endif
+                                        </svg>
+                                    @else
+                                        <svg class="w-3 h-3 shrink-0 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 9l4-4 4 4M8 15l4 4 4-4"/>
+                                        </svg>
+                                    @endif
+                                </a>
                             </th>
                         @endforeach
                         <th class="w-10"></th>

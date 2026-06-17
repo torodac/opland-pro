@@ -81,7 +81,17 @@ class ListadoController extends Controller
         // Filtro control_user: si el usuario no tiene acceso a todos los registros
         $this->applyControlUserFilter($query, $project, $fullTable);
 
-        $registros = $query->orderByDesc('id')->paginate(50)->withQueryString();
+        // Ordenación por columna
+        $sortField = $request->input('sort');
+        $sortDir   = $request->input('dir', 'asc') === 'desc' ? 'desc' : 'asc';
+        $sortableFields = $projectTable->listFields->pluck('name')->toArray();
+        if ($sortField && in_array($sortField, $sortableFields)) {
+            $query->orderBy($sortField, $sortDir);
+        } else {
+            $query->orderByDesc('id');
+        }
+
+        $registros = $query->paginate(50)->withQueryString();
 
         // Opciones para campos FK (type='id'/'desplegable')
         $restricted   = !$this->userCanSeeAllRecords($project);
@@ -178,6 +188,8 @@ class ListadoController extends Controller
             'campoFile'         => $campoFile,
             'fkRefTablas'       => $fkRefTablas,
             'camposFiltrablesGaleria' => $projectTable->listFields->filter(fn($f) => in_array($f->type, ['id', 'desplegable']) && $f->getRefTable()),
+            'sortField'         => $sortField ?? null,
+            'sortDir'           => $sortDir,
             'tablStats'         => $tablStats,
             'breadcrumb'        => [
                 ['label' => $projectTable->label, 'url' => ''],
