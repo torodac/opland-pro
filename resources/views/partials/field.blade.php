@@ -32,15 +32,23 @@
         @break
 
     @case('int')
-        <input type="number" id="campo_{{ $campo->name }}" name="{{ $campo->name }}"
-               value="{{ $valor }}"
-               {{ $req }} class="{{ $base }}">
+        @php $rawInt = $valor !== null && $valor !== '' ? (int) $valor : ''; @endphp
+        <input type="hidden" name="{{ $campo->name }}" id="campo_{{ $campo->name }}_raw" value="{{ $rawInt }}">
+        <input type="text" inputmode="numeric" id="campo_{{ $campo->name }}"
+               value="{{ $rawInt !== '' ? number_format($rawInt, 0, ',', '.') : '' }}"
+               {{ $req }} class="{{ $base }}"
+               oninput="this.previousElementSibling.value=this.value.replace(/\./g,'')"
+               onblur="var n=parseInt(this.value.replace(/\./g,'')); if(!isNaN(n)){this.value=n.toLocaleString('es-ES');this.previousElementSibling.value=n;} else if(this.value===''){this.previousElementSibling.value='';}">
         @break
 
     @case('decimal')
-        <input type="number" step="0.01" id="campo_{{ $campo->name }}" name="{{ $campo->name }}"
-               value="{{ $valor }}"
-               {{ $req }} class="{{ $base }}">
+        @php $rawDec = $valor !== null && $valor !== '' ? (float) $valor : ''; @endphp
+        <input type="hidden" name="{{ $campo->name }}" id="campo_{{ $campo->name }}_raw" value="{{ $rawDec }}">
+        <input type="text" inputmode="decimal" id="campo_{{ $campo->name }}"
+               value="{{ $rawDec !== '' ? number_format($rawDec, 2, ',', '.') : '' }}"
+               {{ $req }} class="{{ $base }}"
+               oninput="this.previousElementSibling.value=this.value.replace(/\./g,'').replace(',','.')"
+               onblur="var n=parseFloat(this.value.replace(/\./g,'').replace(',','.')); if(!isNaN(n)){this.value=n.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2});this.previousElementSibling.value=n;} else if(this.value===''){this.previousElementSibling.value='';}">
         @break
 
     @case('email')

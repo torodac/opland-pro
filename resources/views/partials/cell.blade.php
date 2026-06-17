@@ -76,6 +76,14 @@
         @endif
         @break
 
+    @case('int')
+        {{ $valor !== null && $valor !== '' ? number_format((int) $valor, 0, ',', '.') : '—' }}
+        @break
+
+    @case('decimal')
+        {{ $valor !== null && $valor !== '' ? number_format((float) $valor, 2, ',', '.') : '—' }}
+        @break
+
     @default
         {{ $valor ?? '—' }}
 @endswitch
