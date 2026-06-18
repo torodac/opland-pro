@@ -133,17 +133,14 @@
                             $left  = $d * $colW + 2 + ($loop->index * 15);
                             $tabla = $cat === 'limpieza' ? 'tareas_limpieza' : 'tareas_mantenimiento';
                         @endphp
-                        @php
-                            $tooltipParts = array_filter([
-                                $tarea->nombre ?? null,
-                                $cat === 'limpieza' && $tarea->tipo ? 'Tipo: ' . $tarea->tipo : null,
-                                'Fecha: ' . \Carbon\Carbon::parse($tarea->fecha_planificada)->format('d/m/Y'),
-                                $tarea->propiedad,
-                            ]);
-                            $tooltip = implode(' · ', $tooltipParts);
-                        @endphp
                         <a href="{{ route('ficha', [$project->slug, $tabla, $tarea->id]) }}"
-                           title="{{ $tooltip }}"
+                           data-tip-nombre="{{ $tarea->nombre }}"
+                           data-tip-tipo="{{ $cat === 'limpieza' ? ($tarea->tipo ?? '') : '' }}"
+                           data-tip-fecha="{{ \Carbon\Carbon::parse($tarea->fecha_planificada)->isoFormat('dddd D [de] MMMM') }}"
+                           data-tip-propiedad="{{ $tarea->propiedad }}"
+                           data-tip-cat="{{ $cat }}"
+                           data-tip-color="{{ $cat === 'limpieza' ? ($cfg['circle'] ?? '#6b7280') : '#b45309' }}"
+                           class="cal-tip"
                            style="position:absolute;top:6px;left:{{ $left }}px;width:16px;height:16px;display:flex;align-items:center;justify-content:center;text-decoration:none;z-index:1;">
                             @if($cat === 'limpieza')
                                 <span style="width:16px;height:16px;border-radius:50%;background:{{ $cfg['circle'] }};display:flex;align-items:center;justify-content:center;">
@@ -161,5 +158,91 @@
     </tbody>
 </table>
 </div>
+
+{{-- Tooltip custom --}}
+<div id="cal-tooltip" style="display:none;position:fixed;z-index:9999;pointer-events:none;min-width:200px;max-width:260px;background:white;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.14),0 1px 4px rgba(0,0,0,0.08);overflow:hidden;">
+    <div id="cal-tip-header" style="padding:8px 12px 6px;display:flex;align-items:center;gap:8px;">
+        <span id="cal-tip-icon" style="width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <i id="cal-tip-icon-i" style="font-size:11px;color:white;"></i>
+        </span>
+        <span id="cal-tip-nombre" style="font-size:12px;font-weight:600;color:#111827;line-height:1.3;"></span>
+    </div>
+    <div style="height:1px;background:#f3f4f6;margin:0 12px;"></div>
+    <div style="padding:8px 12px 10px;display:flex;flex-direction:column;gap:5px;">
+        <div id="cal-tip-tipo-row" style="display:flex;align-items:center;gap:6px;">
+            <i class="fa-solid fa-tag" style="font-size:10px;color:#9ca3af;width:12px;text-align:center;"></i>
+            <span id="cal-tip-tipo" style="font-size:11px;color:#6b7280;"></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+            <i class="fa-solid fa-calendar" style="font-size:10px;color:#9ca3af;width:12px;text-align:center;"></i>
+            <span id="cal-tip-fecha" style="font-size:11px;color:#6b7280;"></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+            <i class="fa-solid fa-house" style="font-size:10px;color:#9ca3af;width:12px;text-align:center;"></i>
+            <span id="cal-tip-propiedad" style="font-size:11px;color:#6b7280;"></span>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    const tip    = document.getElementById('cal-tooltip');
+    const header = document.getElementById('cal-tip-header');
+    const icon   = document.getElementById('cal-tip-icon');
+    const iconI  = document.getElementById('cal-tip-icon-i');
+    let hideTimer;
+
+    document.querySelectorAll('.cal-tip').forEach(el => {
+        el.addEventListener('mouseenter', function(e) {
+            clearTimeout(hideTimer);
+            const cat      = this.dataset.tipCat;
+            const color    = this.dataset.tipColor;
+            const nombre   = this.dataset.tipNombre;
+            const tipo     = this.dataset.tipTipo;
+            const fecha    = this.dataset.tipFecha;
+            const propiedad = this.dataset.tipPropiedad;
+
+            icon.style.background = color;
+            iconI.className = cat === 'limpieza'
+                ? 'fa-solid fa-broom'
+                : 'fa-solid fa-wrench';
+            header.style.background = color + '18';
+
+            document.getElementById('cal-tip-nombre').textContent    = nombre;
+            document.getElementById('cal-tip-fecha').textContent      = fecha;
+            document.getElementById('cal-tip-propiedad').textContent  = propiedad;
+
+            const tipoRow = document.getElementById('cal-tip-tipo-row');
+            if (tipo) {
+                document.getElementById('cal-tip-tipo').textContent = tipo;
+                tipoRow.style.display = 'flex';
+            } else {
+                tipoRow.style.display = 'none';
+            }
+
+            tip.style.display = 'block';
+            positionTip(e);
+        });
+
+        el.addEventListener('mousemove', positionTip);
+
+        el.addEventListener('mouseleave', function() {
+            hideTimer = setTimeout(() => tip.style.display = 'none', 120);
+        });
+    });
+
+    function positionTip(e) {
+        const margin = 12;
+        const tw = tip.offsetWidth;
+        const th = tip.offsetHeight;
+        let x = e.clientX + margin;
+        let y = e.clientY + margin;
+        if (x + tw > window.innerWidth  - margin) x = e.clientX - tw - margin;
+        if (y + th > window.innerHeight - margin) y = e.clientY - th - margin;
+        tip.style.left = x + 'px';
+        tip.style.top  = y + 'px';
+    }
+})();
+</script>
 
 </x-app-layout>
