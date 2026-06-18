@@ -69,18 +69,18 @@
         @php
             $resPropiedad = $reservasPorPropiedad[$propiedad] ?? collect();
             $tareasFecha  = $tareasPorPropiedad[$propiedad] ?? collect();
-            $rowH         = 28;
+            $rowH         = 32;
         @endphp
         <tr>
             {{-- Nombre propiedad --}}
-            <td style="position:sticky;left:0;background:white;z-index:2;border-right:1px solid #e5e7eb;border-bottom:0.5px solid #f3f4f6;padding:0;width:{{ $propW }}px;min-width:{{ $propW }}px;">
+            <td style="position:sticky;left:0;background:white;z-index:2;border-right:1px solid #e5e7eb;border-bottom:0.5px solid #f3f4f6;padding:0;width:{{ $propW }}px;min-width:{{ $propW }}px;height:{{ $rowH }}px;overflow:hidden;">
                 <div style="height:{{ $rowH }}px;display:flex;align-items:center;padding:0 10px;overflow:hidden;">
                     <span style="font-size:11px;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ $propiedad }}">{{ $propiedad }}</span>
                 </div>
             </td>
 
             {{-- Celdas días --}}
-            <td colspan="{{ $dias }}" style="padding:0;position:relative;height:{{ $rowH }}px;font-size:0;">
+            <td colspan="{{ $dias }}" style="padding:0;position:relative;height:{{ $rowH }}px;max-height:{{ $rowH }}px;overflow:hidden;font-size:0;line-height:0;">
                 {{-- Fondo de celdas --}}
                 @for($d = 0; $d < $dias; $d++)
                     @php
