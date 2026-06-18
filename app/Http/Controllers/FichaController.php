@@ -327,9 +327,10 @@ class FichaController extends Controller
             $fullRef = $field->getRefFullTable($project->slug);
             if (!$fullRef) continue;
 
-            $query = DB::table($fullRef)
-                ->where(fn($q) => $q->whereNull('deleted')->orWhere('deleted', 0))
-                ->orderBy('nombre');
+            $query = DB::table($fullRef)->orderBy('nombre');
+            if (\Illuminate\Support\Facades\Schema::hasColumn($fullRef, 'deleted')) {
+                $query->where('deleted', 0);
+            }
 
             // Si es control_user como desplegable y el rol está restringido, solo el propio usuario
             if ($restricted && $field->name === 'control_user' && $field->type === 'desplegable' && $fullRef === $usuariosTable) {
@@ -371,10 +372,11 @@ class FichaController extends Controller
             foreach ($relTable->fields as $field) {
                 $fullRef = $field->getRefFullTable($project->slug);
                 if (!$fullRef) continue;
-                $tabFkOptions[$field->name] = DB::table($fullRef)
-                    ->where(fn($q) => $q->whereNull('deleted')->orWhere('deleted', 0))
-                    ->orderBy('nombre')
-                    ->pluck('nombre', 'id')->toArray();
+                $tabQuery = DB::table($fullRef)->orderBy('nombre');
+                if (\Illuminate\Support\Facades\Schema::hasColumn($fullRef, 'deleted')) {
+                    $tabQuery->where('deleted', 0);
+                }
+                $tabFkOptions[$field->name] = $tabQuery->pluck('nombre', 'id')->toArray();
             }
 
             $tabs[] = [
