@@ -24,9 +24,20 @@ class ListadoController extends Controller
 
         $query = DB::table($fullTable);
 
-        // Filtro stat (específico de vm_propiedades)
+        // Filtro stat
         $stat = $request->input('stat');
-        if ($fullTable === 'vm_propiedades' && $stat) {
+        if ($fullTable === 'vm_reservas' && $stat) {
+            $hoy    = now()->toDateString();
+            $manana = now()->addDay()->toDateString();
+            $pasado = now()->addDays(2)->toDateString();
+            $query->whereNotIn('booking_status', ['cancelled', 'canceled']);
+            match ($stat) {
+                'en_curso' => $query->where('check_in_date', '<=', $hoy)->where('check_out_date', '>=', $hoy),
+                'manana'   => $query->where('check_in_date', $manana),
+                'pasado'   => $query->where('check_in_date', $pasado),
+                default    => null,
+            };
+        } elseif ($fullTable === 'vm_propiedades' && $stat) {
             $ayer = now()->subDay()->toDateString();
             $hoy  = now()->toDateString();
             $query->whereNotNull('icnea_code');
@@ -173,8 +184,21 @@ class ListadoController extends Controller
             }
         }
 
-        // Stats específicas de vm_propiedades
+        // Stats específicas por tabla
         $tablStats = null;
+
+        if ($fullTable === 'vm_reservas') {
+            $hoy      = now()->toDateString();
+            $manana   = now()->addDay()->toDateString();
+            $pasado   = now()->addDays(2)->toDateString();
+            $notCancelled = fn($q) => $q->whereNotIn('booking_status', ['cancelled', 'canceled']);
+            $tablStats = [
+                'en_curso' => DB::table($fullTable)->where($notCancelled)->where('check_in_date', '<=', $hoy)->where('check_out_date', '>=', $hoy)->count(),
+                'manana'   => DB::table($fullTable)->where($notCancelled)->where('check_in_date', $manana)->count(),
+                'pasado'   => DB::table($fullTable)->where($notCancelled)->where('check_in_date', $pasado)->count(),
+            ];
+        }
+
         if ($fullTable === 'vm_propiedades') {
             $ayer = now()->subDay()->toDateString();
             $hoy  = now()->toDateString();

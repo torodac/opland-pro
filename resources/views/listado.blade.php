@@ -94,15 +94,22 @@
     @php $statActiva = request('stat'); @endphp
     <div class="flex gap-3 mb-4 flex-wrap">
         @php
-        $stats = [
-            'pte_info'        => ['label' => 'Pte. información', 'color' => 'yellow', 'count' => $tablStats['pte_info']],
-            'posibles_bajas'  => ['label' => 'Posibles bajas',   'color' => 'red',    'count' => $tablStats['posibles_bajas']],
-            'revisar_borrado' => ['label' => 'Revisar borrado',  'color' => 'blue',   'count' => $tablStats['revisar_borrado']],
-        ];
+        $stats = isset($tablStats['en_curso'])
+            ? [
+                'en_curso' => ['label' => 'En curso',          'color' => 'green',  'count' => $tablStats['en_curso']],
+                'manana'   => ['label' => 'Check-in mañana',   'color' => 'blue',   'count' => $tablStats['manana']],
+                'pasado'   => ['label' => 'Check-in pasado',   'color' => 'yellow', 'count' => $tablStats['pasado']],
+            ]
+            : [
+                'pte_info'        => ['label' => 'Pte. información', 'color' => 'yellow', 'count' => $tablStats['pte_info']],
+                'posibles_bajas'  => ['label' => 'Posibles bajas',   'color' => 'red',    'count' => $tablStats['posibles_bajas']],
+                'revisar_borrado' => ['label' => 'Revisar borrado',  'color' => 'blue',   'count' => $tablStats['revisar_borrado']],
+            ];
         $colorMap = [
             'yellow' => ['bg' => '#fefce8', 'border' => '#fde047', 'text' => '#854d0e', 'num' => '#a16207', 'active_bg' => '#fef08a'],
             'red'    => ['bg' => '#fef2f2', 'border' => '#fca5a5', 'text' => '#991b1b', 'num' => '#b91c1c', 'active_bg' => '#fecaca'],
             'blue'   => ['bg' => '#eff6ff', 'border' => '#93c5fd', 'text' => '#1e40af', 'num' => '#1d4ed8', 'active_bg' => '#bfdbfe'],
+            'green'  => ['bg' => '#f0fdf4', 'border' => '#86efac', 'text' => '#166534', 'num' => '#15803d', 'active_bg' => '#bbf7d0'],
         ];
         @endphp
         @foreach($stats as $key => $stat)
