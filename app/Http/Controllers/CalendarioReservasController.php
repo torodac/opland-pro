@@ -34,14 +34,16 @@ class CalendarioReservasController extends Controller
             ->join('vm_propiedades as p', 'p.id', '=', 't.id_propiedades')
             ->where('t.deleted', 0)
             ->whereBetween('t.fecha_planificada', [$desde, $hasta])
-            ->get(['p.nombre as propiedad', 't.id', 't.fecha_planificada', 't.Tipo as tipo', DB::raw("'limpieza' as categoria")]);
+            ->get(['p.nombre as propiedad', 't.id', 't.fecha_planificada', 't.Tipo as tipo'])
+            ->map(fn($r) => (object) array_merge((array) $r, ['categoria' => 'limpieza']));
 
         // Tareas de mantenimiento planificadas en el período
         $mantenimiento = DB::table('vm_tareas_mantenimiento as t')
             ->join('vm_propiedades as p', 'p.id', '=', 't.id_propiedades')
             ->where('t.deleted', 0)
             ->whereBetween('t.fecha_planificada', [$desde, $hasta])
-            ->get(['p.nombre as propiedad', 't.id', 't.fecha_planificada', 't.Tipo as tipo', DB::raw("'mantenimiento' as categoria")]);
+            ->get(['p.nombre as propiedad', 't.id', 't.fecha_planificada', 't.Tipo as tipo'])
+            ->map(fn($r) => (object) array_merge((array) $r, ['categoria' => 'mantenimiento']));
 
         $tareasPorPropiedad = $limpieza->concat($mantenimiento)
             ->groupBy('propiedad')

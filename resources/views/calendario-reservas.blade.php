@@ -80,16 +80,18 @@
             </td>
 
             {{-- Celdas días --}}
-            <td colspan="{{ $dias }}" style="padding:0;position:relative;height:{{ $rowH }}px;max-height:{{ $rowH }}px;overflow:hidden;font-size:0;line-height:0;">
-                {{-- Fondo de celdas --}}
+            <td colspan="{{ $dias }}" style="padding:0;position:relative;height:{{ $rowH }}px;overflow:hidden;">
+                {{-- Fondo de celdas (grid absoluto, sin inline-block) --}}
+                <div style="position:absolute;inset:0;display:grid;grid-template-columns:repeat({{ $dias }},{{ $colW }}px);">
                 @for($d = 0; $d < $dias; $d++)
                     @php
                         $fecha = now()->addDays($d);
                         $isHoy = $fecha->toDateString() === $hoy;
                         $isWE  = in_array($fecha->dayOfWeek, [0, 6]);
                     @endphp
-                    <span style="display:inline-block;width:{{ $colW }}px;height:{{ $rowH }}px;vertical-align:top;box-sizing:border-box;border-right:0.5px solid #f3f4f6;border-bottom:0.5px solid #f3f4f6;background:{{ $isHoy ? '#fff7ed' : ($isWE ? '#fafafa' : 'white') }};"></span>
+                    <div style="border-right:0.5px solid #f3f4f6;border-bottom:0.5px solid #f3f4f6;background:{{ $isHoy ? '#fff7ed' : ($isWE ? '#fafafa' : 'white') }};"></div>
                 @endfor
+                </div>
 
                 {{-- Barras de reservas --}}
                 @foreach($resPropiedad as $r)
