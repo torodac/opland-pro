@@ -82,7 +82,7 @@ class FichaController extends Controller
         // Control de acceso a nivel de registro
         $this->abortIfNoRecordAccess($project, $fullTable, $registro);
 
-        $usuarios   = $this->resolveUsers($registro->createuser, $registro->updateuser);
+        $usuarios   = $this->resolveUsers($registro->createuser ?? null, $registro->updateuser ?? null);
         $fkOptions  = $this->loadFkOptions($project, $projectTable);
         $tabs       = $this->loadTabData($project, $projectTable, $id);
         $canEdit    = (Auth::user()?->canEditTable($project, $projectTable->name) ?? false)
