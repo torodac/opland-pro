@@ -133,15 +133,24 @@
                             $left  = $d * $colW + 2 + ($loop->index * 15);
                             $tabla = $cat === 'limpieza' ? 'tareas_limpieza' : 'tareas_mantenimiento';
                         @endphp
+                        @php
+                            $tooltipParts = array_filter([
+                                $tarea->nombre ?? null,
+                                $cat === 'limpieza' && $tarea->tipo ? 'Tipo: ' . $tarea->tipo : null,
+                                'Fecha: ' . \Carbon\Carbon::parse($tarea->fecha_planificada)->format('d/m/Y'),
+                                $tarea->propiedad,
+                            ]);
+                            $tooltip = implode(' · ', $tooltipParts);
+                        @endphp
                         <a href="{{ route('ficha', [$project->slug, $tabla, $tarea->id]) }}"
-                           title="{{ $cfg['title'] }}"
-                           style="position:absolute;top:7px;left:{{ $left }}px;width:14px;height:14px;display:flex;align-items:center;justify-content:center;text-decoration:none;z-index:1;">
+                           title="{{ $tooltip }}"
+                           style="position:absolute;top:6px;left:{{ $left }}px;width:16px;height:16px;display:flex;align-items:center;justify-content:center;text-decoration:none;z-index:1;">
                             @if($cat === 'limpieza')
-                                <span style="width:14px;height:14px;border-radius:50%;background:{{ $cfg['circle'] }};display:flex;align-items:center;justify-content:center;">
-                                    <i class="fa-solid fa-spray-can-sparkles" style="font-size:8px;color:white;"></i>
+                                <span style="width:16px;height:16px;border-radius:50%;background:{{ $cfg['circle'] }};display:flex;align-items:center;justify-content:center;">
+                                    <i class="fa-solid fa-broom" style="font-size:9px;color:white;"></i>
                                 </span>
                             @else
-                                <i class="fa-solid fa-wrench" style="font-size:11px;color:#b45309;"></i>
+                                <i class="fa-solid fa-wrench" style="font-size:13px;color:#b45309;"></i>
                             @endif
                         </a>
                     @endforeach
