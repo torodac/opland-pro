@@ -18,7 +18,9 @@ class ListadoController extends Controller
             ->with(['listFields', 'fields'])
             ->firstOrFail();
 
-        $fullTable = $projectTable->getFullTableName();
+        $fullTable    = $projectTable->getFullTableName();
+        $tieneDeleted = Schema::hasColumn($fullTable, 'deleted');
+        $tieneHidden  = Schema::hasColumn($fullTable, 'hidden');
 
         $query = DB::table($fullTable);
 
@@ -35,11 +37,15 @@ class ListadoController extends Controller
                 default           => null,
             };
         } else {
-            // Borrados / archivados
-            if ($request->boolean('borrados')) {
-                $query->where('deleted', 1);
-            } else {
-                $query->where('deleted', 0);
+            // Borrados / archivados (solo si las columnas existen)
+            if ($tieneDeleted) {
+                if ($request->boolean('borrados')) {
+                    $query->where('deleted', 1);
+                } else {
+                    $query->where('deleted', 0);
+                }
+            }
+            if ($tieneHidden && !$request->boolean('borrados')) {
                 if ($request->boolean('ocultos')) {
                     $query->where('hidden', 1);
                 } else {
@@ -123,8 +129,6 @@ class ListadoController extends Controller
 
         $modoTabla         = $request->input('modo') === 'tabla' && $requiredHidden->isEmpty();
         $tablaNoDisponible = $request->input('modo') === 'tabla' && $requiredHidden->isNotEmpty();
-        $tieneDeleted      = Schema::hasColumn($fullTable, 'deleted');
-        $tieneHidden       = Schema::hasColumn($fullTable, 'hidden');
         $campoFile         = $projectTable->fields->firstWhere('type', 'file');
         $modoGaleria       = $request->input('modo') === 'galeria' && $campoFile !== null;
         // Para galería: mapa campo → tabla ref para construir URLs a fichas relacionadas
