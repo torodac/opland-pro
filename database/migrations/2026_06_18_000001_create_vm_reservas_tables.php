@@ -28,6 +28,8 @@ return new class extends Migration
             $t->string('checkin_status', 20)->nullable();
             $t->json('trace')->nullable();
             $t->timestamp('icnea_updatedat')->nullable();
+            $t->smallInteger('deleted')->default(0);
+            $t->smallInteger('hidden')->default(0);
             $t->timestamp('createdat')->nullable();
             $t->timestamp('updatedat')->nullable();
         };
