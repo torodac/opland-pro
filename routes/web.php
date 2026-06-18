@@ -6,6 +6,7 @@ use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ListadoController;
 use App\Http\Controllers\FichaController;
 use App\Http\Controllers\ExcelController;
+use App\Http\Controllers\CalendarioReservasController;
 
 // Autenticación
 Route::get('login', [LoginController::class, 'showLogin'])->name('login');
@@ -96,6 +97,8 @@ Route::middleware('auth')->group(function () {
 
     // Rutas dentro de un proyecto (con verificación de acceso)
     Route::prefix('{project:slug}')->middleware('project.access')->group(function () {
+
+        Route::get('calendario-reservas', [CalendarioReservasController::class, 'index'])->name('calendario-reservas');
 
         Route::get('{table}', [ListadoController::class, 'index'])->name('listado');
 
