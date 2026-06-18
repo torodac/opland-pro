@@ -131,7 +131,7 @@
                                 $tipo   = $tarea->tipo ?? '_default';
                                 $cfg    = $tareaConfig[$cat][$tipo] ?? $tareaConfig[$cat]['_default'] ?? ['icon'=>'fa-solid fa-circle','color'=>'#9ca3af','title'=>$tipo];
                                 $left   = $d * $colW + 2 + ($loop->index * 14);
-                                $tabla  = $cat === 'limpieza' ? 'tareas-limpieza' : 'tareas-mantenimiento';
+                                $tabla  = $cat === 'limpieza' ? 'tareas_limpieza' : 'tareas_mantenimiento';
                             @endphp
                             <a href="{{ route('ficha', [$project->slug, $tabla, $tarea->id]) }}"
                                title="{{ $cfg['title'] }}{{ $tipo && $tipo !== '_default' ? ': '.$tipo : '' }}"
