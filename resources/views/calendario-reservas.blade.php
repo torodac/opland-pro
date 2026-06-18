@@ -80,7 +80,7 @@
             </td>
 
             {{-- Celdas días --}}
-            <td colspan="{{ $dias }}" style="padding:0;position:relative;height:{{ $rowH }}px;">
+            <td colspan="{{ $dias }}" style="padding:0;position:relative;height:{{ $rowH }}px;font-size:0;">
                 {{-- Fondo de celdas --}}
                 @for($d = 0; $d < $dias; $d++)
                     @php
