@@ -67,10 +67,9 @@
     <tbody>
     @foreach($propiedades as $propiedad)
         @php
-            $resPropiedad    = $reservasPorPropiedad[$propiedad] ?? collect();
-            $tareasFecha     = $tareasPorPropiedad[$propiedad] ?? collect();
-            $hayTareas       = $tareasFecha->isNotEmpty();
-            $rowH            = $hayTareas ? 44 : 28;
+            $resPropiedad = $reservasPorPropiedad[$propiedad] ?? collect();
+            $tareasFecha  = $tareasPorPropiedad[$propiedad] ?? collect();
+            $rowH         = 28;
         @endphp
         <tr>
             {{-- Nombre propiedad --}}
@@ -118,35 +117,33 @@
                     </a>
                 @endforeach
 
-                {{-- Iconos de tareas (fila inferior) --}}
-                @if($hayTareas)
-                    @for($d = 0; $d < $dias; $d++)
+                {{-- Iconos de tareas (misma fila, dentro de las celdas) --}}
+                @for($d = 0; $d < $dias; $d++)
+                    @php
+                        $fechaStr     = now()->addDays($d)->toDateString();
+                        $tareasDelDia = $tareasFecha[$fechaStr] ?? collect();
+                    @endphp
+                    @foreach($tareasDelDia as $tarea)
                         @php
-                            $fechaStr = now()->addDays($d)->toDateString();
-                            $tareasDelDia = $tareasFecha[$fechaStr] ?? collect();
+                            $cat   = $tarea->categoria;
+                            $tipo  = $tarea->tipo ?? '_default';
+                            $cfg   = $tareaConfig[$cat][$tipo] ?? $tareaConfig[$cat]['_default'] ?? ['circle'=>'#9ca3af','title'=>$tipo];
+                            $left  = $d * $colW + 2 + ($loop->index * 15);
+                            $tabla = $cat === 'limpieza' ? 'tareas_limpieza' : 'tareas_mantenimiento';
                         @endphp
-                        @foreach($tareasDelDia as $tarea)
-                            @php
-                                $cat    = $tarea->categoria;
-                                $tipo   = $tarea->tipo ?? '_default';
-                                $cfg    = $tareaConfig[$cat][$tipo] ?? $tareaConfig[$cat]['_default'] ?? ['icon'=>'fa-solid fa-circle','color'=>'#9ca3af','title'=>$tipo];
-                                $left   = $d * $colW + 2 + ($loop->index * 14);
-                                $tabla  = $cat === 'limpieza' ? 'tareas_limpieza' : 'tareas_mantenimiento';
-                            @endphp
-                            <a href="{{ route('ficha', [$project->slug, $tabla, $tarea->id]) }}"
-                               title="{{ $cfg['title'] }}"
-                               style="position:absolute;bottom:3px;left:{{ $left }}px;width:14px;height:14px;display:flex;align-items:center;justify-content:center;text-decoration:none;">
-                                @if($cat === 'limpieza')
-                                    <span style="width:14px;height:14px;border-radius:50%;background:{{ $cfg['circle'] }};display:flex;align-items:center;justify-content:center;">
-                                        <i class="fa-solid fa-spray-can-sparkles" style="font-size:8px;color:white;"></i>
-                                    </span>
-                                @else
-                                    <i class="fa-solid fa-wrench" style="font-size:11px;color:#b45309;"></i>
-                                @endif
-                            </a>
-                        @endforeach
-                    @endfor
-                @endif
+                        <a href="{{ route('ficha', [$project->slug, $tabla, $tarea->id]) }}"
+                           title="{{ $cfg['title'] }}"
+                           style="position:absolute;top:7px;left:{{ $left }}px;width:14px;height:14px;display:flex;align-items:center;justify-content:center;text-decoration:none;z-index:1;">
+                            @if($cat === 'limpieza')
+                                <span style="width:14px;height:14px;border-radius:50%;background:{{ $cfg['circle'] }};display:flex;align-items:center;justify-content:center;">
+                                    <i class="fa-solid fa-spray-can-sparkles" style="font-size:8px;color:white;"></i>
+                                </span>
+                            @else
+                                <i class="fa-solid fa-wrench" style="font-size:11px;color:#b45309;"></i>
+                            @endif
+                        </a>
+                    @endforeach
+                @endfor
             </td>
         </tr>
     @endforeach
