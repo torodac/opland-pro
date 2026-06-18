@@ -85,7 +85,7 @@
     </x-slot>
 
     @php
-        $camposFiltrables = $campos->filter(fn($c) => in_array($c->type, ['select','tinyint','fecha']));
+        $camposFiltrables = $campos->filter(fn($c) => in_array($c->type, ['select','tinyint','fecha','id','desplegable']));
         $filtrosActivos   = collect(request()->except(['q','ocultos','borrados','page','modo','stat']))->filter()->isNotEmpty();
     @endphp
 
@@ -253,6 +253,18 @@
                                        class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 cursor-pointer">
                                 <input type="hidden" name="{{ $param }}_desde" id="{{ $param }}_desde" value="{{ request($param . '_desde') }}">
                                 <input type="hidden" name="{{ $param }}_hasta" id="{{ $param }}_hasta" value="{{ request($param . '_hasta') }}">
+                            </div>
+
+                        @elseif(in_array($campo->type, ['id', 'desplegable']))
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1">{{ $campo->label }}</label>
+                                <select name="{{ $param }}"
+                                        class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
+                                    <option value="">Todos</option>
+                                    @foreach($fkOptions[$campo->name] ?? [] as $id => $nombre)
+                                        <option value="{{ $id }}" {{ request($param) == $id ? 'selected' : '' }}>{{ $nombre }}</option>
+                                    @endforeach
+                                </select>
                             </div>
                         @endif
                     @endforeach

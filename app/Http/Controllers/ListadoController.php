@@ -78,7 +78,7 @@ class ListadoController extends Controller
                 if ($request->filled($param . '_hasta')) {
                     $query->where($field->name, '<=', $request->input($param . '_hasta'));
                 }
-            } elseif (in_array($field->type, ['select', 'tinyint'])) {
+            } elseif (in_array($field->type, ['select', 'tinyint', 'id', 'desplegable'])) {
                 if ($request->filled($param)) {
                     $query->where($field->name, $request->input($param));
                 }
