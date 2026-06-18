@@ -96,9 +96,9 @@
         @php
         $stats = isset($tablStats['en_curso'])
             ? [
-                'en_curso' => ['label' => 'En curso',          'color' => 'green',  'count' => $tablStats['en_curso']],
-                'manana'   => ['label' => 'Check-in mañana',   'color' => 'blue',   'count' => $tablStats['manana']],
-                'pasado'   => ['label' => 'Check-in pasado',   'color' => 'yellow', 'count' => $tablStats['pasado']],
+                'en_curso' => ['label' => 'En curso',                                                       'color' => 'green',  'count' => $tablStats['en_curso']],
+                'manana'   => ['label' => 'Mañana ' . now()->addDay()->format('d/m'),                       'color' => 'blue',   'count' => $tablStats['manana']],
+                'pasado'   => ['label' => 'Pasado mañana ' . now()->addDays(2)->format('d/m'),              'color' => 'yellow', 'count' => $tablStats['pasado']],
             ]
             : [
                 'pte_info'        => ['label' => 'Pte. información', 'color' => 'yellow', 'count' => $tablStats['pte_info']],
