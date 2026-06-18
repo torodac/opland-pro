@@ -5,6 +5,19 @@
     $doW   = ['D','L','M','X','J','V','S'];
     $colW  = 22;
     $propW = 160;
+
+    // Icono y color según categoría + tipo de tarea
+    $tareaConfig = [
+        'limpieza' => [
+            'Checkout'      => ['icon' => 'fa-solid fa-arrow-right-from-bracket', 'color' => '#ea580c', 'title' => 'Limpieza checkout'],
+            'Cliente'       => ['icon' => 'fa-solid fa-broom',                    'color' => '#2563eb', 'title' => 'Limpieza cliente'],
+            'Mantenimiento' => ['icon' => 'fa-solid fa-wrench',                   'color' => '#7c3aed', 'title' => 'Mantenimiento (limpieza)'],
+            '_default'      => ['icon' => 'fa-solid fa-broom',                    'color' => '#6b7280', 'title' => 'Limpieza'],
+        ],
+        'mantenimiento' => [
+            '_default'      => ['icon' => 'fa-solid fa-screwdriver-wrench',       'color' => '#b45309', 'title' => 'Mantenimiento'],
+        ],
+    ];
 @endphp
 
 <div class="mb-4 flex items-center justify-between gap-4">
@@ -54,18 +67,21 @@
     <tbody>
     @foreach($propiedades as $propiedad)
         @php
-            $resPropiedad = $reservasPorPropiedad[$propiedad] ?? collect();
+            $resPropiedad    = $reservasPorPropiedad[$propiedad] ?? collect();
+            $tareasFecha     = $tareasPorPropiedad[$propiedad] ?? collect();
+            $hayTareas       = $tareasFecha->isNotEmpty();
+            $rowH            = $hayTareas ? 44 : 28;
         @endphp
         <tr>
             {{-- Nombre propiedad --}}
             <td style="position:sticky;left:0;background:white;z-index:2;border-right:1px solid #e5e7eb;border-bottom:0.5px solid #f3f4f6;padding:0;width:{{ $propW }}px;min-width:{{ $propW }}px;">
-                <div style="height:28px;display:flex;align-items:center;padding:0 10px;overflow:hidden;">
+                <div style="height:{{ $rowH }}px;display:flex;align-items:center;padding:0 10px;overflow:hidden;">
                     <span style="font-size:11px;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ $propiedad }}">{{ $propiedad }}</span>
                 </div>
             </td>
 
             {{-- Celdas días --}}
-            <td colspan="{{ $dias }}" style="padding:0;position:relative;height:28px;">
+            <td colspan="{{ $dias }}" style="padding:0;position:relative;height:{{ $rowH }}px;">
                 {{-- Fondo de celdas --}}
                 @for($d = 0; $d < $dias; $d++)
                     @php
@@ -73,7 +89,7 @@
                         $isHoy = $fecha->toDateString() === $hoy;
                         $isWE  = in_array($fecha->dayOfWeek, [0, 6]);
                     @endphp
-                    <span style="display:inline-block;width:{{ $colW }}px;height:28px;vertical-align:top;box-sizing:border-box;border-right:0.5px solid #f3f4f6;border-bottom:0.5px solid #f3f4f6;background:{{ $isHoy ? '#fff7ed' : ($isWE ? '#fafafa' : 'white') }};"></span>
+                    <span style="display:inline-block;width:{{ $colW }}px;height:{{ $rowH }}px;vertical-align:top;box-sizing:border-box;border-right:0.5px solid #f3f4f6;border-bottom:0.5px solid #f3f4f6;background:{{ $isHoy ? '#fff7ed' : ($isWE ? '#fafafa' : 'white') }};"></span>
                 @endfor
 
                 {{-- Barras de reservas --}}
@@ -101,6 +117,30 @@
                         <span style="font-size:10px;font-weight:500;color:{{ $color['text'] }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ $nombre }}</span>
                     </a>
                 @endforeach
+
+                {{-- Iconos de tareas (fila inferior) --}}
+                @if($hayTareas)
+                    @for($d = 0; $d < $dias; $d++)
+                        @php
+                            $fechaStr = now()->addDays($d)->toDateString();
+                            $tareasDelDia = $tareasFecha[$fechaStr] ?? collect();
+                        @endphp
+                        @foreach($tareasDelDia as $tarea)
+                            @php
+                                $cat    = $tarea->categoria;
+                                $tipo   = $tarea->tipo ?? '_default';
+                                $cfg    = $tareaConfig[$cat][$tipo] ?? $tareaConfig[$cat]['_default'] ?? ['icon'=>'fa-solid fa-circle','color'=>'#9ca3af','title'=>$tipo];
+                                $left   = $d * $colW + 2 + ($loop->index * 14);
+                                $tabla  = $cat === 'limpieza' ? 'tareas-limpieza' : 'tareas-mantenimiento';
+                            @endphp
+                            <a href="{{ route('ficha', [$project->slug, $tabla, $tarea->id]) }}"
+                               title="{{ $cfg['title'] }}{{ $tipo && $tipo !== '_default' ? ': '.$tipo : '' }}"
+                               style="position:absolute;bottom:3px;left:{{ $left }}px;width:12px;height:12px;display:flex;align-items:center;justify-content:center;text-decoration:none;">
+                                <i class="{{ $cfg['icon'] }}" style="font-size:10px;color:{{ $cfg['color'] }};"></i>
+                            </a>
+                        @endforeach
+                    @endfor
+                @endif
             </td>
         </tr>
     @endforeach

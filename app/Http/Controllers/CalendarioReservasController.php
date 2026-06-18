@@ -29,10 +29,29 @@ class CalendarioReservasController extends Controller
 
         $reservasPorPropiedad = $reservas->groupBy('propiedad');
 
+        // Tareas de limpieza planificadas en el período
+        $limpieza = DB::table('vm_tareas_limpieza as t')
+            ->join('vm_propiedades as p', 'p.id', '=', 't.id_propiedades')
+            ->where('t.deleted', 0)
+            ->whereBetween('t.fecha_planificada', [$desde, $hasta])
+            ->get(['p.nombre as propiedad', 't.id', 't.fecha_planificada', 't.Tipo as tipo', DB::raw("'limpieza' as categoria")]);
+
+        // Tareas de mantenimiento planificadas en el período
+        $mantenimiento = DB::table('vm_tareas_mantenimiento as t')
+            ->join('vm_propiedades as p', 'p.id', '=', 't.id_propiedades')
+            ->where('t.deleted', 0)
+            ->whereBetween('t.fecha_planificada', [$desde, $hasta])
+            ->get(['p.nombre as propiedad', 't.id', 't.fecha_planificada', 't.Tipo as tipo', DB::raw("'mantenimiento' as categoria")]);
+
+        $tareasPorPropiedad = $limpieza->concat($mantenimiento)
+            ->groupBy('propiedad')
+            ->map(fn($ts) => $ts->groupBy('fecha_planificada'));
+
         return view('calendario-reservas', [
             'project'                => $project,
             'propiedades'            => $propiedades,
             'reservasPorPropiedad'   => $reservasPorPropiedad,
+            'tareasPorPropiedad'     => $tareasPorPropiedad,
             'dias'                   => $dias,
             'breadcrumb'             => [
                 ['label' => 'Calendario de reservas', 'url' => ''],
