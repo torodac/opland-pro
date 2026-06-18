@@ -6,16 +6,16 @@
     $colW  = 22;
     $propW = 160;
 
-    // Icono y color según categoría + tipo de tarea
+    // Color del círculo según tipo de limpieza; mantenimiento usa llave inglesa sin círculo
     $tareaConfig = [
         'limpieza' => [
-            'Checkout'      => ['icon' => 'fa-solid fa-arrow-right-from-bracket', 'color' => '#ea580c', 'title' => 'Limpieza checkout'],
-            'Cliente'       => ['icon' => 'fa-solid fa-broom',                    'color' => '#2563eb', 'title' => 'Limpieza cliente'],
-            'Mantenimiento' => ['icon' => 'fa-solid fa-wrench',                   'color' => '#7c3aed', 'title' => 'Mantenimiento (limpieza)'],
-            '_default'      => ['icon' => 'fa-solid fa-broom',                    'color' => '#6b7280', 'title' => 'Limpieza'],
+            'Checkout'      => ['circle' => '#ea580c', 'title' => 'Limpieza checkout'],
+            'Cliente'       => ['circle' => '#2563eb', 'title' => 'Limpieza cliente'],
+            'Mantenimiento' => ['circle' => '#7c3aed', 'title' => 'Mantenimiento (limpieza)'],
+            '_default'      => ['circle' => '#6b7280', 'title' => 'Limpieza'],
         ],
         'mantenimiento' => [
-            '_default'      => ['icon' => 'fa-solid fa-screwdriver-wrench',       'color' => '#b45309', 'title' => 'Mantenimiento'],
+            '_default'      => ['title' => 'Mantenimiento'],
         ],
     ];
 @endphp
@@ -134,9 +134,15 @@
                                 $tabla  = $cat === 'limpieza' ? 'tareas_limpieza' : 'tareas_mantenimiento';
                             @endphp
                             <a href="{{ route('ficha', [$project->slug, $tabla, $tarea->id]) }}"
-                               title="{{ $cfg['title'] }}{{ $tipo && $tipo !== '_default' ? ': '.$tipo : '' }}"
-                               style="position:absolute;bottom:3px;left:{{ $left }}px;width:12px;height:12px;display:flex;align-items:center;justify-content:center;text-decoration:none;">
-                                <i class="{{ $cfg['icon'] }}" style="font-size:10px;color:{{ $cfg['color'] }};"></i>
+                               title="{{ $cfg['title'] }}"
+                               style="position:absolute;bottom:3px;left:{{ $left }}px;width:14px;height:14px;display:flex;align-items:center;justify-content:center;text-decoration:none;">
+                                @if($cat === 'limpieza')
+                                    <span style="width:14px;height:14px;border-radius:50%;background:{{ $cfg['circle'] }};display:flex;align-items:center;justify-content:center;">
+                                        <i class="fa-solid fa-spray-can-sparkles" style="font-size:8px;color:white;"></i>
+                                    </span>
+                                @else
+                                    <i class="fa-solid fa-wrench" style="font-size:11px;color:#b45309;"></i>
+                                @endif
                             </a>
                         @endforeach
                     @endfor
