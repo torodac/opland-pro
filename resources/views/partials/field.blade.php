@@ -14,9 +14,10 @@
 @switch($campo->type)
 
     @case('text')
+        @php $valorTexto = is_array($valor) || is_object($valor) ? json_encode($valor, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : $valor; @endphp
         <textarea id="campo_{{ $campo->name }}" name="{{ $campo->name }}"
                   rows="4" {{ $req }}
-                  class="{{ $base }} resize-none">{{ $valor }}</textarea>
+                  class="{{ $base }} resize-none">{{ $valorTexto }}</textarea>
         @break
 
     @case('fecha')

@@ -47,7 +47,8 @@
         @break
 
     @case('text')
-        <span class="line-clamp-1 text-gray-500 text-xs">{{ $valor }}</span>
+        @php $valorCell = is_array($valor) || is_object($valor) ? json_encode($valor) : $valor; @endphp
+        <span class="line-clamp-1 text-gray-500 text-xs">{{ $valorCell }}</span>
         @break
 
     @case('id')
