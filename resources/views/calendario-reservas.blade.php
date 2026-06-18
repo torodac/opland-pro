@@ -139,7 +139,7 @@
                            data-tip-fecha="{{ \Carbon\Carbon::parse($tarea->fecha_planificada)->isoFormat('dddd D [de] MMMM') }}"
                            data-tip-propiedad="{{ $tarea->propiedad }}"
                            data-tip-cat="{{ $cat }}"
-                           data-tip-color="{{ $cat === 'limpieza' ? ($cfg['circle'] ?? '#6b7280') : '#b45309' }}"
+                           data-tip-color="{{ $cat === 'limpieza' ? ($cfg['circle'] ?? '#6b7280') : '#6b7c3a' }}"
                            class="cal-tip"
                            style="position:absolute;top:6px;left:{{ $left }}px;width:16px;height:16px;display:flex;align-items:center;justify-content:center;text-decoration:none;z-index:1;">
                             @if($cat === 'limpieza')
@@ -147,7 +147,9 @@
                                     <i class="fa-solid fa-broom" style="font-size:9px;color:white;"></i>
                                 </span>
                             @else
-                                <i class="fa-solid fa-wrench" style="font-size:13px;color:#b45309;"></i>
+                                <span style="width:16px;height:16px;border-radius:50%;background:#6b7c3a;display:flex;align-items:center;justify-content:center;">
+                                    <i class="fa-solid fa-wrench" style="font-size:9px;color:white;"></i>
+                                </span>
                             @endif
                         </a>
                     @endforeach
