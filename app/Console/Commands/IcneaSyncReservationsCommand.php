@@ -45,6 +45,7 @@ class IcneaSyncReservationsCommand extends Command
 
             foreach ($reservas as $r) {
                 DB::table('vm_reservas_temp')->insert([
+                    'nombre'                => trim($r['guest_name'] ?? ''),
                     'icnea_lodging_id'      => $lodgingId,
                     'vm_propiedades_nombre' => $prop->nombre,
                     'booking_id'            => $r['booking_id'],
@@ -130,6 +131,7 @@ class IcneaSyncReservationsCommand extends Command
             if (!$existing) {
                 // Nueva reserva
                 DB::table('vm_reservas')->insert([
+                    'nombre'                => $temp->guest_name,
                     'icnea_lodging_id'      => $temp->icnea_lodging_id,
                     'vm_propiedades_nombre' => $temp->vm_propiedades_nombre,
                     'booking_id'            => $temp->booking_id,

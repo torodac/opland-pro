@@ -133,7 +133,7 @@ class Project extends Model
         $fields = [
             ['name' => 'nombre',   'label' => 'Nombre',    'type' => 'string',   'order' => 1,   'in_list' => true,  'in_form' => true,  'required' => true],
             ['name' => 'mail',     'label' => 'Email',     'type' => 'email',    'order' => 10,  'in_list' => true,  'in_form' => true,  'required' => true],
-            ['name' => 'id_rol',   'label' => 'Rol',       'type' => 'id',       'order' => 20,  'in_list' => true,  'in_form' => true,  'required' => true,  'extras' => 'ref:roles'],
+            ['name' => 'id_rol',   'label' => 'Rol',       'type' => 'desplegable', 'order' => 20,  'in_list' => true,  'in_form' => true,  'required' => true,  'extras' => 'ref:roles'],
             ['name' => 'dni',      'label' => 'DNI',       'type' => 'string',   'order' => 30,  'in_list' => false, 'in_form' => true,  'required' => false],
             ['name' => 'telefono', 'label' => 'Teléfono',  'type' => 'telefono', 'order' => 40,  'in_list' => false, 'in_form' => true,  'required' => false],
             ['name' => 'acceso',   'label' => 'Acceso',    'type' => 'select',   'order' => 50,  'in_list' => true,  'in_form' => true,  'required' => false, 'extras' => 'opt:APP,web,APP y web,sin acceso'],

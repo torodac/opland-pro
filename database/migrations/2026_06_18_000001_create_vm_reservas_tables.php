@@ -10,6 +10,7 @@ return new class extends Migration
     {
         $cols = function (Blueprint $t) {
             $t->id();
+            $t->string('nombre')->nullable();
             $t->string('icnea_lodging_id', 20);
             $t->string('vm_propiedades_nombre')->nullable();
             $t->string('booking_id', 20)->index();

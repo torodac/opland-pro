@@ -96,7 +96,7 @@ class TableField extends Model
     // ¿Es un campo de FK a otra tabla dinámica?
     public function isForeignKey(): bool
     {
-        return $this->type === 'id';
+        return $this->type === 'desplegable';
     }
 
     // Nombre corto de la tabla referenciada: "ref:socios" → "socios", "ref:master.estados" → "estados"
