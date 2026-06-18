@@ -11,6 +11,7 @@ return new class extends Migration
         $cols = function (Blueprint $t) {
             $t->id();
             $t->string('nombre')->nullable();
+            $t->unsignedBigInteger('id_propiedades')->nullable();
             $t->string('icnea_lodging_id', 20);
             $t->string('vm_propiedades_nombre')->nullable();
             $t->string('booking_id', 20)->index();
@@ -28,6 +29,8 @@ return new class extends Migration
             $t->string('checkin_status', 20)->nullable();
             $t->json('trace')->nullable();
             $t->timestamp('icnea_updatedat')->nullable();
+            $t->unsignedBigInteger('createuser')->nullable();
+            $t->unsignedBigInteger('updateuser')->nullable();
             $t->timestamp('createdat')->nullable();
             $t->timestamp('updatedat')->nullable();
         };

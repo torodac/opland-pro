@@ -28,6 +28,9 @@ class IcneaSyncReservationsCommand extends Command
             ->where(fn($q) => $q->whereNull('deleted')->orWhere('deleted', 0))
             ->get(['id', 'nombre', 'icnea_lodging_id']);
 
+        // Mapa lodging_id → vm_propiedades.id para el FK
+        $propMap = $propiedades->keyBy(fn($p) => $this->ownerId . $p->icnea_lodging_id);
+
         $this->info(count($propiedades) . ' propiedades a procesar.');
 
         // Vaciar tabla temporal
@@ -46,6 +49,7 @@ class IcneaSyncReservationsCommand extends Command
             foreach ($reservas as $r) {
                 DB::table('vm_reservas_temp')->insert([
                     'nombre'                => trim($r['guest_name'] ?? ''),
+                    'id_propiedades'        => $propMap[$lodgingId]->id ?? null,
                     'icnea_lodging_id'      => $lodgingId,
                     'vm_propiedades_nombre' => $prop->nombre,
                     'booking_id'            => $r['booking_id'],
@@ -62,8 +66,8 @@ class IcneaSyncReservationsCommand extends Command
                     'guest_language'        => $r['guest_language'] ?? null,
                     'checkin_status'        => $r['checkin_status'] ?? null,
                     'icnea_updatedat'       => now(),
-                    'createdat'             => now(),
-                    'updatedat'             => now(),
+                    'createuser'            => 1,
+                    'createdat'             => $this->date($r['booking_date'] ?? null) ?? now()->toDateString(),
                 ]);
                 $totalInserted++;
             }
@@ -132,6 +136,7 @@ class IcneaSyncReservationsCommand extends Command
                 // Nueva reserva
                 DB::table('vm_reservas')->insert([
                     'nombre'                => $temp->guest_name,
+                    'id_propiedades'        => $temp->id_propiedades,
                     'icnea_lodging_id'      => $temp->icnea_lodging_id,
                     'vm_propiedades_nombre' => $temp->vm_propiedades_nombre,
                     'booking_id'            => $temp->booking_id,
@@ -149,8 +154,8 @@ class IcneaSyncReservationsCommand extends Command
                     'checkin_status'        => $temp->checkin_status,
                     'trace'                 => json_encode([['fecha' => $now, 'campo' => 'booking_status', 'de' => null, 'a' => $temp->booking_status]]),
                     'icnea_updatedat'       => $temp->icnea_updatedat,
-                    'createdat'             => $now,
-                    'updatedat'             => $now,
+                    'createuser'            => 1,
+                    'createdat'             => $temp->createdat ?? $now,
                 ]);
                 $nuevas++;
                 continue;
@@ -176,19 +181,20 @@ class IcneaSyncReservationsCommand extends Command
             $trace = array_merge($trace, $cambios);
 
             DB::table('vm_reservas')->where('booking_id', $temp->booking_id)->update([
-                'booking_status'  => $temp->booking_status,
-                'check_in_date'   => $temp->check_in_date,
-                'check_out_date'  => $temp->check_out_date,
-                'checkin_status'  => $temp->checkin_status,
+                'booking_status'     => $temp->booking_status,
+                'check_in_date'      => $temp->check_in_date,
+                'check_out_date'     => $temp->check_out_date,
+                'checkin_status'     => $temp->checkin_status,
                 'number_of_adults'   => $temp->number_of_adults,
                 'number_of_children' => $temp->number_of_children,
                 'number_of_infants'  => $temp->number_of_infants,
-                'guest_name'      => $temp->guest_name,
-                'guest_email'     => $temp->guest_email,
-                'guest_phone'     => $temp->guest_phone,
-                'trace'           => json_encode($trace),
-                'icnea_updatedat' => now(),
-                'updatedat'       => $now,
+                'guest_name'         => $temp->guest_name,
+                'guest_email'        => $temp->guest_email,
+                'guest_phone'        => $temp->guest_phone,
+                'trace'              => json_encode($trace),
+                'icnea_updatedat'    => now(),
+                'updateuser'         => 1,
+                'updatedat'          => $now,
             ]);
             $actualizadas++;
 
