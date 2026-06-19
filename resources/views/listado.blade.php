@@ -17,6 +17,16 @@
             </svg>
         </a>
         @endif
+        {{-- Planificador (solo tareas_limpieza) --}}
+        @if($projectTable->name === 'tareas_limpieza')
+        <a href="{{ route('planificador-limpieza', $project->slug) }}"
+           title="Planificador del día"
+           class="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M12 12v4m0 0l-2-2m2 2l2-2"/>
+            </svg>
+        </a>
+        @endif
         {{-- Toggle vista tabla editable --}}
         <a href="{{ request()->fullUrlWithQuery(['modo' => $modoTabla ? 'lista' : 'tabla']) }}"
            title="{{ $modoTabla ? 'Vista lista' : 'Vista tabla editable' }}"

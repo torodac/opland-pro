@@ -7,6 +7,8 @@ use App\Http\Controllers\ListadoController;
 use App\Http\Controllers\FichaController;
 use App\Http\Controllers\ExcelController;
 use App\Http\Controllers\CalendarioReservasController;
+use App\Http\Controllers\PlanificadorLimpiezaController;
+use App\Http\Controllers\InformeImputacionesController;
 
 // Autenticación
 Route::get('login', [LoginController::class, 'showLogin'])->name('login');
@@ -99,6 +101,12 @@ Route::middleware('auth')->group(function () {
     Route::prefix('{project:slug}')->middleware('project.access')->group(function () {
 
         Route::get('calendario-reservas', [CalendarioReservasController::class, 'index'])->name('calendario-reservas');
+
+        Route::get('informe-imputaciones', [InformeImputacionesController::class, 'index'])->name('informe-imputaciones');
+        Route::get('informe-imputaciones/pdf', [InformeImputacionesController::class, 'pdf'])->name('informe-imputaciones.pdf');
+
+        Route::get('tareas_limpieza/planificar', [PlanificadorLimpiezaController::class, 'index'])->name('planificador-limpieza');
+        Route::patch('tareas_limpieza/{id}/asignar', [PlanificadorLimpiezaController::class, 'assign'])->name('planificador-limpieza.asignar');
 
         Route::get('{table}', [ListadoController::class, 'index'])->name('listado');
 

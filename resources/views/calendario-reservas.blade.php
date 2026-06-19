@@ -31,10 +31,16 @@
                 @endforeach
             </select>
         </form>
-        <div class="flex items-center gap-3 text-xs text-gray-500">
-            <span class="flex items-center gap-1.5"><span style="width:14px;height:10px;border-radius:2px;background:#86efac;display:inline-block;"></span>En curso</span>
-            <span class="flex items-center gap-1.5"><span style="width:14px;height:10px;border-radius:2px;background:#93c5fd;display:inline-block;"></span>Confirmada</span>
-            <span class="flex items-center gap-1.5"><span style="width:14px;height:10px;border-radius:2px;background:#fde68a;display:inline-block;"></span>Solicitada</span>
+        <div class="flex flex-col gap-1.5">
+            <div class="flex items-center gap-3 text-xs text-gray-500">
+                <span class="flex items-center gap-1.5"><span style="width:14px;height:10px;border-radius:2px;background:#86efac;display:inline-block;"></span>En curso</span>
+                <span class="flex items-center gap-1.5"><span style="width:14px;height:10px;border-radius:2px;background:#93c5fd;display:inline-block;"></span>Confirmada</span>
+                <span class="flex items-center gap-1.5"><span style="width:14px;height:10px;border-radius:2px;background:#fde68a;display:inline-block;"></span>Solicitada</span>
+            </div>
+            <span class="flex items-center gap-1 text-xs text-gray-400">
+                <svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 16v-4M12 8h.01"/></svg>
+                Tareas de checkout generadas automáticamente para los próximos 7 días
+            </span>
         </div>
     </div>
     <span class="text-xs text-gray-400">{{ $propiedades->count() }} propiedades · {{ $reservasPorPropiedad->flatten()->count() }} reservas</span>
