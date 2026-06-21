@@ -216,20 +216,20 @@
     <div class="flex-1 flex flex-col overflow-hidden min-w-0">
 
         {{-- HEADER --}}
-        <header class="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0">
-            <div class="flex items-center gap-3 min-w-0">
+        <header class="h-14 bg-white border-b border-gray-200 flex items-center px-4 shrink-0 gap-3">
 
-                {{-- Toggle sidebar --}}
-                <button @click="sidebarOpen = !sidebarOpen"
-                        class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 shrink-0">
-                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                    </svg>
-                </button>
+            {{-- Toggle sidebar — siempre visible, no puede ser comprimido --}}
+            <button @click="sidebarOpen = !sidebarOpen"
+                    class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 shrink-0">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
+            </button>
 
-                {{-- Breadcrumb --}}
+            {{-- Breadcrumb / título — ocupa el espacio disponible y trunca si es necesario --}}
+            <div class="flex-1 min-w-0 overflow-hidden">
                 @if($breadcrumb)
-                    <nav class="text-sm text-gray-400 flex items-center gap-1.5 min-w-0 overflow-hidden">
+                    <nav class="text-sm text-gray-400 flex items-center gap-1.5">
                         @foreach($breadcrumb as $crumb)
                             @if(!$loop->last)
                                 <a href="{{ $crumb['url'] }}" class="hover:text-gray-600 shrink-0">{{ $crumb['label'] }}</a>
