@@ -148,6 +148,35 @@
 
         {{-- Panel Detalles --}}
         <div @if($registro && !empty($tabs)) x-show="tab === 'detalles'" @endif>
+
+            @php
+                $docPath    = $registro?->documento ?? null;
+                $docExt     = $docPath ? strtolower(pathinfo($docPath, PATHINFO_EXTENSION)) : null;
+                $mostrarPdf = $docPath && $docExt === 'pdf';
+                $docUrl     = $mostrarPdf ? asset('storage/' . $docPath) : null;
+            @endphp
+
+            <div class="{{ $mostrarPdf ? 'flex gap-6 items-start' : '' }}">
+
+            {{-- Columna izquierda: preview PDF --}}
+            @if($mostrarPdf)
+            <div class="w-1/2 shrink-0 sticky top-4">
+                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden" style="height: calc(100vh - 7rem)">
+                    <div class="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50">
+                        <span class="text-xs text-gray-400 truncate">{{ basename($docPath) }}</span>
+                        <a href="{{ $docUrl }}" target="_blank"
+                           class="text-xs text-orange-500 hover:text-orange-600 shrink-0 ml-2">
+                            <i class="fas fa-external-link-alt"></i>
+                        </a>
+                    </div>
+                    <iframe src="{{ $docUrl }}" class="w-full h-full border-0" style="height: calc(100% - 37px)"></iframe>
+                </div>
+            </div>
+            @endif
+
+            {{-- Columna derecha (o única): campos --}}
+            <div class="{{ $mostrarPdf ? 'flex-1 min-w-0' : 'w-full' }}">
+
             <form method="POST"
                   action="{{ $registro
                     ? route('ficha.update', [$project->slug, $projectTable->name, $registro->id])
@@ -282,6 +311,8 @@
                     @endif
                 </div>
             @endif
+            </div> {{-- fin columna derecha --}}
+            </div> {{-- fin flex contenedor pdf+campos --}}
         </div>
 
         {{-- Paneles de tablas relacionadas --}}
