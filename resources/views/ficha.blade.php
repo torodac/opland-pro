@@ -211,9 +211,9 @@
                             @php $i++; @endphp
 
                         @else
-                            {{-- Dos campos por fila (o uno solo si es el último impar) --}}
-                            @php $campo2 = ($i + 1 < $total && $camposList[$i + 1]->type !== 'text') ? $camposList[$i + 1] : null; @endphp
-                            <div class="grid grid-cols-1 sm:grid-cols-2">
+                            {{-- Un campo por fila cuando hay PDF, dos por fila en el resto --}}
+                            @php $campo2 = (!$mostrarPdf && $i + 1 < $total && $camposList[$i + 1]->type !== 'text') ? $camposList[$i + 1] : null; @endphp
+                            <div class="{{ $mostrarPdf ? 'grid grid-cols-1' : 'grid grid-cols-1 sm:grid-cols-2' }}">
                                 <div class="px-5 py-4">
                                     <label for="campo_{{ $campo->name }}"
                                            class="block text-xs font-bold text-gray-600 mb-1.5">
