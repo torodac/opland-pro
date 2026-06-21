@@ -2,6 +2,24 @@
 
     <x-slot name="actions">
         @if($registro)
+            {{-- Navegación prev/next --}}
+            <div class="flex items-center gap-1">
+                <a href="{{ $prevId ? route('ficha', [$project->slug, $projectTable->name, $prevId]) : '#' }}"
+                   class="p-1.5 rounded-lg border border-gray-200 text-gray-400 transition-colors {{ $prevId ? 'hover:bg-gray-50 hover:text-gray-600' : 'opacity-30 cursor-not-allowed pointer-events-none' }}"
+                   title="Registro anterior">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                </a>
+                <a href="{{ $nextId ? route('ficha', [$project->slug, $projectTable->name, $nextId]) : '#' }}"
+                   class="p-1.5 rounded-lg border border-gray-200 text-gray-400 transition-colors {{ $nextId ? 'hover:bg-gray-50 hover:text-gray-600' : 'opacity-30 cursor-not-allowed pointer-events-none' }}"
+                   title="Registro siguiente">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+
             {{-- Modo lectura --}}
             <div id="grupo-ver" class="flex gap-2">
                 {{-- Reset password: solo en tabla usuarios, solo admins --}}
@@ -156,11 +174,11 @@
                 $docUrl     = $mostrarPdf ? asset('storage/' . $docPath) : null;
             @endphp
 
-            <div class="{{ $mostrarPdf ? 'flex gap-6 items-start' : '' }}">
+            <div class="{{ $mostrarPdf ? 'grid grid-cols-2 gap-6 items-start' : '' }}">
 
             {{-- Columna izquierda: preview PDF --}}
             @if($mostrarPdf)
-            <div class="w-1/2 shrink-0 sticky top-4">
+            <div class="sticky top-4">
                 <div class="bg-white rounded-xl border border-gray-200 overflow-hidden" style="height: calc(100vh - 7rem)">
                     <div class="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50">
                         <span class="text-xs text-gray-400 truncate">{{ basename($docPath) }}</span>
@@ -175,7 +193,7 @@
             @endif
 
             {{-- Columna derecha (o única): campos --}}
-            <div class="{{ $mostrarPdf ? 'flex-1 min-w-0' : 'w-full' }}">
+            <div>
 
             <form method="POST"
                   action="{{ $registro
