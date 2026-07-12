@@ -262,7 +262,7 @@ class DashboardController extends Controller
         // Caso 1: fichaje + horario descanso
         $rawDescanso = DB::table('vm_fichaje as f')
             ->join('vm_usuarios as u', fn($j) => $j
-                ->whereRaw("f.nombre LIKE '%_' || u.nombre")
+                ->whereColumn('u.id', 'f.control_user')
                 ->where('u.deleted', 0)
             )
             ->join('vm_horarios as h', fn($j) => $j
@@ -276,7 +276,7 @@ class DashboardController extends Controller
         // Caso 2: fichaje + ausencia
         $rawAusencia = DB::table('vm_fichaje as f')
             ->join('vm_usuarios as u', fn($j) => $j
-                ->whereRaw("f.nombre LIKE '%_' || u.nombre")
+                ->whereColumn('u.id', 'f.control_user')
                 ->where('u.deleted', 0)
             )
             ->join('vm_ausencias as a', fn($j) => $j
