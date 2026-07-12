@@ -199,6 +199,9 @@ Route::middleware('auth')->group(function () {
         Route::post('tareas_{tipo}_form/{id}/imputaciones', [\App\Http\Controllers\Vm\TareaController::class, 'storeImputacion'])
             ->where(['tipo' => 'limpieza|mantenimiento|piscina', 'id' => '[0-9]+'])
             ->name('vm.tarea.imputacion.store');
+        Route::patch('tareas_{tipo}_form/{id}/imputaciones/{impId}', [\App\Http\Controllers\Vm\TareaController::class, 'updateImputacion'])
+            ->where(['tipo' => 'limpieza|mantenimiento|piscina', 'id' => '[0-9]+', 'impId' => '[0-9]+'])
+            ->name('vm.tarea.imputacion.update');
         Route::delete('tareas_{tipo}_form/{id}/imputaciones/{impId}', [\App\Http\Controllers\Vm\TareaController::class, 'deleteImputacion'])
             ->where(['tipo' => 'limpieza|mantenimiento|piscina', 'id' => '[0-9]+', 'impId' => '[0-9]+'])
             ->name('vm.tarea.imputacion.delete');
