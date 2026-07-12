@@ -627,7 +627,7 @@
                                             default                                        => 'text-left',
                                         };
                                     @endphp
-                                    <td class="px-4 py-3 text-gray-700 {{ $colAlign }}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ $registro->{$campo->name} ?? '' }}">
+                                    <td class="px-4 py-3 text-gray-700 {{ $colAlign }}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;{{ in_array($campo->type, ['fecha','time']) ? 'min-width:90px' : '' }}" title="{{ $registro->{$campo->name} ?? '' }}">
                                         @include('partials.cell', ['campo' => $campo, 'valor' => $registro->{$campo->name} ?? null, 'fkOptions' => $fkOptions, 'usuariosMap' => $usuariosMap ?? []])
                                     </td>
                                 @endforeach
