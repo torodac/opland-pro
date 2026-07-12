@@ -6,16 +6,80 @@ use App\Http\Controllers\Controller;
 use App\Models\Project;
 use App\Models\ProjectTable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class TableController extends Controller
 {
     public function index(Project $project)
     {
-        $tables       = $project->tables()->withCount('fields')->orderBy('order')->get();
+        $tables = $project->tables()->withCount('fields')->orderBy('order')->get();
+
+        // Adjuntar modulo desde admin_menu_items
+        $moduloMap = \App\Models\MenuItem::where('project_id', $project->id)
+            ->whereNotNull('project_table_id')
+            ->pluck('modulo', 'project_table_id');
+        $tables->each(fn($t) => $t->modulo = $moduloMap[$t->id] ?? null);
+
         $panelTables  = $tables->where('admin_only', false)->values();
         $configTables = $tables->where('admin_only', true)->values();
 
-        return view('config.tables.index', compact('project', 'tables', 'panelTables', 'configTables'));
+        // Orden de módulos guardado en el proyecto
+        $moduloOrder = $project->modulo_order ?? [];
+
+        $sortGroups = function ($grouped) use ($moduloOrder) {
+            return $grouped->sortBy(function ($_, $modulo) use ($moduloOrder) {
+                $idx = array_search((string) $modulo, array_map('strval', $moduloOrder));
+                return $idx === false ? 9999 : $idx;
+            });
+        };
+
+        $panelGroups  = $sortGroups($panelTables->groupBy('modulo'));
+        $configGroups = $sortGroups($configTables->groupBy('modulo'));
+
+        return view('config.tables.index', compact(
+            'project', 'tables', 'panelTables', 'configTables', 'panelGroups', 'configGroups'
+        ));
+    }
+
+    public function reorderModulos(Request $request, Project $project)
+    {
+        $request->validate(['order' => 'required|array']);
+        $project->update(['modulo_order' => $request->input('order')]);
+        return response()->json(['ok' => true]);
+    }
+
+    public function renameModulo(Request $request, Project $project, string $modulo)
+    {
+        $nuevo = trim($request->input('nombre', ''));
+        if (!$nuevo) return response()->json(['error' => 'Nombre vacío'], 422);
+
+        $order = array_map(fn($m) => $m === $modulo ? $nuevo : $m, $project->modulo_order ?? []);
+        $project->update(['modulo_order' => $order]);
+
+        \App\Models\MenuItem::where('project_id', $project->id)
+            ->where('modulo', $modulo)
+            ->update(['modulo' => $nuevo]);
+
+        return response()->json(['ok' => true, 'nuevo' => $nuevo]);
+    }
+
+    public function deleteModulo(Request $request, Project $project, string $modulo)
+    {
+        $order = collect($project->modulo_order ?? [])
+            ->filter(fn($m) => $m !== $modulo)
+            ->values()
+            ->toArray();
+        $project->update(['modulo_order' => $order]);
+        return response()->json(['ok' => true]);
+    }
+
+    public function setModulo(Request $request, Project $project, ProjectTable $table)
+    {
+        $modulo = $request->input('modulo') ?: null;
+        \App\Models\MenuItem::where('project_id', $project->id)
+            ->where('project_table_id', $table->id)
+            ->update(['modulo' => $modulo]);
+        return response()->json(['ok' => true]);
     }
 
     public function patch(Request $request, Project $project, ProjectTable $table)
@@ -141,6 +205,7 @@ class TableController extends Controller
 
     public function destroy(Project $project, ProjectTable $table)
     {
+        DB::table('admin_menu_items')->where('project_table_id', $table->id)->delete();
         $table->delete();
 
         return redirect()

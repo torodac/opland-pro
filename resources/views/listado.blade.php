@@ -17,6 +17,14 @@
             </svg>
         </a>
         @endif
+        {{-- PyG: ir al importador --}}
+        @if($projectTable->name === 'pyg_valores')
+        <a href="{{ url('/vm/pyg') }}"
+           title="Importar PyG"
+           class="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors">
+            <i class="fa-solid fa-file-import"></i>
+        </a>
+        @endif
         {{-- Planificador (solo tareas_limpieza) --}}
         @if($projectTable->name === 'tareas_limpieza')
         <a href="{{ route('planificador-limpieza', $project->slug) }}"
@@ -24,6 +32,20 @@
            class="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors">
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M12 12v4m0 0l-2-2m2 2l2-2"/>
+            </svg>
+        </a>
+        @endif
+        {{-- Planificador (horarios) --}}
+        @if($projectTable->name === 'horarios')
+        <a href="{{ route('horario', $project->slug) }}"
+           title="Planificador semanal"
+           class="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                <line x1="8" y1="14" x2="8" y2="14" stroke-width="2.5" stroke-linecap="round"/>
+                <line x1="12" y1="14" x2="12" y2="14" stroke-width="2.5" stroke-linecap="round"/>
+                <line x1="16" y1="14" x2="16" y2="14" stroke-width="2.5" stroke-linecap="round"/>
             </svg>
         </a>
         @endif
@@ -106,20 +128,22 @@
         @php
         $stats = isset($tablStats['en_curso'])
             ? [
-                'en_curso' => ['label' => 'reservas en curso',                                               'color' => 'green',  'count' => $tablStats['en_curso']],
-                'manana'   => ['label' => 'checkins mañana ' . now()->addDay()->format('d/m'),              'color' => 'blue',   'count' => $tablStats['manana']],
-                'pasado'   => ['label' => 'checkins pasado mañana ' . now()->addDays(2)->format('d/m'),    'color' => 'yellow', 'count' => $tablStats['pasado']],
+                'en_curso' => ['label' => 'reservas en curso',                                               'color' => 'green',  'count' => $tablStats['en_curso'],  'tooltip' => 'Reservas activas hoy (check-in pasado, check-out futuro)'],
+                'manana'   => ['label' => 'checkins mañana ' . now()->addDay()->format('d/m'),              'color' => 'blue',   'count' => $tablStats['manana'],    'tooltip' => 'Reservas con check-in mañana'],
+                'pasado'   => ['label' => 'checkins pasado mañana ' . now()->addDays(2)->format('d/m'),    'color' => 'yellow', 'count' => $tablStats['pasado'],    'tooltip' => 'Reservas con check-in pasado mañana'],
             ]
             : [
-                'pte_info'        => ['label' => 'Pte. información', 'color' => 'yellow', 'count' => $tablStats['pte_info']],
-                'posibles_bajas'  => ['label' => 'Posibles bajas',   'color' => 'red',    'count' => $tablStats['posibles_bajas']],
-                'revisar_borrado' => ['label' => 'Revisar borrado',  'color' => 'blue',   'count' => $tablStats['revisar_borrado']],
+                'pte_info'        => ['label' => 'Pte. información',     'color' => 'yellow', 'count' => $tablStats['pte_info'],        'tooltip' => 'Propiedades activas y visibles a las que les falta la fecha de inicio o el tipo de renta.'],
+                'posibles_bajas'  => ['label' => 'Posibles bajas',       'color' => 'red',    'count' => $tablStats['posibles_bajas'],   'tooltip' => 'Propiedades activas sin sincronización con Icnea en las últimas 24 h ¿siguen estando en cartera o hay que borrarlas?'],
+                'revisar_borrado' => ['label' => 'Revisar borrado',      'color' => 'blue',   'count' => $tablStats['revisar_borrado'],  'tooltip' => 'Propiedades marcadas como eliminadas que Icnea ha actualizado hoy ¿es correcto mantenerlas borradas?'],
+                'ocultas'         => ['label' => 'Propiedades ocultas',  'color' => 'gray',   'count' => $tablStats['ocultas'],          'tooltip' => 'Propiedades archivadas — no se muestran en desplegables ni en otros módulos'],
             ];
         $colorMap = [
             'yellow' => ['bg' => '#fefce8', 'border' => '#fde047', 'text' => '#854d0e', 'num' => '#a16207', 'active_bg' => '#fef08a'],
             'red'    => ['bg' => '#fef2f2', 'border' => '#fca5a5', 'text' => '#991b1b', 'num' => '#b91c1c', 'active_bg' => '#fecaca'],
             'blue'   => ['bg' => '#eff6ff', 'border' => '#93c5fd', 'text' => '#1e40af', 'num' => '#1d4ed8', 'active_bg' => '#bfdbfe'],
             'green'  => ['bg' => '#f0fdf4', 'border' => '#86efac', 'text' => '#166534', 'num' => '#15803d', 'active_bg' => '#bbf7d0'],
+            'gray'   => ['bg' => '#f9fafb', 'border' => '#d1d5db', 'text' => '#374151', 'num' => '#374151', 'active_bg' => '#e5e7eb'],
         ];
         @endphp
         @foreach($stats as $key => $stat)
@@ -129,8 +153,28 @@
            class="hover:opacity-80">
             <span style="font-size:1.25rem;font-weight:700;color:{{ $c['num'] }}">{{ $stat['count'] }}</span>
             <span style="font-size:0.75rem;font-weight:500;color:{{ $c['text'] }}">{{ $stat['label'] }}</span>
+            @if(!empty($stat['tooltip']))
+            <span title="{{ $stat['tooltip'] }}" style="font-size:0.7rem;color:{{ $c['text'] }};opacity:0.6;flex-shrink:0" onclick="event.preventDefault()">&#9432;</span>
+            @endif
         </a>
         @endforeach
+    </div>
+    @endif
+
+    @if($icneaSync ?? null)
+    <div class="flex items-center gap-3 mb-3">
+        <span class="text-xs text-gray-400">
+            Última sincronización con Icnea: {{ $icneaSync['fecha'] }}
+            @if($icneaSync['errores'] > 0)
+                · <span class="text-red-400">{{ $icneaSync['errores'] }} errores</span>
+            @endif
+        </span>
+        <form method="POST" action="{{ route('propiedades.sync-icnea', $project->slug) }}">
+            @csrf
+            <button type="submit" class="text-xs text-orange-500 hover:text-orange-700 hover:underline transition-colors">
+                Sincronizar ahora
+            </button>
+        </form>
     </div>
     @endif
 
@@ -241,7 +285,7 @@
                             <div>
                                 <label class="block text-xs font-medium text-gray-500 mb-1">{{ $campo->label }}</label>
                                 <select name="{{ $param }}"
-                                        class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
+                                        class="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
                                     <option value="">Todos</option>
                                     @foreach($campo->getOptions() as $opt)
                                         <option value="{{ $opt }}" {{ request($param) === $opt ? 'selected' : '' }}>{{ $opt }}</option>
@@ -253,7 +297,7 @@
                             <div>
                                 <label class="block text-xs font-medium text-gray-500 mb-1">{{ $campo->label }}</label>
                                 <select name="{{ $param }}"
-                                        class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
+                                        class="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
                                     <option value="">Todos</option>
                                     <option value="1" {{ request($param) === '1' ? 'selected' : '' }}>Sí</option>
                                     <option value="0" {{ request($param) === '0' ? 'selected' : '' }}>No</option>
@@ -267,7 +311,7 @@
                                        id="rango-{{ $campo->name }}"
                                        placeholder="Selecciona un rango de fechas..."
                                        autocomplete="off"
-                                       class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 cursor-pointer">
+                                       class="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 cursor-pointer">
                                 <input type="hidden" name="{{ $param }}_desde" id="{{ $param }}_desde" value="{{ request($param . '_desde') }}">
                                 <input type="hidden" name="{{ $param }}_hasta" id="{{ $param }}_hasta" value="{{ request($param . '_hasta') }}">
                             </div>
@@ -276,7 +320,7 @@
                             <div>
                                 <label class="block text-xs font-medium text-gray-500 mb-1">{{ $campo->label }}</label>
                                 <select name="{{ $param }}"
-                                        class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
+                                        class="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
                                     <option value="">Todos</option>
                                     @foreach($fkOptions[$campo->name] ?? [] as $id => $nombre)
                                         <option value="{{ $id }}" {{ request($param) == $id ? 'selected' : '' }}>{{ $nombre }}</option>
@@ -377,7 +421,7 @@
     {{-- Tabla de datos --}}
     <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div class="overflow-x-auto" @if($modoTabla) x-data="newRowForm()" @endif>
-            <table class="w-full text-sm">
+            <table class="w-full text-xs">
                 <thead>
                     <tr class="border-b border-gray-200 bg-gray-50">
                         @if($modoTabla)
@@ -388,8 +432,13 @@
                                 $isActive = $sortField === $campo->name;
                                 $nextDir  = ($isActive && $sortDir === 'asc') ? 'desc' : 'asc';
                                 $sortUrl  = request()->fullUrlWithQuery(['sort' => $campo->name, 'dir' => $nextDir, 'page' => null]);
+                                $colAlign = match(true) {
+                                    in_array($campo->type, ['fecha', 'time'])      => 'text-center',
+                                    in_array($campo->type, ['decimal', 'float'])   => 'text-right',
+                                    default                                         => 'text-left',
+                                };
                             @endphp
-                            <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap">
+                            <th class="{{ $colAlign }} px-4 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap">
                                 <a href="{{ $sortUrl }}" class="inline-flex items-center gap-1 {{ $isActive ? 'text-orange-500' : 'text-gray-400 hover:text-gray-600' }}">
                                     {{ $campo->label }}
                                     @if($isActive)
@@ -427,8 +476,13 @@
                                         $valor     = $registro->{$campo->name} ?? '';
                                         $endpoint  = route('ficha.update-field', [$project->slug, $projectTable->name, $registro->id]);
                                         $readonly  = in_array($campo->type, ['file']);
+                                        $colAlign  = match(true) {
+                                            in_array($campo->type, ['fecha', 'time'])    => 'text-center',
+                                            in_array($campo->type, ['decimal', 'float']) => 'text-right',
+                                            default                                       => 'text-left',
+                                        };
                                     @endphp
-                                    <td class="px-1 py-1"
+                                    <td class="px-1 py-1 {{ $colAlign }}"
                                         x-data="{
                                             editing: false,
                                             original: {{ json_encode((string) $valor) }},
@@ -466,7 +520,7 @@
                                             <span class="block px-2 py-1 text-gray-400 text-xs">—</span>
                                         @elseif($campo->type === 'select')
                                             <select x-model="value" @change="save()"
-                                                    class="w-full text-sm border border-transparent hover:border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-transparent focus:bg-white outline-none transition-colors cursor-pointer">
+                                                    class="w-full text-xs border border-transparent hover:border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-transparent focus:bg-white outline-none transition-colors cursor-pointer">
                                                 <option value=""></option>
                                                 @foreach($campo->getOptions() as $opt)
                                                     <option value="{{ $opt }}">{{ $opt }}</option>
@@ -474,17 +528,17 @@
                                             </select>
                                         @elseif($campo->type === 'tinyint')
                                             <select x-model="value" @change="save()"
-                                                    class="w-full text-sm border border-transparent hover:border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-transparent focus:bg-white outline-none transition-colors cursor-pointer">
+                                                    class="w-full text-xs border border-transparent hover:border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-transparent focus:bg-white outline-none transition-colors cursor-pointer">
                                                 <option value="0">No</option>
                                                 <option value="1">Sí</option>
                                             </select>
                                         @elseif($campo->type === 'fecha')
                                             <input type="date" x-model="value"
                                                    @change="save()"
-                                                   class="w-full text-sm border border-transparent hover:border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-transparent focus:bg-white outline-none transition-colors">
+                                                   class="w-full text-xs border border-transparent hover:border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-transparent focus:bg-white outline-none transition-colors">
                                         @elseif(in_array($campo->type, ['id', 'desplegable']))
                                             <select x-model="value" @change="save()"
-                                                    class="w-full text-sm border border-transparent hover:border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-transparent focus:bg-white outline-none transition-colors cursor-pointer">
+                                                    class="w-full text-xs border border-transparent hover:border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-transparent focus:bg-white outline-none transition-colors cursor-pointer">
                                                 <option value=""></option>
                                                 @foreach($fkOptions[$campo->name] ?? [] as $fkId => $fkNombre)
                                                     <option value="{{ $fkId }}" {{ (string)$valor === (string)$fkId ? 'selected' : '' }}>{{ $fkNombre }}</option>
@@ -494,7 +548,7 @@
                                             <select multiple
                                                     x-init="(() => { try { const sel = JSON.parse(value || '[]').map(String); $el.querySelectorAll('option').forEach(o => o.selected = sel.includes(o.value)); } catch(e){} })()"
                                                     @change="value = JSON.stringify(Array.from($el.selectedOptions).map(o => o.value)); save()"
-                                                    class="w-full text-sm border border-transparent hover:border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-transparent focus:bg-white outline-none transition-colors">
+                                                    class="w-full text-xs border border-transparent hover:border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-transparent focus:bg-white outline-none transition-colors">
                                                 @foreach($projectUsuarios as $pu)
                                                     <option value="{{ $pu['id'] }}">{{ $pu['label'] }}</option>
                                                 @endforeach
@@ -506,7 +560,7 @@
                                                           @blur="save()" @keydown.escape="value = original; editing = false"
                                                           x-init="$watch('editing', v => v && $nextTick(() => $el.focus()))"
                                                           rows="2"
-                                                          class="w-full text-sm border border-orange-300 ring-2 ring-orange-200 rounded px-2 py-1 bg-white outline-none resize-none"></textarea>
+                                                          class="w-full text-xs border border-orange-300 ring-2 ring-orange-200 rounded px-2 py-1 bg-white outline-none resize-none"></textarea>
                                             </div>
                                         @else
                                             <div @click="editing = true">
@@ -514,7 +568,7 @@
                                                 <input x-show="editing" x-model="value" type="{{ $campo->type === 'email' ? 'email' : ($campo->type === 'time' ? 'time' : 'text') }}"
                                                        @blur="save()" @keydown.enter="$el.blur()" @keydown.escape="value = original; editing = false"
                                                        x-init="$watch('editing', v => v && $nextTick(() => $el.focus()))"
-                                                       class="w-full text-sm border border-orange-300 ring-2 ring-orange-200 rounded px-2 py-1 bg-white outline-none">
+                                                       class="w-full text-xs border border-orange-300 ring-2 ring-orange-200 rounded px-2 py-1 bg-white outline-none">
                                             </div>
                                         @endif
                                     </td>
@@ -529,7 +583,7 @@
                                     </button>
                                     <div x-show="open"
                                          class="absolute right-6 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 text-sm">
-                                        <a href="{{ route('ficha', [$project->slug, $projectTable->name, $registro->id]) }}"
+                                        <a href="{{ in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : route('ficha', [$project->slug, $projectTable->name, $registro->id]) }}"
                                            class="flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50">
                                             Ver ficha
                                         </a>
@@ -564,9 +618,16 @@
                         @else
                             {{-- ── FILA NORMAL (solo lectura) ── --}}
                             <tr class="hover:bg-gray-50 cursor-pointer"
-                                onclick="window.location='{{ route('ficha', [$project->slug, $projectTable->name, $registro->id]) }}'">
+                                onclick="window.location='{{ $projectTable->name === 'fichaje' ? route('vm.fichaje_form', [$project->slug, $registro->id]) : ($projectTable->name === 'usuarios' ? route('vm.usuario_form', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : route('ficha', [$project->slug, $projectTable->name, $registro->id]))) }}'">
                                 @foreach($campos as $campo)
-                                    <td class="px-4 py-3 text-gray-700" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ $registro->{$campo->name} ?? '' }}">
+                                    @php
+                                        $colAlign = match(true) {
+                                            in_array($campo->type, ['fecha', 'time'])    => 'text-center',
+                                            in_array($campo->type, ['decimal', 'float']) => 'text-right',
+                                            default                                        => 'text-left',
+                                        };
+                                    @endphp
+                                    <td class="px-4 py-3 text-gray-700 {{ $colAlign }}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ $registro->{$campo->name} ?? '' }}">
                                         @include('partials.cell', ['campo' => $campo, 'valor' => $registro->{$campo->name} ?? null, 'fkOptions' => $fkOptions, 'usuariosMap' => $usuariosMap ?? []])
                                     </td>
                                 @endforeach
@@ -580,7 +641,7 @@
                                     </button>
                                     <div x-show="open"
                                          class="absolute right-6 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 text-sm">
-                                        <a href="{{ route('ficha', [$project->slug, $projectTable->name, $registro->id]) }}"
+                                        <a href="{{ in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : route('ficha', [$project->slug, $projectTable->name, $registro->id]) }}"
                                            class="flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50">
                                             Ver ficha
                                         </a>
@@ -645,7 +706,7 @@
                             <td class="px-1 py-1">
                                 @if($campo->type === 'select')
                                     <select x-model="fields['{{ $campo->name }}']"
-                                            class="w-full text-sm border border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-white outline-none">
+                                            class="w-full text-xs border border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-white outline-none">
                                         <option value=""></option>
                                         @foreach($campo->getOptions() as $opt)
                                             <option value="{{ $opt }}">{{ $opt }}</option>
@@ -653,17 +714,17 @@
                                     </select>
                                 @elseif($campo->type === 'tinyint')
                                     <select x-model="fields['{{ $campo->name }}']"
-                                            class="w-full text-sm border border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-white outline-none">
+                                            class="w-full text-xs border border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-white outline-none">
                                         <option value="0">No</option>
                                         <option value="1">Sí</option>
                                     </select>
                                 @elseif($campo->type === 'fecha')
                                     <input type="date" x-model="fields['{{ $campo->name }}']"
                                            @keydown.enter="save()"
-                                           class="w-full text-sm border border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-white outline-none">
+                                           class="w-full text-xs border border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-white outline-none">
                                 @elseif(in_array($campo->type, ['id', 'desplegable']))
                                     <select x-model="fields['{{ $campo->name }}']"
-                                            class="w-full text-sm border border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-white outline-none">
+                                            class="w-full text-xs border border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-white outline-none">
                                         <option value=""></option>
                                         @foreach($fkOptions[$campo->name] ?? [] as $fkId => $fkNombre)
                                             <option value="{{ $fkId }}">{{ $fkNombre }}</option>
@@ -671,7 +732,7 @@
                                     </select>
                                 @elseif($campo->type === 'multiusuario')
                                     <select multiple x-model="fields['{{ $campo->name }}']"
-                                            class="w-full text-sm border border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-white outline-none">
+                                            class="w-full text-xs border border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-white outline-none">
                                         @foreach($projectUsuarios as $pu)
                                             <option value="{{ $pu['id'] }}">{{ $pu['label'] }}</option>
                                         @endforeach
@@ -679,13 +740,13 @@
                                 @elseif($campo->type === 'text')
                                     <textarea x-model="fields['{{ $campo->name }}']" rows="2"
                                               @keydown.escape="cancel()"
-                                              class="w-full text-sm border border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-white outline-none resize-none"></textarea>
+                                              class="w-full text-xs border border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-white outline-none resize-none"></textarea>
                                 @else
                                     <input type="{{ $campo->type === 'email' ? 'email' : ($campo->type === 'time' ? 'time' : 'text') }}"
                                            x-model="fields['{{ $campo->name }}']"
                                            @keydown.enter="save()"
                                            @keydown.escape="cancel()"
-                                           class="w-full text-sm border border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-white outline-none">
+                                           class="w-full text-xs border border-gray-200 focus:border-orange-300 focus:ring-2 focus:ring-orange-200 rounded px-2 py-1 bg-white outline-none">
                                 @endif
                             </td>
                             @endforeach
@@ -756,7 +817,7 @@
 <div id="modal-eliminar" class="fixed inset-0 z-50 hidden">
     <div class="absolute inset-0 bg-black/40" onclick="cerrarModalEliminar()"></div>
     <div class="absolute inset-0 flex items-center justify-center p-4">
-        <div class="relative bg-white rounded-xl shadow-xl w-1/3 min-w-80 p-6">
+        <div class="relative bg-white rounded-xl shadow-xl w-1/3 min-w-80 p-6 max-h-[90vh] overflow-y-auto">
             <div class="flex items-center gap-3 mb-3">
                 <div class="w-10 h-10 rounded-full bg-red-200 flex items-center justify-center shrink-0">
                     <i class="fas fa-times-circle text-red-600"></i>

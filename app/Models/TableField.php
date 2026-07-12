@@ -13,6 +13,8 @@ use Illuminate\Database\Schema\Blueprint;
  */
 class TableField extends Model
 {
+    protected $table = 'admin_table_fields';
+
     protected $fillable = [
         'project_table_id', 'name', 'label', 'type',
         'order', 'required', 'in_list', 'in_form', 'extras',
@@ -100,29 +102,40 @@ class TableField extends Model
     }
 
     // Nombre corto de la tabla referenciada: "ref:socios" → "socios", "ref:master.estados" → "estados"
+    // Soporta "ref:inventario|parent:id_propiedades" — ignora la parte |parent:...
     public function getRefTable(): ?string
     {
-        if (!str_starts_with($this->extras ?? '', 'ref:')) return null;
-        $ref = substr($this->extras, 4);
+        $base = explode('|', $this->extras ?? '', 2)[0];
+        if (!str_starts_with($base, 'ref:')) return null;
+        $ref = substr($base, 4);
         return str_contains($ref, '.') ? explode('.', $ref, 2)[1] : $ref;
     }
 
     // Nombre completo en BD: "ref:socios" → "{slug}_socios", "ref:master.estados" → "master_estados"
     // Para desplegable sin prefijo "ref:" (ej. "master_duraciones"), lo trata como nombre directo de tabla.
+    // Soporta "ref:inventario|parent:id_propiedades" — ignora la parte |parent:...
     public function getRefFullTable(string $currentSlug): string
     {
-        $extras = $this->extras ?? '';
-        if (!str_starts_with($extras, 'ref:')) {
-            // tolerancia: desplegable con extras = nombre directo de tabla
-            if ($this->type === 'desplegable' && $extras !== '') return $extras;
+        $base = explode('|', $this->extras ?? '', 2)[0];
+        if (!str_starts_with($base, 'ref:')) {
+            if ($this->type === 'desplegable' && $base !== '') return $base;
             return '';
         }
-        $ref = substr($extras, 4);
+        $ref = substr($base, 4);
         if (str_contains($ref, '.')) {
             [$slug, $table] = explode('.', $ref, 2);
             return $slug . '_' . $table;
         }
         return $currentSlug . '_' . $ref;
+    }
+
+    // Si extras contiene "|parent:CAMPO", devuelve el nombre del campo padre para filtrar la FK
+    public function getParentFilterField(): ?string
+    {
+        $extras = $this->extras ?? '';
+        if (!str_contains($extras, '|parent:')) return null;
+        $part = explode('|parent:', $extras, 2)[1];
+        return explode('|', $part, 2)[0];
     }
 
     // ¿Es readonly (calculado automáticamente)?

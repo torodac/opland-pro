@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0ea5e9">
+
+  <!-- iOS PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="VM Equipo">
+  <link rel="apple-touch-icon" href="icon-192.png">
+
+  <!-- Android PWA -->
+  <title>VM Equipo</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f172a;
+      --surface:  #1e293b;
+      --border:   #334155;
+      --text:     #f1f5f9;
+      --muted:    #94a3b8;
+      --accent:   #0ea5e9;
+      --green:    #22c55e;
+      --amber:    #f59e0b;
+      --red:      #ef4444;
+      --radius:   12px;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bot: env(safe-area-inset-bottom, 0px);
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; font-size: 16px; }
+
+    #app { height: 100%; display: flex; flex-direction: column; }
+
+    /* ── Screens ── */
+    .screen { display: none; flex-direction: column; height: 100%; overflow: hidden; }
+    .screen.active { display: flex; }
+
+    /* ── Topbar ── */
+    .topbar {
+      padding: calc(var(--safe-top) + 12px) 16px 12px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px;
+      flex-shrink: 0;
+    }
+    .topbar h1 { font-size: 18px; font-weight: 700; flex: 1; }
+    .topbar .badge { background: var(--red); color: #fff; border-radius: 99px; font-size: 12px; font-weight: 700; padding: 2px 8px; }
+
+    /* ── Scrollable body ── */
+    .scroll { flex: 1; overflow-y: auto; padding: 12px 16px; }
+    .scroll::-webkit-scrollbar { display: none; }
+
+    /* ── Bottom nav ── */
+    .bottom-nav {
+      display: flex;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      padding-bottom: var(--safe-bot);
+      flex-shrink: 0;
+    }
+    .nav-btn {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      gap: 3px; padding: 10px 0; border: none; background: none;
+      color: var(--muted); font-size: 11px; cursor: pointer; transition: color .15s;
+    }
+    .nav-btn.active, .nav-btn:active { color: var(--accent); }
+    .nav-btn svg { width: 22px; height: 22px; }
+
+    /* ── Login ── */
+    #login-screen {
+      justify-content: center; align-items: center; padding: 32px 24px;
+      background: var(--bg);
+    }
+    .login-card {
+      width: 100%; max-width: 360px; background: var(--surface);
+      border-radius: var(--radius); border: 1px solid var(--border); padding: 32px 24px;
+    }
+    .login-logo { text-align: center; margin-bottom: 24px; }
+    .login-logo .vm-mark { font-size: 32px; font-weight: 900; color: var(--accent); letter-spacing: -1px; }
+    .login-logo p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    input[type=email], input[type=password] {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 11px 14px; color: var(--text); font-size: 16px;
+      margin-bottom: 16px; outline: none; transition: border-color .15s;
+    }
+    input:focus { border-color: var(--accent); }
+
+    .check-row { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; font-size: 14px; }
+    .check-row input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
+
+    .btn {
+      width: 100%; padding: 13px; border: none; border-radius: 8px;
+      font-size: 16px; font-weight: 600; cursor: pointer; transition: opacity .15s;
+    }
+    .btn:active { opacity: .75; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-green   { background: var(--green); color: #fff; }
+    .btn-amber   { background: var(--amber); color: #000; }
+    .btn-red     { background: var(--red);   color: #fff; }
+    .btn-outline {
+      background: none; border: 1px solid var(--border); color: var(--text);
+      padding: 11px;
+    }
+    .btn + .btn { margin-top: 10px; }
+
+    .error-msg { color: var(--red); font-size: 13px; margin-bottom: 12px; text-align: center; }
+
+    /* ── Tarea card ── */
+    .tarea-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px;
+      cursor: pointer; transition: border-color .15s;
+    }
+    .tarea-card:active { border-color: var(--accent); }
+    .tarea-card.done { opacity: .55; }
+    .tarea-header { display: flex; align-items: flex-start; gap: 10px; }
+    .tarea-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+    .tarea-info { flex: 1; min-width: 0; }
+    .tarea-nombre { font-weight: 600; font-size: 15px; line-height: 1.3; }
+    .tarea-descripcion { font-size: 13px; color: var(--text); margin-top: 3px; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .tarea-inmueble { color: var(--muted); font-size: 13px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tarea-badges { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+    .chip {
+      font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 99px;
+      background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+    }
+    .chip.green { background: #14532d; border-color: #16a34a; color: #86efac; }
+    .chip.amber { background: #451a03; border-color: #d97706; color: #fcd34d; }
+    .chip.blue  { background: #0c2a3e; border-color: #0284c7; color: #7dd3fc; }
+
+    .done-mark { color: var(--green); font-size: 22px; flex-shrink: 0; }
+
+    /* ── Detalle ── */
+    #detalle-screen .topbar { cursor: pointer; }
+    .back-btn { color: var(--accent); font-size: 22px; line-height: 1; }
+
+    .inmueble-foto {
+      width: 100%; height: 180px; object-fit: cover;
+      border-radius: var(--radius); margin-bottom: 14px; background: var(--border);
+    }
+    .detail-section { margin-bottom: 16px; }
+    .detail-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+    .detail-value { font-size: 15px; }
+    .detail-value a { color: var(--accent); text-decoration: none; }
+
+    .reserva-block {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px; margin-bottom: 14px;
+    }
+    .reserva-block h3 { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px; }
+    .reserva-row { display: flex; gap: 16px; }
+    .reserva-col { flex: 1; }
+    .reserva-col .lbl { font-size: 11px; color: var(--muted); }
+    .reserva-col .val { font-size: 15px; font-weight: 600; }
+
+    /* ── Modal completar ── */
+    .overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7);
+      z-index: 100; align-items: flex-end; justify-content: center;
+    }
+    .overlay.open { display: flex; }
+    .modal {
+      width: 100%; max-width: 480px; background: var(--surface);
+      border-radius: var(--radius) var(--radius) 0 0;
+      padding: 24px 20px calc(20px + var(--safe-bot));
+      border-top: 1px solid var(--border);
+    }
+    .modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+    select {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 11px 14px; color: var(--text); font-size: 16px;
+      margin-bottom: 12px; outline: none;
+    }
+    textarea {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 11px 14px; color: var(--text); font-size: 15px;
+      resize: none; outline: none; margin-bottom: 12px; min-height: 80px;
+    }
+    .foto-preview { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .foto-preview img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+    .foto-add-btn {
+      width: 72px; height: 72px; border: 1px dashed var(--border); border-radius: 8px;
+      background: var(--bg); color: var(--muted); font-size: 28px;
+      display: flex; align-items: center; justify-content: center; cursor: pointer;
+    }
+
+    /* ── Fichaje ── */
+    .fichaje-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px; margin-bottom: 14px;
+    }
+    .fichaje-card h2 { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+    .jornada-row { display: flex; justify-content: space-around; margin-bottom: 16px; }
+    .jornada-col { text-align: center; }
+    .jornada-col .hora { font-size: 24px; font-weight: 700; }
+    .jornada-col .lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    .empty-state { text-align: center; padding: 48px 24px; color: var(--muted); }
+    .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-state p { font-size: 15px; }
+
+    .user-info { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--surface); border-radius: var(--radius); margin-bottom: 14px; }
+    .user-avatar { width: 40px; height: 40px; background: var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; color: #fff; flex-shrink: 0; }
+    .user-name { font-weight: 600; }
+    .user-rol { font-size: 12px; color: var(--muted); }
+
+    .spinner { text-align: center; padding: 32px; color: var(--muted); }
+
+    /* ── Badges horario (mismos colores que horario.blade.php) ── */
+    /* ── Horario agenda ── */
+    .agenda-semana-nav { display:flex;align-items:center;gap:8px;padding:10px 0 14px;justify-content:center }
+    .agenda-semana-nav button { background:none;border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:5px 12px;cursor:pointer }
+    .agenda-semana-nav .semana-label { font-size:14px;font-weight:600;min-width:170px;text-align:center }
+    .agenda-dia { background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px }
+    .agenda-dia.hoy { border-color:var(--accent) }
+    .agenda-dia-header { display:flex;align-items:center;gap:10px;margin-bottom:6px }
+    .agenda-dia-fecha { font-weight:700;font-size:15px;min-width:90px }
+    .agenda-dia-hoy-badge { font-size:11px;background:var(--accent);color:#fff;border-radius:99px;padding:2px 8px }
+
+    /* ── Horario equipo (pantalla completa) ── */
+    #horario-equipo-screen .topbar { gap:10px }
+    .equipo-table-wrap { overflow-x:auto;-webkit-overflow-scrolling:touch }
+    .equipo-table { border-collapse:collapse;min-width:600px;width:100%;font-size:13px }
+    .equipo-table th { padding:8px 6px;text-align:center;color:var(--muted);font-weight:600;font-size:12px;border-bottom:1px solid var(--border);white-space:nowrap }
+    .equipo-table th.col-usuario { text-align:left;padding-left:4px }
+    .equipo-table td { padding:8px 6px;text-align:center;border-bottom:1px solid var(--border);vertical-align:middle }
+    .equipo-table td.col-usuario { text-align:left;font-weight:600;padding-left:4px;white-space:nowrap }
+    .equipo-table tr:last-child td { border-bottom:none }
+    .equipo-grupo-title { font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:14px 0 6px;grid-column:1/-1 }
+    .equipo-col-fin { color:var(--muted) }
+    .col-hoy { background:rgba(14,165,233,.07) }
+
+    .hbadge { font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;white-space:nowrap }
+    .hbadge-turno        { background:#74aaf8;color:#fff }
+    .hbadge-descanso     { background:#2a3a4a;color:#64748b }
+    .hbadge-vacaciones   { background:#e8b800;color:#fff }
+    .hbadge-baja         { background:#7b3f8c;color:#fff }
+    .hbadge-asuntos      { background:#34c163;color:#fff }
+    .hbadge-absentismo   { background:#dc3545;color:#fff }
+    .hbadge-compensacion { background:#e83e8c;color:#fff }
+
+    .toast {
+      position: fixed; bottom: calc(72px + var(--safe-bot) + 12px); left: 50%; transform: translateX(-50%);
+      background: #1e293b; border: 1px solid var(--border); color: var(--text);
+      padding: 10px 20px; border-radius: 99px; font-size: 14px; font-weight: 500;
+      z-index: 200; opacity: 0; transition: opacity .25s; pointer-events: none; white-space: nowrap;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ══ LOGIN ══════════════════════════════════════════════════════════════ -->
+  <div id="login-screen" class="screen">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="vm-mark">VM</div>
+        <p>Equipo VacationMarbella</p>
+      </div>
+      <div id="login-error" class="error-msg" style="display:none"></div>
+      <label>Email</label>
+      <input type="email" id="login-email" autocomplete="email" inputmode="email" placeholder="tu@email.com">
+      <label>Contraseña</label>
+      <input type="password" id="login-pass" autocomplete="current-password" placeholder="••••••••">
+      <div class="check-row">
+        <input type="checkbox" id="login-remember" checked>
+        <label for="login-remember" style="margin:0;color:var(--text)">Recordarme 30 días</label>
+      </div>
+      <button class="btn btn-primary" id="login-btn">Entrar</button>
+    </div>
+  </div>
+
+  <!-- ══ CAMBIAR PASSWORD ════════════════════════════════════════════════ -->
+  <div id="cambiar-password-screen" class="screen" style="justify-content:center;align-items:center;padding:32px 24px;background:var(--bg)">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="vm-mark">VM</div>
+        <p>Cambia tu contraseña</p>
+      </div>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:20px;text-align:center">Es tu primer acceso. Establece una contraseña personal antes de continuar.</p>
+      <div id="cp-error" class="error-msg" style="display:none"></div>
+      <label>Nueva contraseña</label>
+      <input type="password" id="cp-nueva" autocomplete="new-password" placeholder="Mínimo 8 caracteres">
+      <label>Confirmar contraseña</label>
+      <input type="password" id="cp-confirmar" autocomplete="new-password" placeholder="Repite la contraseña">
+      <button class="btn btn-green" id="cp-guardar" style="margin-top:4px">Guardar contraseña</button>
+    </div>
+  </div>
+
+  <!-- ══ TAREAS ══════════════════════════════════════════════════════════════ -->
+  <div id="tareas-screen" class="screen">
+    <div class="topbar">
+      <h1>Mis tareas</h1>
+      <button id="btn-nueva-tarea" style="background:none;border:none;color:var(--accent);font-size:26px;cursor:pointer;line-height:1;padding:0 0 0 8px">+</button>
+    </div>
+    <div class="scroll" id="tareas-list">
+      <div class="spinner">Cargando…</div>
+    </div>
+    <nav class="bottom-nav" data-nav-container="tareas"></nav>
+  </div>
+
+  <!-- ══ FICHAJE ══════════════════════════════════════════════════════════════ -->
+  <div id="fichaje-screen" class="screen">
+    <div class="topbar"><h1>Fichaje</h1></div>
+    <div class="scroll" id="fichaje-content">
+      <div class="spinner">Cargando…</div>
+    </div>
+    <nav class="bottom-nav" data-nav-container="fichaje"></nav>
+  </div>
+
+  <!-- ══ HORARIO ══════════════════════════════════════════════════════════════ -->
+  <div id="horario-screen" class="screen">
+    <div class="topbar">
+      <h1>Mi horario</h1>
+    </div>
+    <div class="scroll" id="horario-content">
+      <div class="spinner">Cargando…</div>
+    </div>
+    <nav class="bottom-nav" data-nav-container="horario"></nav>
+  </div>
+
+  <!-- ══ HORARIO EQUIPO (pantalla completa) ══════════════════════════════════ -->
+  <div id="horario-equipo-screen" class="screen">
+    <div class="topbar">
+      <button id="btn-volver-horario" style="background:none;border:none;color:var(--accent);font-size:22px;cursor:pointer;line-height:1;padding:0">‹</button>
+      <h1 style="flex:1">Horario equipo</h1>
+    </div>
+    <div class="scroll" id="horario-equipo-content">
+      <div class="spinner">Cargando…</div>
+    </div>
+  </div>
+
+  <!-- ══ PERFIL ══════════════════════════════════════════════════════════════ -->
+  <div id="perfil-screen" class="screen">
+    <div class="topbar"><h1>Mi perfil</h1></div>
+    <div class="scroll">
+      <div class="user-info" id="perfil-info"></div>
+      <div id="impersonar-block" style="display:none;margin-bottom:14px">
+        <label style="display:block;font-size:13px;color:var(--muted);margin-bottom:6px">Ver como usuario</label>
+        <select id="impersonar-select" style="margin-bottom:8px"></select>
+        <button class="btn btn-outline" id="btn-impersonar" style="font-size:14px">Ver como este usuario</button>
+      </div>
+      <div id="impersonando-banner" style="display:none;background:#451a03;border:1px solid #d97706;border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;color:#fcd34d;font-size:14px;display:none">
+        <span id="impersonando-nombre"></span>
+        <button id="btn-dejar-impersonar" style="float:right;background:none;border:none;color:#fcd34d;font-size:13px;cursor:pointer;text-decoration:underline">Volver a mí</button>
+      </div>
+      <button class="btn btn-outline" id="btn-push-test" style="margin-bottom:10px">Activar notificaciones</button>
+      <button class="btn btn-outline" id="btn-actualizar-app" style="margin-bottom:10px">Actualizar app</button>
+      <button class="btn btn-outline" id="logout-btn">Cerrar sesión</button>
+      <p id="app-version" style="text-align:center;color:var(--muted);font-size:11px;margin-top:18px"></p>
+    </div>
+    <nav class="bottom-nav" data-nav-container="perfil"></nav>
+  </div>
+
+  <!-- ══ DETALLE TAREA ════════════════════════════════════════════════════════ -->
+  <div id="detalle-screen" class="screen" style="position:relative">
+    <div class="topbar" id="detalle-back">
+      <span class="back-btn">‹</span>
+      <h1 id="detalle-titulo">Detalle</h1>
+    </div>
+    <div class="scroll" id="detalle-content"></div>
+
+    <!-- Botón flotante 3 puntos -->
+    <button id="btn-ctx-menu" style="display:none;position:fixed;bottom:calc(16px + var(--safe-bot));right:16px;width:48px;height:48px;border-radius:50%;background:var(--accent);border:none;color:#fff;font-size:24px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.4);z-index:50;display:none;align-items:center;justify-content:center;letter-spacing:0">⋮</button>
+
+    <!-- Menú contextual -->
+    <div id="ctx-menu" style="display:none;position:fixed;bottom:calc(72px + var(--safe-bot));right:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:51;min-width:200px;overflow:hidden">
+      <button id="ctx-reportar" style="display:block;width:100%;padding:14px 18px;background:none;border:none;color:var(--text);font-size:14px;text-align:left;cursor:pointer">Reportar a <span id="ctx-reportar-tipo"></span></button>
+    </div>
+  </div>
+
+  <!-- ══ MODAL IMPUTAR TIEMPO ════════════════════════════════════════════════ -->
+  <div class="overlay" id="completar-overlay">
+    <div class="modal">
+      <h2 id="modal-imputar-titulo">Imputar tiempo</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <label style="font-size:12px;color:var(--muted)">Tiempo <span style="color:var(--red)">*</span>
+          <input type="time" id="modal-tiempo"
+            style="display:block;width:65%;margin-top:4px;padding:7px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:15px;outline:none">
+        </label>
+        <label style="font-size:12px;color:var(--muted)">Fecha <span style="color:var(--red)">*</span>
+          <input type="date" id="modal-fecha-imputacion"
+            style="display:block;width:90%;margin-top:4px;padding:7px 6px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:13px;outline:none">
+        </label>
+      </div>
+      <label>Observaciones (opcional)</label>
+      <textarea id="modal-comentario" placeholder="Observaciones…"></textarea>
+      <div id="modal-error" class="error-msg" style="display:none"></div>
+      <button class="btn btn-green" id="modal-confirmar">Guardar</button>
+      <button class="btn btn-outline" id="modal-cancelar">Cancelar</button>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<!-- ══ MODAL REPORTAR TAREA ════════════════════════════════════════════════ -->
+<div class="overlay" id="modal-reportar">
+  <div class="modal">
+    <h2 id="modal-reportar-titulo">Reportar a Mantenimiento</h2>
+    <label>Descripción <span style="color:var(--red)">*</span></label>
+    <textarea id="reportar-descripcion" placeholder="Describe el problema…" rows="4" style="margin-bottom:12px"></textarea>
+    <div id="reportar-foto-preview" class="foto-preview" style="padding-top:8px;min-height:0"></div>
+    <div id="reportar-foto-error" class="error-msg" style="display:none">Adjunta al menos una foto</div>
+    <div id="reportar-desc-error" class="error-msg" style="display:none">La descripción es obligatoria</div>
+    <div style="display:flex;gap:10px;margin-bottom:16px">
+      <button id="reportar-btn-camara"   class="btn btn-outline" style="flex:1;font-size:14px">📷 Cámara</button>
+      <button id="reportar-btn-fototeca" class="btn btn-outline" style="flex:1;font-size:14px">🖼 Fototeca</button>
+    </div>
+    <input type="file" id="reportar-file-camara"   accept="image/*" capture="environment" style="display:none">
+    <input type="file" id="reportar-file-fototeca" accept="image/*" multiple style="display:none">
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-outline" id="reportar-cancelar" style="flex:1;padding:12px;font-size:14px">Cancelar</button>
+      <button class="btn btn-green"   id="reportar-enviar"   style="flex:1;padding:12px;font-size:14px">Enviar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL NUEVO FICHAJE ══════════════════════════════════════════════════ -->
+<div class="overlay" id="modal-nuevo-fichaje">
+  <div class="modal">
+    <h2>Nuevo fichaje</h2>
+    <label>Fecha (máx. 2 días atrás)</label>
+    <input type="date" id="nf-fecha" style="width:100%;min-width:0;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-size:16px;margin-bottom:12px;outline:none">
+    <div id="nf-fecha-error" class="error-msg" style="display:none"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <label style="font-size:12px;color:var(--muted)">Entrada
+        <input type="time" id="nf-hora-inicio" style="display:block;width:65%;margin-top:4px;padding:7px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:15px">
+      </label>
+      <label style="font-size:12px;color:var(--muted)">Salida
+        <input type="time" id="nf-hora-fin" style="display:block;width:65%;margin-top:4px;padding:7px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:15px">
+      </label>
+      <label style="font-size:12px;color:var(--muted)">Inicio pausa
+        <input type="time" id="nf-pausa-inicio" style="display:block;width:65%;margin-top:4px;padding:7px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:15px">
+      </label>
+      <label style="font-size:12px;color:var(--muted)">Fin pausa
+        <input type="time" id="nf-pausa-fin" style="display:block;width:65%;margin-top:4px;padding:7px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:15px">
+      </label>
+    </div>
+    <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:16px">Observación
+      <textarea id="nf-observacion" rows="2" style="display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:7px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px;resize:vertical"></textarea>
+    </label>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-outline" id="nf-cancelar" style="flex:1;padding:12px;font-size:14px">Cancelar</button>
+      <button class="btn btn-green"   id="nf-guardar"  style="flex:1;padding:12px;font-size:14px">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL NUEVA TAREA ══════════════════════════════════════════════════ -->
+<div class="overlay" id="modal-nueva-tarea">
+  <div class="modal">
+    <h2>Nueva tarea</h2>
+    <label>Propiedad <span style="color:var(--red)">*</span></label>
+    <select id="nt-propiedad" style="margin-bottom:12px"></select>
+    <label>Tarea <span style="color:var(--red)">*</span></label>
+    <input type="text" id="nt-nombre" placeholder="Rellenar..."
+      style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-size:15px;margin-bottom:12px;outline:none">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <label style="font-size:12px;color:var(--muted)">Fecha fin <span style="color:var(--red)">*</span>
+        <input type="date" id="nt-fecha"
+          style="display:block;width:90%;margin-top:4px;padding:7px 6px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:13px;outline:none">
+      </label>
+      <label style="font-size:12px;color:var(--muted)">Tiempo <span style="color:var(--red)">*</span>
+        <input type="time" id="nt-tiempo"
+          style="display:block;width:65%;margin-top:4px;padding:7px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:15px;outline:none">
+      </label>
+    </div>
+    <div id="nt-error" class="error-msg" style="display:none"></div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-outline" id="nt-cancelar" style="flex:1;padding:12px;font-size:14px">Cancelar</button>
+      <button class="btn btn-green"   id="nt-guardar"  style="flex:1;padding:12px;font-size:14px">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js?v=20260710"></script>
+</body>
+</html>

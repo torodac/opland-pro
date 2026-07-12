@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <style>
-@page { margin:2cm 1.5cm; }
+@page { margin:2cm 1.5cm 0.5cm 1.5cm; }
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:DejaVu Sans,sans-serif; font-size:9pt; color:#222; padding:0 0.5cm; }
 
@@ -38,21 +38,27 @@ body { font-family:DejaVu Sans,sans-serif; font-size:9pt; color:#222; padding:0 
 .tbl-main    { width:100%; border-collapse:collapse; font-size:7.5pt; }
 .tbl-main th { background:#f0f2f5; color:#444; font-weight:bold;
                padding:4pt 3pt; text-align:center; border:1pt solid #d5d8dc; }
-.tbl-main td { padding:3pt 3pt; text-align:center; border:1pt solid #e8eaed; }
+.tbl-main td { padding:3pt 3pt; text-align:center; border:1pt solid #e8eaed; white-space:nowrap; }
+.tbl-main .col-dia  { width:26pt; }
+.tbl-main .col-time { width:22pt; }
+.tbl-main .col-dur  { width:28pt; }
+.tbl-main .col-km   { width:20pt; }
+.tbl-main .col-tipo { width:18pt; }
 .tbl-main tr.wk td { background:#fafafa; color:#bbb; }
 
-.tipo-badge { display:inline-block; padding:1pt 5pt; border-radius:8pt;
-              font-size:6.5pt; font-weight:bold; color:#fff; }
+.tipo-badge { display:inline-flex; align-items:center; justify-content:center;
+              width:14pt; height:14pt; border-radius:50%;
+              font-size:5.5pt; font-weight:bold; }
 .he-pos { color:#1a7a34; }
 .he-neg { color:#cc2200; }
 
-.firma-sec  { margin-top:28pt; font-size:8pt; }
+.firma-sec  { margin-top:2pt; font-size:8pt; }
 .firma-line { border-bottom:1pt solid #999; width:180pt; height:40pt; margin-top:10pt; margin-bottom:8pt; }
 .nombre-nif { font-size:8.5pt; font-weight:bold; width:180pt; }
 </style>
 </head>
 <body>
-@php use App\Http\Controllers\InformeImputacionesController as IC; @endphp
+@php use App\Http\Controllers\Vm\InformeImputacionesController as IC; @endphp
 @php
 $pdf_tipo_color = [
     'Asuntos propios' => '#34c163',
@@ -94,10 +100,9 @@ $liquidado_fecha  = $ud['liquidado_fecha'];
 $sum_ep = array_sum(array_column($year_stats, 'ep'));
 $sum_en = array_sum(array_column($year_stats, 'en'));
 $sum_et = array_sum(array_column($year_stats, 'total'));
-$es_ultimo = ($pdf_idx === $pdf_total - 1);
 @endphp
 
-<div style="{{ $es_ultimo ? '' : 'page-break-after:always' }}">
+<div style="{{ $pdf_idx > 0 ? 'page-break-before:always' : '' }}">
 
     <div class="pdf-header">
         <div class="pdf-header-left">
@@ -112,16 +117,22 @@ $es_ultimo = ($pdf_idx === $pdf_total - 1);
 
             <div class="panel">
                 <div class="panel-title">Leyenda</div>
+                @php $ley_map2 = ['Trab. fest.'=>'TF','Asuntos propios'=>'AP','Vacaciones'=>'V','Baja'=>'B','Compensación'=>'C','Absentismo'=>'Ab','Revisar'=>'Re','Desc. Fest.'=>'DF','Trabajo'=>'T','Descanso'=>'D']; @endphp
                 @foreach($tipos as $t)
                     @if(str_starts_with(mb_strtolower($t->nombre), 'comp. ')) @continue @endif
+                    @php $ini2 = $ley_map2[$t->nombre] ?? mb_strtoupper(mb_substr($t->nombre,0,2)); @endphp
                     <div class="leyenda-row">
                         <div class="leyenda-dot"><span style="background:{{ tcTotal($t->nombre, $pdf_tipo_color) }}"></span></div>
-                        <div class="leyenda-name">{{ $t->nombre }}</div>
+                        <div class="leyenda-name">{{ $t->nombre }} ({{ $ini2 }})</div>
                     </div>
                 @endforeach
                 <div class="leyenda-row">
                     <div class="leyenda-dot"><span style="background:{{ $pdf_color_trabajo }}"></span></div>
-                    <div class="leyenda-name">Trabajo</div>
+                    <div class="leyenda-name">Trabajo (T, TF)</div>
+                </div>
+                <div class="leyenda-row">
+                    <div class="leyenda-dot"><span style="background:#F3F4F6;border:1pt solid #d1d5db"></span></div>
+                    <div class="leyenda-name">Descanso (D, DF)</div>
                 </div>
             </div>
 
@@ -193,8 +204,8 @@ $es_ultimo = ($pdf_idx === $pdf_total - 1);
         <div class="col-right">
             <table class="tbl-main">
                 <thead><tr>
-                    <th>Dia</th><th>Entrada</th><th>Salida</th><th>T. Fichado</th>
-                    <th>Pausa</th><th>H. Extras</th><th>H. Tareas</th><th>Km</th><th>Tipo</th>
+                    <th class="col-dia">Día</th><th class="col-time">Inicio</th><th class="col-time">Fin</th><th class="col-dur">Jornada</th>
+                    <th class="col-dur">Pausa</th><th class="col-dur">Extras</th><th class="col-dur">Reales</th><th class="col-dur">Tareas</th><th class="col-km">Km</th><th class="col-tipo">Tipo</th>
                 </tr></thead>
                 <tbody>
                 @foreach($dias as $dia)
@@ -211,17 +222,20 @@ $es_ultimo = ($pdf_idx === $pdf_total - 1);
                     <td class="{{ ($dia['he_min'] ?? 0) > 0 ? 'he-pos' : (($dia['he_min'] ?? 0) < 0 ? 'he-neg' : '') }}">
                         {{ $dia['he_min'] !== null ? IC::fmtMin($dia['he_min'], true) : '' }}
                     </td>
+                    @php $efMin2 = ($dia['tf_min'] !== null && $dia['p_min'] !== null) ? $dia['tf_min'] - $dia['p_min'] : $dia['tf_min']; @endphp
+                    <td>{{ $efMin2 !== null ? IC::fmtMin($efMin2) : '' }}</td>
                     <td>{{ $dia['ht_min'] > 0 ? IC::fmtMin($dia['ht_min']) : '' }}</td>
-                    <td>{{ $dia['km'] !== null && $dia['km'] > 0 ? number_format($dia['km'],2,',','') : ($dia['entrada'] ? '0,00' : '') }}</td>
+                    <td>{{ $dia['km'] !== null && $dia['km'] > 0 ? number_format($dia['km'],1,',','') : ($dia['entrada'] ? '0,0' : '') }}</td>
                     <td>
+                        @php $ini_map2 = ['Trab. fest.'=>'TF','Asuntos propios'=>'AP','Vacaciones'=>'V','Baja'=>'B','Compensación'=>'C','Absentismo'=>'Ab','Revisar'=>'Re','Desc. Fest.'=>'DF','Trabajo'=>'T','Descanso'=>'D']; @endphp
                         @if($dia['is_rotatorio'])
-                            <span class="tipo-badge" style="background:#6f42c1">Rotatorio</span>
+                            <span class="tipo-badge" style="background:#6f42c1;color:#fff" title="Desc. Fest.">DF</span>
                         @elseif($dia['is_fest_trab'])
-                            <span class="tipo-badge" style="background:#0d6efd">Trab. fest.</span>
+                            <span class="tipo-badge" style="background:#0d6efd;color:#fff" title="Trab. fest.">TF</span>
                         @elseif($dia['tipo'])
-                            <span class="tipo-badge" style="background:{{ tcTotal($dia['tipo']->nombre, $pdf_tipo_color) }}">{{ $dia['tipo']->nombre }}</span>
+                            <span class="tipo-badge" style="background:{{ tcTotal($dia['tipo']->nombre, $pdf_tipo_color) }};color:#fff" title="{{ $dia['tipo']->nombre }}">{{ $ini_map2[$dia['tipo']->nombre] ?? mb_strtoupper(mb_substr($dia['tipo']->nombre,0,2)) }}</span>
                         @elseif($dia['entrada'])
-                            <span class="tipo-badge" style="background:{{ $pdf_color_trabajo }}">Trabajo</span>
+                            <span class="tipo-badge" style="background:{{ $pdf_color_trabajo }};color:#fff" title="Trabajo">T</span>
                         @endif
                     </td>
                 </tr>

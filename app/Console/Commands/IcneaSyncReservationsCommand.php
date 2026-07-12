@@ -18,8 +18,9 @@ class IcneaSyncReservationsCommand extends Command
 
     public function handle(): void
     {
-        $desde = $this->option('desde') ?? '2026-01-01';
-        $hasta = $this->option('hasta') ?? now()->addDays(365)->format('Y-m-d');
+        $desde = $this->option('desde') ?? now()->subDays(30)->format('Y-m-d');
+        $hastaDefault = now()->addDays(335)->format('Y-m-d'); // desde+30+335 < 366 days (API limit: max 1 year)
+        $hasta = $this->option('hasta') ?? $hastaDefault;
 
         $this->info("Sincronizando reservas {$desde} → {$hasta}");
 
@@ -108,7 +109,18 @@ class IcneaSyncReservationsCommand extends Command
             return [];
         }
 
+        // API returns XML on error (e.g. date range > 1 year)
+        if (str_starts_with(trim($response), '<')) {
+            Log::error("IcneaSyncReservations XML error ({$lodgingId}): {$response}");
+            return [];
+        }
+
         $data = json_decode($response, true);
+
+        if (!$data) {
+            Log::error("IcneaSyncReservations invalid JSON ({$lodgingId}): " . substr($response, 0, 200));
+            return [];
+        }
 
         if (isset($data['services_get_reservations_response']['error'])) {
             Log::warning("IcneaSyncReservations error ({$lodgingId}): " . $data['services_get_reservations_response']['error']);

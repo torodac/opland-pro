@@ -99,6 +99,20 @@ return [
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 
+        'opland' => [
+            'driver' => 'pgsql',
+            'host' => env('DB_OPLAND_HOST', '127.0.0.1'),
+            'port' => env('DB_OPLAND_PORT', '5432'),
+            'database' => env('DB_OPLAND_DATABASE', 'opland_db'),
+            'username' => env('DB_OPLAND_USERNAME', 'opland'),
+            'password' => env('DB_OPLAND_PASSWORD', ''),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => 'prefer',
+        ],
+
         'sqlsrv' => [
             'driver' => 'sqlsrv',
             'url' => env('DB_URL'),

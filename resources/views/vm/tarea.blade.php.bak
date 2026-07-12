@@ -1,0 +1,589 @@
+@php
+function minToHm(int $min): string {
+    if ($min <= 0) return '0h 00m';
+    return intdiv($min, 60) . 'h ' . str_pad($min % 60, 2, '0', STR_PAD_LEFT) . 'm';
+}
+$colores = [
+    'limpieza'      => ['bg'=>'#E6F1FB','bd'=>'#378ADD','tx'=>'#0C447C','bar'=>'#85B7EB'],
+    'mantenimiento' => ['bg'=>'#FAEEDA','bd'=>'#EF9F27','tx'=>'#633806','bar'=>'#FAC775'],
+    'piscina'       => ['bg'=>'#E1F5EE','bd'=>'#1D9E75','tx'=>'#085041','bar'=>'#5DCAA5'],
+];
+$c = $colores[$tipo];
+$tipoLabel = ['limpieza'=>'Limpieza','mantenimiento'=>'Mantenimiento','piscina'=>'Piscinas'][$tipo];
+$tipoIcon  = ['limpieza'=>'ti-sparkles','mantenimiento'=>'ti-tool','piscina'=>'ti-droplet'][$tipo];
+$subtipo   = $tarea->Tipo ?? null;
+$listadoTable = $tablaLabel[$tipo];
+$urlUpdate    = route('vm.tarea.update',          [$project->slug, $tipo, $tarea->id]);
+$urlAsignados = route('vm.tarea.asignados',        [$project->slug, $tipo, $tarea->id]);
+$urlImpStore  = route('vm.tarea.imputacion.store', [$project->slug, $tipo, $tarea->id]);
+$urlImpDel    = url("/vm/tareas_{$tipo}_form/{$tarea->id}/imputaciones");
+$csrf         = csrf_token();
+@endphp
+<x-app-layout
+    :breadcrumb="[
+        ['label' => $tipoLabel, 'url' => route('listado', [$project->slug, $listadoTable])],
+        ['label' => $tarea->nombre ?? 'Tarea #' . $tarea->id, 'url' => ''],
+    ]"
+    :project="$project">
+
+    <x-slot name="actions">
+        {{-- Enlace ficha genérica --}}
+        <a href="{{ route('ficha', [$project->slug, $listadoTable, $tarea->id]) }}"
+           class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors"
+           title="Ver ficha estándar">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        </a>
+        @if ($canEdit)
+        {{-- VIEW mode --}}
+        <div id="btn-view-mode" style="display:flex;align-items:center;gap:6px;">
+            <button onclick="enterEdit()"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">
+                <i class="ti ti-pencil text-sm"></i>Editar
+            </button>
+        </div>
+        {{-- EDIT mode --}}
+        <div id="btn-edit-mode" style="display:none;align-items:center;gap:6px;">
+            <button onclick="cancelEdit()"
+                class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-500 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                Cancelar
+            </button>
+            <button id="btn-save" onclick="guardar()"
+                class="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white rounded-lg transition-colors"
+                style="background:{{ $c['bd'] }};border-color:{{ $c['bd'] }}">
+                Guardar
+            </button>
+        </div>
+        @endif
+    </x-slot>
+
+<style>
+.t-card{background:var(--surface-2);border:0.5px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px}
+.t-top{padding:14px 18px;border-bottom:0.5px solid var(--border)}
+.t-row-title{display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.t-name{font-size:16px;font-weight:500;color:var(--text-primary);flex:1;min-width:0;line-height:1.3}
+.t-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:500;flex-shrink:0;white-space:nowrap}
+.t-meta{display:flex;gap:20px;flex-wrap:wrap;margin-top:10px}
+.t-meta-item{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary)}
+.t-meta-item i{font-size:13px;color:var(--text-muted)}
+.t-meta-val{font-weight:500;color:var(--text-primary)}
+.t-body{padding:14px 18px;display:flex;flex-direction:column;gap:16px}
+.t-sec-label{font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
+.t-text{font-size:13px;color:var(--text-secondary);line-height:1.55;background:var(--surface-1);border:0.5px solid var(--border);border-radius:8px;padding:9px 12px}
+.t-text.empty{color:var(--text-muted);font-style:italic}
+/* edit mode inputs */
+.edit-input{display:none;font-size:inherit;font-weight:inherit;color:var(--text-primary);border:0.5px solid var(--border);border-radius:6px;padding:6px 9px;background:var(--surface-2);width:100%;font-family:inherit;line-height:1.4}
+.edit-textarea{display:none;font-size:13px;color:var(--text-primary);border:0.5px solid var(--border);border-radius:8px;padding:9px 12px;background:var(--surface-2);width:100%;font-family:inherit;line-height:1.55;resize:vertical;min-height:72px}
+.editing .edit-input{display:block}
+.editing .edit-textarea{display:block}
+.editing .view-val{display:none}
+/* dur */
+.dur-card{background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:8px;display:flex;overflow:hidden}
+.dark .dur-card{background:#1a1a1a;border-color:rgba(255,255,255,.08)}
+.dur-half{flex:1;padding:12px 16px;text-align:center}
+.dur-half+.dur-half{border-left:0.5px solid var(--border)}
+.dur-lbl{font-size:11px;color:var(--text-muted);margin-bottom:4px;display:flex;align-items:center;justify-content:center;gap:4px}
+.dur-val{font-size:20px;font-weight:500;color:var(--text-primary)}
+.dur-val.over{color:var(--text-danger)}
+.dur-val.nil{font-size:14px;color:var(--text-muted)}
+/* personas */
+.asgn-list{display:flex;flex-direction:column;gap:7px}
+.asgn-row{display:flex;align-items:center;gap:10px}
+.t-avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;flex-shrink:0}
+.asgn-info{flex:1;min-width:0}
+.asgn-name{font-size:13px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar-wrap{height:4px;border-radius:2px;margin-top:4px;overflow:hidden;background:var(--surface-0)}
+.bar-fill{height:100%;border-radius:2px}
+.asgn-time{font-size:12px;font-weight:500;flex-shrink:0;min-width:44px;text-align:right}
+.no-imp-txt{font-size:11px;color:var(--text-muted);flex-shrink:0}
+/* imputaciones */
+.imp-card{background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px;overflow:hidden}
+.dark .imp-card{background:#1a1a1a;border-color:rgba(255,255,255,.08)}
+.imp-head{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:0.5px solid var(--border);background:var(--surface-2)}
+.imp-title{font-size:13px;font-weight:500;color:var(--text-primary);flex:1}
+.imp-row{display:grid;grid-template-columns:28px 1fr auto auto auto;align-items:start;gap:10px;padding:10px 16px;border-bottom:0.5px solid var(--border)}
+.imp-row:last-child{border-bottom:none}
+.imp-avatar{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:500;margin-top:1px}
+.imp-main{min-width:0}
+.imp-uname{font-size:13px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.imp-obs{font-size:12px;color:var(--text-secondary);margin-top:3px;line-height:1.4}
+.imp-obs.empty{color:var(--text-muted);font-style:italic}
+.imp-date{font-size:12px;color:var(--text-muted);white-space:nowrap;padding-top:2px}
+.imp-dur{font-size:13px;font-weight:500;white-space:nowrap;text-align:right;padding-top:2px}
+.imp-empty{padding:2rem 16px;text-align:center}
+.imp-empty i{font-size:28px;color:var(--text-muted);display:block;margin-bottom:8px}
+.imp-empty p{font-size:13px;color:var(--text-muted)}
+.imp-foot{display:flex;align-items:center;justify-content:space-between;padding:9px 16px;background:var(--surface-2);border-top:0.5px solid var(--border-strong)}
+.section-card{background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px;padding:1rem 1.25rem;margin-bottom:12px}
+.dark .section-card{background:#1a1a1a;border-color:rgba(255,255,255,.08)}
+/* btn del (X) */
+.btn-del{background:none;border:none;cursor:pointer;padding:3px 5px;border-radius:4px;color:var(--text-muted);line-height:1;transition:color .15s,background .15s}
+.btn-del:hover{color:#ef4444;background:#fee2e2}
+/* block header with action btn */
+.block-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.btn-block-action{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:6px;border:0.5px solid var(--border-strong);background:none;font-size:12px;color:var(--text-secondary);cursor:pointer;transition:background .15s}
+.btn-block-action:hover{background:var(--surface-1)}
+/* modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:#fff;border:0.5px solid rgba(0,0,0,.1);border-radius:12px;padding:1.5rem;width:400px;max-width:94vw;max-height:90vh;overflow-y:auto}
+.dark .modal{background:#1a1a1a;border-color:rgba(255,255,255,.1)}
+.modal-title{font-weight:500;font-size:15px;margin:0 0 1rem}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:1.25rem;padding-top:1rem;border-top:0.5px solid rgba(0,0,0,.07)}
+.modal label{font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px}
+.modal select,.modal input,.modal textarea{font-size:13px;border:0.5px solid var(--border);border-radius:6px;padding:7px 10px;background:var(--surface-2);color:var(--text-primary);width:100%;margin-bottom:10px}
+.modal .form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{padding:7px 16px;border-radius:7px;border:0.5px solid var(--border);font-size:13px;cursor:pointer;background:none;color:var(--text-secondary)}
+.btn:hover{background:var(--surface-1)}
+.btn-primary{border:none;font-weight:500;color:#fff}
+.btn-primary:hover{filter:brightness(.92)}
+/* user-checkbox list */
+.user-check-list{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;margin-bottom:2px}
+.user-check-item{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:7px;cursor:pointer;border:0.5px solid transparent;transition:background .12s}
+.user-check-item:hover{background:var(--surface-1)}
+.user-check-item.checked{background:var(--surface-1);border-color:var(--border)}
+.user-check-item input[type=checkbox]{width:15px;height:15px;cursor:pointer;accent-color:{{ $c['bd'] }}}
+.user-check-item span{font-size:13px;color:var(--text-primary)}
+</style>
+
+<div style="max-width:720px;margin:0 auto;padding:1rem 0 2rem">
+
+{{-- Formulario oculto para guardar campos principales --}}
+@if ($canEdit)
+<form id="form-tarea" method="POST" action="{{ $urlUpdate }}" style="display:none">
+    @csrf
+    @method('PUT')
+    <input type="hidden" name="nombre"            id="f-nombre">
+    <input type="hidden" name="descripcion"       id="f-descripcion">
+    <input type="hidden" name="comentario"        id="f-comentario">
+    <input type="hidden" name="fecha_planificada" id="f-fecha">
+    <input type="hidden" name="Tipo"              id="f-tipo">
+</form>
+@endif
+
+{{-- ── FICHA PRINCIPAL ── --}}
+<div class="t-card" id="main-card">
+  <div class="t-top">
+    <div class="t-row-title">
+      {{-- Nombre: view/edit --}}
+      <div class="t-name">
+        <span class="view-val">{{ $tarea->nombre ?? 'Sin nombre' }}</span>
+        <input class="edit-input" id="inp-nombre" value="{{ $tarea->nombre }}" placeholder="Nombre de la tarea" style="font-size:16px;font-weight:500">
+      </div>
+
+      {{-- Badge tipo --}}
+      <span class="t-badge" style="background:{{ $c['bg'] }};border:0.5px solid {{ $c['bd'] }};color:{{ $c['tx'] }}">
+        <i class="ti {{ $tipoIcon }}" aria-hidden="true" style="font-size:11px"></i>
+        <span class="view-val">{{ $subtipo ?? $tipoLabel }}</span>
+        <input class="edit-input" id="inp-tipo" value="{{ $subtipo }}" placeholder="{{ $tipoLabel }}"
+               style="font-size:12px;font-weight:500;color:{{ $c['tx'] }};background:transparent;border:none;padding:0;width:90px">
+      </span>
+
+      {{-- Badge imputación --}}
+      @if ($badgeImp === 'sin_imputar')
+        <span class="t-badge" style="background:var(--surface-1);border:0.5px solid var(--border-strong);color:var(--text-muted)">
+          <i class="ti ti-clock-pause" aria-hidden="true" style="font-size:11px"></i>Sin imputar
+        </span>
+      @elseif ($badgeImp === 'parcial')
+        <span class="t-badge" style="background:#FAEEDA;border:0.5px solid #EF9F27;color:#633806">
+          <i class="ti ti-clock-half-2" aria-hidden="true" style="font-size:11px"></i>Imputación parcial
+        </span>
+      @else
+        <span class="t-badge" style="background:var(--bg-success);border:0.5px solid var(--border-success);color:var(--text-success)">
+          <i class="ti ti-circle-check" aria-hidden="true" style="font-size:11px"></i>Todos imputados
+        </span>
+      @endif
+    </div>
+
+    @if ($propiedad)
+      <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);margin-bottom:8px">
+        <i class="ti ti-building" aria-hidden="true" style="font-size:14px;color:var(--text-muted)"></i>
+        <span style="font-weight:500;color:var(--text-primary)">{{ $propiedad->nombre }}</span>
+      </div>
+    @endif
+
+    <div class="t-meta">
+      <span class="t-meta-item">
+        <i class="ti ti-calendar" aria-hidden="true"></i>
+        Planificada
+        <span class="t-meta-val view-val">
+          {{ $tarea->fecha_planificada ? \Carbon\Carbon::parse($tarea->fecha_planificada)->translatedFormat('j M Y') : '—' }}
+        </span>
+        <input class="edit-input" id="inp-fecha" type="date" value="{{ $tarea->fecha_planificada }}"
+               style="font-size:12px;font-weight:500;padding:2px 6px;width:auto">
+      </span>
+      <span class="t-meta-item">
+        <i class="ti ti-users" aria-hidden="true"></i>
+        Asignadas
+        <span class="t-meta-val" id="meta-asignadas-count">{{ $usuarios->count() }} {{ $usuarios->count() === 1 ? 'persona' : 'personas' }}</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="t-body">
+
+    @if ($tipo === 'limpieza')
+      @php
+        $prevMin = $propiedad?->tiempo_limpieza ?? null;
+        $isOver  = $prevMin && $totalImputado > $prevMin;
+      @endphp
+      <div>
+        <div class="t-sec-label">Duración</div>
+        <div class="dur-card">
+          <div class="dur-half">
+            <div class="dur-lbl"><i class="ti ti-clock" style="font-size:12px"></i>Prevista</div>
+            @if ($prevMin)
+              <div class="dur-val">{{ minToHm($prevMin) }}</div>
+            @else
+              <div class="dur-val nil">Sin definir</div>
+            @endif
+          </div>
+          <div class="dur-half">
+            <div class="dur-lbl"><i class="ti ti-clock-check" style="font-size:12px"></i>Imputada</div>
+            <div class="dur-val {{ $isOver ? 'over' : ($totalImputado ? '' : 'nil') }}" id="dur-total">
+              {{ $totalImputado ? minToHm($totalImputado) : 'Sin imputar' }}
+            </div>
+          </div>
+        </div>
+      </div>
+    @endif
+
+    {{-- Descripción --}}
+    <div>
+      <div class="t-sec-label" style="margin-bottom:6px">Descripción</div>
+      <div class="t-text {{ $tarea->descripcion ? '' : 'empty' }} view-val">{{ $tarea->descripcion ?? 'Sin descripción.' }}</div>
+      <textarea class="edit-textarea" id="inp-desc" rows="4" placeholder="Descripción...">{{ $tarea->descripcion }}</textarea>
+    </div>
+
+    {{-- Comentario --}}
+    <div>
+      <div class="t-sec-label" style="margin-bottom:6px">Comentario</div>
+      <div class="t-text {{ $tarea->comentario ? '' : 'empty' }} view-val">{{ $tarea->comentario ?? 'Sin comentario.' }}</div>
+      <textarea class="edit-textarea" id="inp-com" rows="3" placeholder="Comentario...">{{ $tarea->comentario }}</textarea>
+    </div>
+
+    {{-- Personas asignadas --}}
+    <div class="section-card">
+      <div class="block-header">
+        <div class="t-sec-label" style="margin:0">Personas asignadas</div>
+        @if ($canEdit)
+        <button class="btn-block-action" onclick="openModal('modal-personas')">
+          <i class="ti ti-users-plus" style="font-size:12px"></i> Editar
+        </button>
+        @endif
+      </div>
+      <div class="asgn-list" id="asgn-list">
+        @forelse ($usuarios as $u)
+          @php
+            $uMin  = $tiempoPorUsuario[$u->id] ?? 0;
+            $pct   = $maxPorUsuario > 0 ? round($uMin / $maxPorUsuario * 100) : 0;
+            $inis  = collect(explode(' ', $u->nombre))->map(fn($p) => strtoupper($p[0] ?? ''))->take(2)->join('');
+            $hasImp = $uMin > 0;
+          @endphp
+          <div class="asgn-row" id="asgn-{{ $u->id }}">
+            <div class="t-avatar" style="background:{{ $hasImp ? $c['bg'] : 'var(--surface-1)' }};color:{{ $hasImp ? $c['tx'] : 'var(--text-muted)' }}">{{ $inis }}</div>
+            <div class="asgn-info">
+              <div class="asgn-name">{{ $u->nombre }}</div>
+              <div class="bar-wrap"><div class="bar-fill" style="width:{{ $pct }}%;background:{{ $c['bar'] }}"></div></div>
+            </div>
+            @if ($hasImp)
+              <span class="asgn-time" style="color:{{ $c['tx'] }}">{{ minToHm($uMin) }}</span>
+            @else
+              <span class="no-imp-txt">Sin imputar</span>
+            @endif
+          </div>
+        @empty
+          <p id="asgn-empty" style="font-size:13px;color:var(--text-muted);margin:0">Sin personas asignadas.</p>
+        @endforelse
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{{-- ── IMPUTACIONES ── --}}
+<div class="imp-card">
+  <div class="imp-head">
+    <i class="ti ti-clock-record" style="font-size:15px;color:var(--text-muted)"></i>
+    <span class="imp-title">Imputaciones</span>
+    <span style="font-size:13px;font-weight:500;color:{{ $c['tx'] }}" id="imp-total-head">
+      {{ $totalImputado ? minToHm($totalImputado) : 'Ninguna' }}
+    </span>
+    @if ($canEdit)
+    <button class="btn-block-action" style="margin-left:8px" onclick="openModal('modal-imp')">
+      <i class="ti ti-plus" style="font-size:12px"></i> Añadir
+    </button>
+    @endif
+  </div>
+
+  <div id="imp-list">
+  @forelse ($imputaciones as $imp)
+    @php $inis = collect(explode(' ', $imp->usuario_nombre))->map(fn($p) => strtoupper($p[0] ?? ''))->take(2)->join(''); @endphp
+    <div class="imp-row" id="imp-{{ $imp->id }}" data-dur="{{ $imp->duracion }}">
+      <div class="imp-avatar" style="background:{{ $c['bg'] }};color:{{ $c['tx'] }}">{{ $inis }}</div>
+      <div class="imp-main">
+        <div class="imp-uname">{{ $imp->usuario_nombre }}</div>
+        <div class="imp-obs {{ $imp->observacion ? '' : 'empty' }}">{{ $imp->observacion ?? 'Sin observación.' }}</div>
+      </div>
+      <span class="imp-date">{{ \Carbon\Carbon::parse($imp->fecha_imputacion)->translatedFormat('j M') }}</span>
+      <span class="imp-dur" style="color:{{ $c['tx'] }}">{{ minToHm($imp->duracion) }}</span>
+      @if ($canEdit)
+      <button class="btn-del" title="Eliminar" onclick="eliminarImputacion({{ $imp->id }}, this)">
+        <i class="ti ti-x" style="font-size:12px"></i>
+      </button>
+      @else
+      <span></span>
+      @endif
+    </div>
+  @empty
+    <div class="imp-empty" id="imp-empty">
+      <i class="ti ti-clock-pause"></i>
+      <p>Nadie ha imputado tiempo todavía.</p>
+    </div>
+  @endforelse
+  </div>
+
+  <div class="imp-foot" id="imp-foot" style="{{ $imputaciones->count() ? '' : 'display:none' }}">
+    <span style="font-size:12px;color:var(--text-secondary);font-weight:500">Total imputado</span>
+    <span style="font-size:14px;font-weight:500;color:{{ $c['tx'] }}" id="imp-total-foot">{{ minToHm($totalImputado) }}</span>
+  </div>
+</div>
+
+</div>{{-- /max-width --}}
+
+{{-- ── MODAL PERSONAS ASIGNADAS ── --}}
+@if ($canEdit)
+<div class="modal-overlay" id="modal-personas">
+  <div class="modal">
+    <div class="modal-title">Personas asignadas</div>
+    <div class="user-check-list" id="user-check-list">
+      @foreach ($usuariosDisponibles as $u)
+        @php $checked = in_array($u->id, array_map('intval', json_decode($tarea->control_user ?? '[]', true) ?? [])); @endphp
+        <label class="user-check-item {{ $checked ? 'checked' : '' }}" data-uid="{{ $u->id }}">
+          <input type="checkbox" value="{{ $u->id }}" {{ $checked ? 'checked' : '' }}
+                 onchange="this.closest('.user-check-item').classList.toggle('checked', this.checked)">
+          <span>{{ $u->nombre }}</span>
+        </label>
+      @endforeach
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-personas')">Cancelar</button>
+      <button class="btn btn-primary" style="background:{{ $c['bd'] }}" onclick="guardarAsignados()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+{{-- ── MODAL IMPUTACIÓN ── --}}
+<div class="modal-overlay" id="modal-imp">
+  <div class="modal">
+    <div class="modal-title">Añadir imputación</div>
+    <label>Persona</label>
+    <select id="imp-usuario">
+      <option value="">— Selecciona —</option>
+      @foreach ($usuarios as $u)
+        <option value="{{ $u->id }}">{{ $u->nombre }}</option>
+      @endforeach
+    </select>
+    <div class="form-row">
+      <div>
+        <label>Fecha</label>
+        <input type="date" id="imp-fecha" value="{{ date('Y-m-d') }}">
+      </div>
+      <div>
+        <label>Duración (minutos)</label>
+        <input type="number" id="imp-duracion" min="1" placeholder="60">
+      </div>
+    </div>
+    <label>Observación (opcional)</label>
+    <textarea id="imp-obs" rows="2" placeholder="Observación..."></textarea>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-imp')">Cancelar</button>
+      <button class="btn btn-primary" style="background:{{ $c['bd'] }}" onclick="guardarImputacion()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const CSRF = '{{ $csrf }}';
+const COLOR_TX  = '{{ $c['tx'] }}';
+const COLOR_BG  = '{{ $c['bg'] }}';
+const COLOR_BAR = '{{ $c['bar'] }}';
+const URL_UPDATE    = '{{ $urlUpdate }}';
+const URL_ASIGNADOS = '{{ $urlAsignados }}';
+const URL_IMP_STORE = '{{ $urlImpStore }}';
+const URL_IMP_DEL   = '{{ $urlImpDel }}';
+
+// ── Edit mode ──
+function enterEdit() {
+    document.getElementById('main-card').classList.add('editing');
+    document.getElementById('btn-view-mode').style.display = 'none';
+    document.getElementById('btn-edit-mode').style.display = 'flex';
+}
+function cancelEdit() {
+    document.getElementById('main-card').classList.remove('editing');
+    document.getElementById('btn-view-mode').style.display = 'flex';
+    document.getElementById('btn-edit-mode').style.display = 'none';
+}
+function guardar() {
+    document.getElementById('f-nombre').value      = document.getElementById('inp-nombre').value;
+    document.getElementById('f-descripcion').value = document.getElementById('inp-desc').value;
+    document.getElementById('f-comentario').value  = document.getElementById('inp-com').value;
+    document.getElementById('f-fecha').value       = document.getElementById('inp-fecha').value;
+    document.getElementById('f-tipo').value        = document.getElementById('inp-tipo').value;
+    document.getElementById('form-tarea').submit();
+}
+
+// ── Modals ──
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(m =>
+    m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); })
+);
+
+// ── Personas asignadas ──
+function minToHm(min) {
+    if (min <= 0) return '0h 00m';
+    return Math.floor(min/60) + 'h ' + String(min%60).padStart(2,'0') + 'm';
+}
+function iniciales(nombre) {
+    return nombre.split(' ').slice(0,2).map(p => (p[0]||'').toUpperCase()).join('');
+}
+
+async function guardarAsignados() {
+    const ids = [...document.querySelectorAll('#user-check-list input:checked')].map(cb => parseInt(cb.value));
+    const r = await fetch(URL_ASIGNADOS, {
+        method: 'PATCH',
+        headers: {'Content-Type':'application/json','X-CSRF-TOKEN':CSRF,'Accept':'application/json'},
+        body: JSON.stringify({ids})
+    });
+    const data = await r.json();
+    if (data.ok) {
+        closeModal('modal-personas');
+        // Rebuild asgn-list from checked
+        const list = document.getElementById('asgn-list');
+        list.innerHTML = '';
+        const checked = document.querySelectorAll('#user-check-list input:checked');
+        if (!checked.length) {
+            const p = document.createElement('p');
+            p.id = 'asgn-empty';
+            p.style.cssText = 'font-size:13px;color:var(--text-muted);margin:0';
+            p.textContent = 'Sin personas asignadas.';
+            list.appendChild(p);
+        } else {
+            checked.forEach(cb => {
+                const nombre = cb.closest('label').querySelector('span').textContent;
+                const uid = parseInt(cb.value);
+                const row = document.createElement('div');
+                row.className = 'asgn-row';
+                row.id = 'asgn-' + uid;
+                row.innerHTML = `
+                    <div class="t-avatar" style="background:var(--surface-1);color:var(--text-muted)">${iniciales(nombre)}</div>
+                    <div class="asgn-info">
+                        <div class="asgn-name">${nombre}</div>
+                        <div class="bar-wrap"><div class="bar-fill" style="width:0%;background:${COLOR_BAR}"></div></div>
+                    </div>
+                    <span class="no-imp-txt">Sin imputar</span>`;
+                list.appendChild(row);
+            });
+        }
+        const n = ids.length;
+        document.getElementById('meta-asignadas-count').textContent = n + ' ' + (n === 1 ? 'persona' : 'personas');
+
+        // Update modal-imp select with new users
+        const sel = document.getElementById('imp-usuario');
+        sel.innerHTML = '<option value="">— Selecciona —</option>';
+        checked.forEach(cb => {
+            const nombre = cb.closest('label').querySelector('span').textContent;
+            const opt = document.createElement('option');
+            opt.value = cb.value;
+            opt.textContent = nombre;
+            sel.appendChild(opt);
+        });
+    }
+}
+
+// ── Imputaciones ──
+let impTotal = {{ $totalImputado }};
+
+function updateImpTotals() {
+    const hm = minToHm(impTotal);
+    document.getElementById('imp-total-head').textContent = impTotal ? hm : 'Ninguna';
+    const foot = document.getElementById('imp-total-foot');
+    if (foot) foot.textContent = hm;
+    document.getElementById('imp-foot').style.display = impTotal ? '' : 'none';
+    @if ($tipo === 'limpieza')
+    const durEl = document.getElementById('dur-total');
+    if (durEl) durEl.textContent = impTotal ? hm : 'Sin imputar';
+    @endif
+}
+
+async function eliminarImputacion(impId, btn) {
+    if (!confirm('¿Eliminar esta imputación?')) return;
+    btn.disabled = true;
+    const r = await fetch(URL_IMP_DEL + '/' + impId, {
+        method: 'DELETE',
+        headers: {'X-CSRF-TOKEN':CSRF,'Accept':'application/json'}
+    });
+    const data = await r.json();
+    if (data.ok) {
+        const row = document.getElementById('imp-' + impId);
+        impTotal -= parseInt(row?.dataset.dur || 0);
+        row?.remove();
+        updateImpTotals();
+        if (!document.querySelectorAll('#imp-list .imp-row').length) {
+            const empty = document.createElement('div');
+            empty.className = 'imp-empty'; empty.id = 'imp-empty';
+            empty.innerHTML = '<i class="ti ti-clock-pause"></i><p>Nadie ha imputado tiempo todavía.</p>';
+            document.getElementById('imp-list').appendChild(empty);
+        }
+    }
+    btn.disabled = false;
+}
+
+async function guardarImputacion() {
+    const uid  = parseInt(document.getElementById('imp-usuario').value);
+    const fecha = document.getElementById('imp-fecha').value;
+    const dur  = parseInt(document.getElementById('imp-duracion').value);
+    const obs  = document.getElementById('imp-obs').value.trim();
+    if (!uid || !fecha || !dur || dur < 1) { alert('Completa persona, fecha y duración.'); return; }
+
+    const btn = document.querySelector('#modal-imp .btn-primary');
+    btn.disabled = true;
+    const r = await fetch(URL_IMP_STORE, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json','X-CSRF-TOKEN':CSRF,'Accept':'application/json'},
+        body: JSON.stringify({id_usuario:uid, fecha_imputacion:fecha, duracion:dur, observacion:obs||null})
+    });
+    const data = await r.json();
+    if (data.ok) {
+        const imp = data.imp;
+        const inis = iniciales(imp.usuario_nombre);
+        const fechaFmt = new Date(imp.fecha_imputacion + 'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'});
+        document.getElementById('imp-empty')?.remove();
+        const row = document.createElement('div');
+        row.className = 'imp-row'; row.id = 'imp-' + imp.id; row.dataset.dur = imp.duracion;
+        row.innerHTML = `
+            <div class="imp-avatar" style="background:${COLOR_BG};color:${COLOR_TX}">${inis}</div>
+            <div class="imp-main">
+                <div class="imp-uname">${imp.usuario_nombre}</div>
+                <div class="imp-obs ${imp.observacion?'':'empty'}">${imp.observacion||'Sin observación.'}</div>
+            </div>
+            <span class="imp-date">${fechaFmt}</span>
+            <span class="imp-dur" style="color:${COLOR_TX}">${minToHm(imp.duracion)}</span>
+            <button class="btn-del" title="Eliminar" onclick="eliminarImputacion(${imp.id}, this)">
+                <i class="ti ti-x" style="font-size:12px"></i>
+            </button>`;
+        const list = document.getElementById('imp-list');
+        const last = list.querySelector('.imp-row:last-child');
+        last ? last.after(row) : list.appendChild(row);
+        impTotal += imp.duracion;
+        updateImpTotals();
+        closeModal('modal-imp');
+        document.getElementById('imp-usuario').value = '';
+        document.getElementById('imp-duracion').value = '';
+        document.getElementById('imp-obs').value = '';
+    }
+    btn.disabled = false;
+}
+</script>
+@endif
+</x-app-layout>

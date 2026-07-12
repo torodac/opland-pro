@@ -1,6 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Vm;
+
+use App\Http\Controllers\Controller;
 
 use App\Models\Project;
 use Illuminate\Http\Request;
@@ -10,20 +12,44 @@ class CalendarioReservasController extends Controller
 {
     public function index(Request $request, Project $project)
     {
-        $dias  = max(14, min(60, (int) $request->input('dias', 30)));
-        $desde = now()->toDateString();
-        $hasta = now()->addDays($dias)->toDateString();
+        $dias        = max(14, min(60, (int) $request->input('dias', 30)));
+        $desdeRaw    = $request->input('desde', now()->toDateString());
+        try { $desdeCarbon = \Carbon\Carbon::parse($desdeRaw); }
+        catch (\Exception $e) { $desdeCarbon = now(); }
+        $desde = $desdeCarbon->toDateString();
+        $hasta = $desdeCarbon->copy()->addDays($dias)->toDateString();
+        $salidas = $request->input('salidas'); // 'hoy' | 'manana' | null
 
-        $reservas = DB::table('vm_reservas as r')
+        $baseQuery = DB::table('vm_reservas as r')
             ->join('vm_propiedades as p', 'p.id', '=', 'r.id_propiedades')
             ->where('p.deleted', 0)
             ->whereNotNull('p.icnea_code')
-            ->whereNotIn('r.booking_status', ['cancelled', 'canceled'])
+            ->whereNotIn('r.booking_status', ['cancelled', 'canceled']);
+
+        // Conteos para los stats
+        $salidasHoy    = (clone $baseQuery)->whereDate('r.check_out_date', now()->toDateString())->count();
+        $salidasManana = (clone $baseQuery)->whereDate('r.check_out_date', now()->addDay()->toDateString())->count();
+
+        // Filtro por salidas si se activa el stat
+        $reservasQuery = (clone $baseQuery)
             ->where('r.check_out_date', '>=', $desde)
             ->where('r.check_in_date', '<=', $hasta)
             ->orderBy('p.nombre')
-            ->orderBy('r.check_in_date')
-            ->get(['p.nombre as propiedad', 'r.id', 'r.guest_name', 'r.check_in_date', 'r.check_out_date', 'r.booking_status']);
+            ->orderBy('r.check_in_date');
+
+        if ($salidas === 'hoy') {
+            $propsFiltradas = (clone $baseQuery)
+                ->whereDate('r.check_out_date', now()->toDateString())
+                ->pluck('p.nombre')->unique();
+            $reservasQuery->whereIn('p.nombre', $propsFiltradas);
+        } elseif ($salidas === 'manana') {
+            $propsFiltradas = (clone $baseQuery)
+                ->whereDate('r.check_out_date', now()->addDay()->toDateString())
+                ->pluck('p.nombre')->unique();
+            $reservasQuery->whereIn('p.nombre', $propsFiltradas);
+        }
+
+        $reservas = $reservasQuery->get(['p.nombre as propiedad', 'r.id', 'r.guest_name', 'r.check_in_date', 'r.check_out_date', 'r.booking_status']);
 
         $propiedades = $reservas->pluck('propiedad')->unique()->sort()->values();
 
@@ -51,10 +77,14 @@ class CalendarioReservasController extends Controller
 
         return view('calendario-reservas', [
             'project'                => $project,
+            'desde'                  => $desde,
             'propiedades'            => $propiedades,
             'reservasPorPropiedad'   => $reservasPorPropiedad,
             'tareasPorPropiedad'     => $tareasPorPropiedad,
             'dias'                   => $dias,
+            'salidasHoy'             => $salidasHoy,
+            'salidasManana'          => $salidasManana,
+            'salidasFiltro'          => $salidas,
             'breadcrumb'             => [
                 ['label' => 'Calendario de reservas', 'url' => ''],
             ],

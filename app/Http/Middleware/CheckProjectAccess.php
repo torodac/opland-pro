@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Project;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -14,6 +15,11 @@ class CheckProjectAccess
     {
         $project = $request->route('project');
         if (!$project) return $next($request);
+
+        // Route model binding puede no haberse resuelto aún si el middleware corre antes de SubstituteBindings
+        if (is_string($project)) {
+            $project = Project::where('slug', $project)->firstOrFail();
+        }
 
         $user = Auth::user();
 

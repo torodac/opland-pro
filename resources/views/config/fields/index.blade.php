@@ -453,7 +453,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 
 {{-- Modal Nuevo campo --}}
-@php $maxOrder = $fields->max('order') ?? 0; @endphp
+@php $maxOrder = $fields->where('order', '<', 900)->max('order') ?? 0; @endphp
 <div x-data="{
     open: {{ $errors->any() ? 'true' : 'false' }},
     type: '{{ old('type') }}',

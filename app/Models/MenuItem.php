@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class MenuItem extends Model
 {
+    protected $table = 'admin_menu_items';
+
     protected $fillable = [
         'project_id', 'label', 'icon', 'project_table_id', 'url', 'parent_id', 'order',
     ];
@@ -42,6 +44,17 @@ class MenuItem extends Model
             return $this->url;
         }
         if ($this->projectTable) {
+            $taskMap = [
+                'tareas_limpieza'      => 'limpieza',
+                'tareas_mantenimiento' => 'mantenimiento',
+                'tareas_piscinas'      => 'piscina',
+            ];
+            if (isset($taskMap[$this->projectTable->name])) {
+                return route('vm.tarea.list', [
+                    'project' => $this->project->slug,
+                    'tipo'    => $taskMap[$this->projectTable->name],
+                ]);
+            }
             return route('listado', [
                 'project' => $this->project->slug,
                 'table'   => $this->projectTable->name,

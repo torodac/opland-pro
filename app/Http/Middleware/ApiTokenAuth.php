@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Project;
 use Closure;
 use Illuminate\Http\Request;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -10,25 +11,26 @@ class ApiTokenAuth
 {
     public function handle(Request $request, Closure $next)
     {
-        // Acepta token por query string (?api_token=...) además de header Bearer
-        if ($request->filled('api_token') && !$request->bearerToken()) {
-            $request->headers->set('Authorization', 'Bearer ' . $request->api_token);
-        }
-
-        $token = $request->bearerToken();
+        $token = $request->bearerToken() ?? $request->input('api_token');
 
         if (!$token) {
             return response()->json(['error' => 'Token requerido'], 401);
         }
 
-        $pat = PersonalAccessToken::findToken($token);
+        // Token de proyecto: busca en la tabla projects
+        $project = Project::where('api_token', $token)->first();
+        if ($project) {
+            $request->attributes->set('project_token_slug', $project->slug);
+            return $next($request);
+        }
 
+        // Token Sanctum (usuario admin)
+        $pat = PersonalAccessToken::findToken($token);
         if (!$pat || !$pat->tokenable) {
             return response()->json(['error' => 'Token inválido'], 401);
         }
 
         auth()->setUser($pat->tokenable);
-
         return $next($request);
     }
 }

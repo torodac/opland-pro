@@ -12,7 +12,9 @@ use Illuminate\Database\Schema\Blueprint;
  */
 class Project extends Model
 {
-    protected $fillable = ['name', 'slug', 'logo', 'favicon', 'description', 'active'];
+    protected $table = 'admin_projects';
+
+    protected $fillable = ['name', 'slug', 'logo', 'favicon', 'description', 'active', 'modulo_order'];
 
     public function getRouteKeyName(): string
     {
@@ -24,7 +26,7 @@ class Project extends Model
         $this->attributes['slug'] = strtolower($value);
     }
 
-    protected $casts = ['active' => 'boolean'];
+    protected $casts = ['active' => 'boolean', 'modulo_order' => 'array'];
 
     // Un proyecto tiene muchas tablas configuradas
     public function tables()
@@ -37,6 +39,10 @@ class Project extends Model
     {
         return $this->hasMany(MenuItem::class)
             ->whereNull('parent_id')
+            ->where(function ($q) {
+                $q->whereNull('project_table_id')
+                   ->orWhereHas('projectTable', fn($t) => $t->where('active', True));
+            })
             ->with(['projectTable', 'children.projectTable'])
             ->orderBy('order');
     }
@@ -115,6 +121,7 @@ class Project extends Model
             Schema::create($tableName, function (Blueprint $t) {
                 $t->id();
                 $t->string('nombre')->nullable();
+                $t->string('alias', 50)->nullable();
                 $t->string('mail')->nullable();
                 $t->unsignedBigInteger('id_rol')->nullable();
                 $t->string('dni', 20)->nullable();
@@ -132,6 +139,7 @@ class Project extends Model
 
         $fields = [
             ['name' => 'nombre',   'label' => 'Nombre',    'type' => 'string',   'order' => 1,   'in_list' => true,  'in_form' => true,  'required' => true],
+            ['name' => 'alias',    'label' => 'Alias',     'type' => 'string',   'order' => 2,   'in_list' => true,  'in_form' => true,  'required' => false],
             ['name' => 'mail',     'label' => 'Email',     'type' => 'email',    'order' => 10,  'in_list' => true,  'in_form' => true,  'required' => true],
             ['name' => 'id_rol',   'label' => 'Rol',       'type' => 'desplegable', 'order' => 20,  'in_list' => true,  'in_form' => true,  'required' => true,  'extras' => 'ref:roles'],
             ['name' => 'dni',      'label' => 'DNI',       'type' => 'string',   'order' => 30,  'in_list' => false, 'in_form' => true,  'required' => false],

@@ -82,6 +82,40 @@ class ExcelController extends Controller
         return view('excel.import-form', compact('project', 'projectTable'));
     }
 
+
+    public function importTemplate(Project $project, string $table)
+    {
+        $projectTable = $project->tables()->where('name', $table)->with('fields')->firstOrFail();
+
+        $campos = $projectTable->fields
+            ->filter(fn($f) => !$f->hidden && !in_array($f->type, ['file']) && !in_array($f->name, ['blocked', 'hidden', 'deleted']))
+            ->sortBy('order')
+            ->pluck('name')
+            ->values()
+            ->toArray();
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->fromArray([$campos], null, 'A1');
+
+        $lastCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($campos));
+        $sheet->getStyle('A1:' . $lastCol . '1')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
+            'fill' => ['fillType' => 'solid', 'startColor' => ['argb' => 'FFF97316']],
+        ]);
+        foreach (range(1, count($campos)) as $col) {
+            $sheet->getColumnDimensionByColumn($col)->setAutoSize(true);
+        }
+
+        $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xlsx');
+        $filename = $table . '_plantilla.xlsx';
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
     public function importPreview(Request $request, Project $project, string $table)
     {
         $request->validate(['archivo' => 'required|file|mimes:xlsx,xls,csv|max:20480']);
@@ -143,8 +177,8 @@ class ExcelController extends Controller
         session()->forget('excel_import_path');
 
         $msg = "Importación completada: {$importer->inserted} insertados";
-        if ($importer->updated) $msg .= ", {$importer->updated} actualizados";
-        if ($importer->skipped) $msg .= ", {$importer->skipped} omitidos";
+        if (!empty($importer->updated ?? null)) $msg .= ", {$importer->updated} actualizados";
+        if (!empty($importer->skipped ?? null)) $msg .= ", {$importer->skipped} omitidos";
 
         return redirect()->route('listado', [$project->slug, $table])->with('success', $msg);
     }

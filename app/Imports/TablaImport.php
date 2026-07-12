@@ -133,6 +133,10 @@ class TablaImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
                         continue;
                     }
                     if ($this->dupMode === 'update') {
+                        if ($exists->blocked ?? false) {
+                            $this->skipped++;
+                            continue;
+                        }
                         DB::table($fullTable)
                             ->where('id', $exists->id)
                             ->update(array_merge($rowData, ['updatedat' => $now, 'updateuser' => $this->userId]));

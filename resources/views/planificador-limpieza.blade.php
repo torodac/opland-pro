@@ -24,15 +24,17 @@
     $pxPerHora = 28;
     $COLORS    = ['#ea580c','#2563eb','#7c3aed','#0891b2','#16a34a','#dc2626','#d97706','#be185d','#0d9488','#6d28d9','#b45309','#4f46e5'];
 
-    $usuariosConConfig = $usuarios->values()->map(function ($u, $idx) use ($COLORS) {
+    $usuariosConConfig = $usuarios->values()->map(function ($u, $idx) use ($COLORS, $noDisponible) {
         $parts    = explode(' ', trim($u->nombre));
         $initials = strtoupper(substr($parts[0] ?? 'X', 0, 1) . substr($parts[1] ?? $parts[0] ?? 'X', 0, 1));
         return (object)[
-            'id'       => $u->id,
-            'nombre'   => $u->nombre,
-            'initials' => $initials,
-            'color'    => ($u->id_rol == 6) ? '#92400e' : $COLORS[$idx % count($COLORS)],
-            'ext'      => ($u->id_rol == 6),
+            'id'         => $u->id,
+            'nombre'     => $u->nombre,
+            'initials'   => $initials,
+            'color'      => ($u->id_rol == 6) ? '#92400e' : $COLORS[$idx % count($COLORS)],
+            'ext'        => ($u->id_rol == 6),
+            'disponible' => !isset($noDisponible[$u->id]),
+            'motivo'     => $noDisponible[$u->id] ?? null,
         ];
     });
 
@@ -53,6 +55,12 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
         </svg>
     </a>
+    <a href="{{ $urlSiguiente }}"
+       class="flex items-center justify-center w-7 h-7 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+        </svg>
+    </a>
     <div class="flex items-center gap-2">
         <h2 class="text-sm font-semibold text-gray-700">{{ $fechaTexto }}</h2>
         @if(!$esHoy)
@@ -63,33 +71,42 @@
         @endif
         <span class="text-xs text-gray-400">· {{ $tareas->count() }} {{ $tareas->count() === 1 ? 'tarea' : 'tareas' }}</span>
     </div>
-    <a href="{{ $urlSiguiente }}"
-       class="flex items-center justify-center w-7 h-7 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors">
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
-        </svg>
-    </a>
 </div>
 
-<div style="display:flex;gap:10px;align-items:flex-start;">
+<div style="display:flex;gap:10px;align-items:flex-start;margin-top:20px;">
 
     {{-- COLUMNA EQUIPO --}}
     <div style="width:148px;flex-shrink:0;">
         <p class="text-xs font-medium text-gray-400 mb-2 uppercase tracking-wide">Equipo</p>
         <div style="display:flex;flex-direction:column;gap:6px;">
             @foreach($usuariosConConfig as $u)
+            @php
+                $bgCard     = !$u->disponible ? '#fef2f2' : ($u->ext ? '#fffbeb' : 'white');
+                $borderCard = !$u->disponible ? '#fca5a5' : ($u->ext ? '#fbbf24' : '#e5e7eb');
+                $cursor     = !$u->disponible ? 'not-allowed' : 'grab';
+                $opacity    = !$u->disponible ? '0.7' : '1';
+            @endphp
             <div class="cleaner-card"
-                 draggable="true"
+                 draggable="{{ $u->disponible ? 'true' : 'false' }}"
                  data-cleaner-id="{{ $u->id }}"
                  data-cleaner-name="{{ $u->nombre }}"
                  data-cleaner-initials="{{ $u->initials }}"
                  data-cleaner-color="{{ $u->color }}"
                  data-cleaner-ext="{{ $u->ext ? '1' : '0' }}"
-                 style="display:flex;align-items:center;gap:7px;background:{{ $u->ext ? '#fffbeb' : 'white' }};border:0.5px solid {{ $u->ext ? '#fbbf24' : '#e5e7eb' }};border-radius:8px;padding:6px 8px;cursor:grab;user-select:none;">
-                <div style="width:24px;height:24px;border-radius:50%;background:{{ $u->color }};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:500;color:white;flex-shrink:0;">{{ $u->initials }}</div>
-                <span style="font-size:11px;font-weight:500;color:#374151;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ $u->nombre }}</span>
+                 data-disponible="{{ $u->disponible ? '1' : '0' }}"
+                 title="{{ $u->disponible ? $u->nombre : $u->nombre . ' — ' . $u->motivo }}"
+                 style="display:flex;align-items:center;gap:7px;background:{{ $bgCard }};border:0.5px solid {{ $borderCard }};border-radius:8px;padding:6px 8px;cursor:{{ $cursor }};user-select:none;opacity:{{ $opacity }};">
+                <div style="width:24px;height:24px;border-radius:50%;background:{{ $u->disponible ? $u->color : '#d1d5db' }};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:500;color:white;flex-shrink:0;">{{ $u->initials }}</div>
+                <div style="flex:1;min-width:0;overflow:hidden;">
+                    <span style="font-size:11px;font-weight:500;color:{{ $u->disponible ? '#374151' : '#9ca3af' }};display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ $u->nombre }}</span>
+                    @if(!$u->disponible)
+                    <span style="font-size:9px;color:#ef4444;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ $u->motivo }}</span>
+                    @endif
+                </div>
+                @if($u->disponible)
                 <span data-cleaner-count="{{ $u->id }}"
                       style="min-width:17px;height:17px;padding:0 3px;border-radius:9px;background:#f3f4f6;color:#6b7280;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;flex-shrink:0;">0</span>
+                @endif
             </div>
             @endforeach
         </div>
@@ -110,14 +127,18 @@
                     $decoded = json_decode($tarea->control_user, true);
                     if (is_array($decoded)) $assigned = $decoded;
                 }
-                $assignedStr = json_encode($assigned);
+                $assignedStr  = json_encode($assigned);
+                $nextCheckin  = $siguientesCheckin[$tarea->id_propiedades]->next_checkin ?? null;
+                $checkinUrgente = $nextCheckin && $nextCheckin === $fecha;
+                $borderStyle  = 'border:0.5px solid #e5e7eb;';
+                $barColor     = $checkinUrgente ? ($TYPE_COLOR[$tarea->tipo ?? ''] ?? '#6b7280') : '#6ee7b7';
             @endphp
             <div class="task-card"
                  data-task-id="{{ $tarea->id }}"
                  data-horas="{{ $horas }}"
                  data-assigned='{{ $assignedStr }}'
                  data-assign-url="{{ route('planificador-limpieza.asignar', [$project->slug, $tarea->id]) }}"
-                 style="position:relative;height:{{ $h }}px;background:white;border:0.5px solid #e5e7eb;border-radius:8px;overflow:hidden;box-sizing:border-box;display:flex;flex-direction:column;">
+                 style="position:relative;height:{{ $h }}px;background:white;{{ $borderStyle }}border-radius:8px;overflow:hidden;box-sizing:border-box;display:flex;flex-direction:column;">
 
                 {{-- Barra lateral tipo --}}
                 <div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:{{ $barColor }};border-radius:3px 0 0 3px;"></div>
@@ -127,8 +148,10 @@
 
                     {{-- Fila 1: nombre + duración --}}
                     <div style="display:flex;align-items:baseline;gap:4px;">
-                        <span style="flex:1;font-size:11px;font-weight:600;color:#111827;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;"
-                              title="{{ $tarea->propiedad }}">{{ $tarea->propiedad }}</span>
+                        <a href="{{ route('ficha', [$project->slug, 'tareas_limpieza', $tarea->id]) }}"
+                       style="flex:1;font-size:11px;font-weight:600;color:{{ $checkinUrgente ? '#111827' : '#6b7280' }};line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;text-decoration:none;"
+                       title="{{ $tarea->propiedad }}"
+                       onclick="event.stopPropagation()">{{ $tarea->propiedad }}</a>
                         <span style="font-size:10px;color:#9ca3af;white-space:nowrap;flex-shrink:0;padding-right:2px;">{{ $horas }} h</span>
                     </div>
 
@@ -138,6 +161,26 @@
                             <span style="font-size:10px;border-radius:20px;padding:1px 7px;background:{{ $barColor }}18;color:{{ $barColor }};align-self:flex-start;">{{ $tarea->tipo ?? '—' }}</span>
                             @if($tarea->estado)
                             <span style="font-size:10px;color:#9ca3af;font-style:italic;">{{ $tarea->estado }}</span>
+                            @endif
+                            @if($nextCheckin && !$checkinUrgente)
+                            {{-- Hay checkin futuro: se puede replanificar hasta ese día --}}
+                            <button class="replan-btn"
+                                    data-task-id="{{ $tarea->id }}"
+                                    data-fecha-actual="{{ $fecha }}"
+                                    data-max-fecha="{{ $nextCheckin }}"
+                                    data-replan-url="{{ route('planificador-limpieza.replanificar', [$project->slug, $tarea->id]) }}"
+                                    onclick="event.stopPropagation();openReplanPopover(this)"
+                                    style="font-size:9px;display:flex;align-items:center;gap:2px;margin-top:1px;background:none;border:none;padding:0;cursor:pointer;color:#9ca3af;"
+                                    title="Replanificar (siguiente checkin: {{ \Carbon\Carbon::parse($nextCheckin)->format('d/m') }})">
+                                <svg style="width:9px;height:9px;flex-shrink:0;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 9l3 3-3 3"/></svg>
+                                {{ \Carbon\Carbon::parse($nextCheckin)->format('d/m') }}
+                            </button>
+                            @elseif($nextCheckin && $checkinUrgente)
+                            {{-- Checkin hoy: sólo texto, sin modal --}}
+                            <span style="font-size:9px;display:flex;align-items:center;gap:2px;margin-top:1px;color:#111827;font-weight:600;">
+                                <svg style="width:9px;height:9px;flex-shrink:0;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 9l3 3-3 3"/></svg>
+                                {{ \Carbon\Carbon::parse($nextCheckin)->format('d/m') }}
+                            </span>
                             @endif
                         </div>
                         <div class="task-drop-zone"
@@ -217,6 +260,7 @@
     // ── Drag limpiador: deshabilita Sortable ────────────────────
     document.querySelectorAll('.cleaner-card').forEach(el => {
         el.addEventListener('dragstart', e => {
+            if (el.dataset.disponible === '0') { e.preventDefault(); return; }
             cleanerDragId = el.dataset.cleanerId;
             el.style.opacity = '0.45';
             e.dataTransfer.effectAllowed = 'copy';
@@ -344,5 +388,115 @@
 .task-dragging { box-shadow:0 6px 20px rgba(0,0,0,0.13); opacity:0.96; cursor:grabbing !important; }
 .is-sorting .cleaner-card { pointer-events:none; }
 </style>
+
+{{-- Popover replanificar --}}
+<div id="replan-popover" style="display:none;position:fixed;z-index:9999;background:white;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.15);padding:14px 16px;min-width:220px;">
+    <p style="font-size:11px;font-weight:600;color:#374151;margin:0 0 10px;">Replanificar tarea</p>
+    <input type="date" id="replan-input"
+           style="width:100%;font-size:12px;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;outline:none;box-sizing:border-box;color:#111827;">
+    <p id="replan-hint" style="font-size:10px;color:#9ca3af;margin:6px 0 10px;"></p>
+    <div style="display:flex;gap:8px;">
+        <button id="replan-cancel" style="flex:1;font-size:11px;padding:5px;border:1px solid #e5e7eb;border-radius:7px;background:white;color:#6b7280;cursor:pointer;">Cancelar</button>
+        <button id="replan-save" style="flex:1;font-size:11px;padding:5px;border:none;border-radius:7px;background:#ea580c;color:white;cursor:pointer;font-weight:500;">Guardar</button>
+    </div>
+</div>
+
+<script>
+(function() {
+    const popover  = document.getElementById('replan-popover');
+    const input    = document.getElementById('replan-input');
+    const hint     = document.getElementById('replan-hint');
+    const btnSave  = document.getElementById('replan-save');
+    const btnCancel= document.getElementById('replan-cancel');
+    const csrf     = document.querySelector('meta[name="csrf-token"]').content;
+    let currentBtn = null;
+
+    window.openReplanPopover = function(btn) {
+        currentBtn  = btn;
+        const min   = btn.dataset.fechaActual;
+        const max   = btn.dataset.maxFecha;
+
+        input.min   = min;
+        input.max   = max || '';
+        input.value = min;
+
+        if (max) {
+            const maxFmt = max.split('-').reverse().join('/');
+            hint.textContent = 'Disponible hasta ' + maxFmt + ' (siguiente checkin)';
+            hint.style.color = '#9ca3af';
+        } else {
+            hint.textContent = 'Sin restricción de fecha';
+            hint.style.color = '#9ca3af';
+        }
+
+        // Position near button
+        const rect = btn.getBoundingClientRect();
+        popover.style.display = 'block';
+        const pw = popover.offsetWidth;
+        const ph = popover.offsetHeight;
+        let left = rect.left;
+        let top  = rect.bottom + 6;
+        if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+        if (top  + ph > window.innerHeight - 8) top = rect.top - ph - 6;
+        popover.style.left = left + 'px';
+        popover.style.top  = top + 'px';
+    };
+
+    btnCancel.addEventListener('click', () => { popover.style.display = 'none'; currentBtn = null; });
+
+    document.addEventListener('click', e => {
+        if (!popover.contains(e.target) && e.target !== currentBtn) {
+            popover.style.display = 'none';
+            currentBtn = null;
+        }
+    });
+
+    btnSave.addEventListener('click', async () => {
+        if (!currentBtn || !input.value) return;
+        const url  = currentBtn.dataset.replanUrl;
+        const date = input.value;
+
+        // Validate against max
+        if (input.max && date > input.max) {
+            hint.textContent = 'Fecha posterior al siguiente checkin';
+            hint.style.color = '#ef4444';
+            return;
+        }
+
+        btnSave.textContent = '...';
+        btnSave.disabled = true;
+
+        try {
+            const r = await fetch(url, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf },
+                body: JSON.stringify({ fecha: date }),
+            });
+            const json = await r.json();
+            if (json.ok) {
+                // Remove card from current view with animation
+                const card = currentBtn.closest('.task-card');
+                if (card) {
+                    card.style.transition = 'opacity 0.25s,transform 0.25s';
+                    card.style.opacity = '0';
+                    card.style.transform = 'scale(0.95)';
+                    setTimeout(() => card.remove(), 260);
+                }
+                popover.style.display = 'none';
+                currentBtn = null;
+            } else {
+                hint.textContent = 'Error al guardar';
+                hint.style.color = '#ef4444';
+            }
+        } catch(e) {
+            hint.textContent = 'Error de conexión';
+            hint.style.color = '#ef4444';
+        }
+
+        btnSave.textContent = 'Guardar';
+        btnSave.disabled = false;
+    });
+})();
+</script>
 
 </x-app-layout>

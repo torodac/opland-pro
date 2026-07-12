@@ -1,4 +1,4 @@
-﻿@props(['project' => null, 'breadcrumb' => null, 'title' => null])
+@props(['project' => null, 'breadcrumb' => null, 'title' => null])
 
 <!DOCTYPE html>
 <html lang="es" class="invisible">
@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     @livewireStyles
 </head>
-<body class="bg-gray-50 text-gray-800">
+<body class="bg-gray-50 text-gray-800 overflow-hidden">
 <script>document.documentElement.classList.remove('invisible');</script>
 
 <div class="flex h-screen overflow-hidden"
@@ -64,7 +64,16 @@
                     $isProjectAdmin = $authUser?->isProjectAdmin($project);
                 @endphp
 
+                @php $currentModulo = null; @endphp
                 @foreach($mainItems as $item)
+                    @if($item->modulo !== $currentModulo)
+                        @php $currentModulo = $item->modulo; @endphp
+                        @if($currentModulo)
+                        <div :class="sidebarOpen ? 'block' : 'hidden'" class="px-2 pt-3 pb-0.5">
+                            <span style="font-size:0.65rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#f97316;">{{ $currentModulo }}</span>
+                        </div>
+                        @endif
+                    @endif
                     @if($item->children->count())
                         <div x-data="{ open: false }">
                             <button @click="sidebarOpen ? open = !open : sidebarOpen = true"
@@ -272,6 +281,31 @@
 
     </div>
 </div>
+
+
+<script>
+history.scrollRestoration = "manual";
+function resetMainScroll() {
+    var el = document.querySelector("main");
+    if (el) { el.scrollTop = 0; }
+    window.scrollTo(0, 0);
+}
+function resetMainScrollRaf() { requestAnimationFrame(resetMainScroll); }
+document.addEventListener("DOMContentLoaded", resetMainScrollRaf);
+window.addEventListener("pageshow", function(e) { resetMainScrollRaf(); setTimeout(resetMainScroll, 150); });
+document.addEventListener("alpine:initialized", resetMainScrollRaf);
+</script>
+
+
+
+
+
+
+
+
+
+
+
 
 @livewireScripts
 </body>

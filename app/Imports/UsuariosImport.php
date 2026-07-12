@@ -56,11 +56,8 @@ class UsuariosImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
                     'password' => Hash::make('bienvenido'),
                 ]);
 
-                // 2. Asignar rol en admin_user_roles
-                $role = trim($row['role'] ?? $row['rol'] ?? '');
-                if ($role) {
-                    UserRole::create(['user_id' => $user->id, 'role' => $role]);
-                }
+                // 2. Dar acceso web al proyecto
+                UserRole::create(['user_id' => $user->id, 'role' => $this->project->slug . '_usuarios']);
 
                 // 3. Datos para la tabla dinámica
                 $rowData = ['admin_user_id' => $user->id];

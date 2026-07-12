@@ -1,11 +1,14 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Vm;
+
+use App\Http\Controllers\Controller;
 
 use App\Models\Project;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use App\Services\VmHorasService;
 use Illuminate\Support\Facades\DB;
 
 class InformeImputacionesController extends Controller
@@ -21,17 +24,32 @@ class InformeImputacionesController extends Controller
 
         $data = $this->getInformeData($userId, $year, $month);
 
+        $hoy = date('Y-m-d');
+        $contratosUsuario = DB::table('vm_contratos')
+            ->where('id_usuarios', $userId)
+            ->where(function ($q) { $q->where('deleted', 0)->orWhereNull('deleted'); })
+            ->orderBy('fecha_alta')
+            ->get(['fecha_alta', 'fecha_baja']);
+        $sinContrato = $contratosUsuario->isNotEmpty()
+            && $contratosUsuario->every(fn($c) => $c->fecha_baja && $c->fecha_baja <= $hoy)
+            && $contratosUsuario->every(fn($c) => $c->fecha_alta <= $hoy);
+        $fechaFinContrato = $sinContrato
+            ? $contratosUsuario->sortByDesc('fecha_baja')->first()?->fecha_baja
+            : null;
+
         $usuarios = $canSelect
             ? $allUsuarios
             : collect();
 
         return view('informe-imputaciones', array_merge($data, [
-            'project'    => $project,
-            'year'       => $year,
-            'month'      => $month,
-            'user_id'    => $userId,
-            'usuarios'   => $usuarios,
-            'can_select' => $canSelect,
+            'project'            => $project,
+            'year'               => $year,
+            'month'              => $month,
+            'user_id'            => $userId,
+            'usuarios'           => $usuarios,
+            'can_select'         => $canSelect,
+            'sin_contrato'       => $sinContrato,
+            'fecha_fin_contrato' => $fechaFinContrato,
             'breadcrumb' => [
                 ['label' => 'Informe mensual', 'url' => ''],
             ],
@@ -53,11 +71,80 @@ class InformeImputacionesController extends Controller
         $nombre   = str_replace(' ', '_', $data['usuario']->nombre ?? 'usuario');
         $filename = "informe_{$nombre}_{$meses[$month-1]}_{$year}.pdf";
 
+        $hoy = date('Y-m-d');
+        $contratosUsuario = DB::table('vm_contratos')
+            ->where('id_usuarios', $userId)
+            ->where(function ($q) { $q->where('deleted', 0)->orWhereNull('deleted'); })
+            ->orderBy('fecha_alta')
+            ->get(['fecha_alta', 'fecha_baja']);
+        $sinContrato = $contratosUsuario->isNotEmpty()
+            && $contratosUsuario->every(fn($c) => $c->fecha_baja && $c->fecha_baja <= $hoy)
+            && $contratosUsuario->every(fn($c) => $c->fecha_alta <= $hoy);
+        $fechaFinContrato = $sinContrato
+            ? $contratosUsuario->sortByDesc('fecha_baja')->first()?->fecha_baja
+            : null;
+
         $pdf = Pdf::loadView('informe-imputaciones-pdf', array_merge($data, [
-            'year'  => $year,
-            'month' => $month,
+            'year'             => $year,
+            'month'            => $month,
+            'sin_contrato'     => $sinContrato,
+            'fecha_fin_contrato' => $fechaFinContrato,
         ]))->setPaper('a4', 'portrait');
 
+        return $pdf->download($filename);
+    }
+
+    public function pdfTodos(Request $request, Project $project)
+    {
+        ini_set('memory_limit', '512M');
+        $user    = auth()->user();
+        $isAdmin = $user->isProjectAdmin($project);
+        if (!$isAdmin) abort(403);
+
+        $year  = max(2020, min(2040, (int) $request->input('year',  now()->year)));
+        $month = max(1,    min(12,   (int) $request->input('month', now()->month)));
+
+        $allUsuarios = DB::table('vm_usuarios')
+            ->where('deleted', 0)
+            ->orderBy('nombre')
+            ->get(['id', 'nombre']);
+
+        $meses = ['enero','febrero','marzo','abril','mayo','junio',
+                  'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+        $hoy = date('Y-m-d');
+        $pages = [];
+        foreach ($allUsuarios as $u) {
+            $data = $this->getInformeData($u->id, $year, $month);
+
+            $contratosU = DB::table('vm_contratos')
+                ->where('id_usuarios', $u->id)
+                ->where(function ($q) { $q->where('deleted', 0)->orWhereNull('deleted'); })
+                ->orderBy('fecha_alta')
+                ->get(['fecha_alta', 'fecha_baja']);
+            $sinContrato = $contratosU->isNotEmpty()
+                && $contratosU->every(fn($c) => $c->fecha_baja && $c->fecha_baja <= $hoy)
+                && $contratosU->every(fn($c) => $c->fecha_alta <= $hoy);
+            $fechaFinContrato = $sinContrato
+                ? $contratosU->sortByDesc('fecha_baja')->first()?->fecha_baja
+                : null;
+
+            $pages[] = view('informe-imputaciones-pdf', array_merge($data, [
+                'year'               => $year,
+                'month'              => $month,
+                'sin_contrato'       => $sinContrato,
+                'fecha_fin_contrato' => $fechaFinContrato,
+            ]))->render();
+        }
+
+        $html = '';
+        foreach ($pages as $i => $page) {
+            $style = $i > 0 ? ' style="page-break-before:always"' : '';
+            $html .= "<div{$style}>{$page}</div>";
+        }
+        $filename = "informes_{$meses[$month-1]}_{$year}.pdf";
+
+        $pdf = Pdf::loadHTML($html)->setPaper('a4', 'portrait');
         return $pdf->download($filename);
     }
 
@@ -85,21 +172,26 @@ class InformeImputacionesController extends Controller
         return [$year, $month, $userId, $allUsuarios, $canSelect];
     }
 
+
     private function getInformeData(int $userId, int $year, int $month): array
     {
         $usuario = DB::table('vm_usuarios')->where('id', $userId)->first();
+        $sede    = $usuario->sede ?? '';
 
         $mp  = str_pad($month, 2, '0', STR_PAD_LEFT);
         $ms  = "{$year}-{$mp}-01";
         $dim = (int) Carbon::parse($ms)->daysInMonth;
         $me  = "{$year}-{$mp}-{$dim}";
 
+        $festivosDia = VmHorasService::festivosSet($sede, $ms, $me);
+
         // Fichajes del mes
         $fichajes = DB::table('vm_fichaje')
             ->where('control_user', $userId)
             ->where('deleted', 0)
             ->whereBetween('fecha_fichaje', [$ms, $me])
-            ->get()
+            ->get(['fecha_fichaje','hora_inicio','hora_fin','pausa_inicio','pausa_fin',
+                   'fuera_de_turno','festivo','km','ajuste_he','ajuste_he_motivo'])
             ->keyBy('fecha_fichaje');
 
         // Tipos de ausencia (valores fijos, sin tabla separada)
@@ -124,14 +216,20 @@ class InformeImputacionesController extends Controller
             }
         }
 
-        // Horas tareas por día (vm_imputaciones)
-        $tareasMin = DB::table('vm_imputaciones as i')
-            ->join('master_duraciones as d', 'd.id', '=', 'i.duracion')
-            ->where('i.id_usuario', $userId)
-            ->whereBetween('i.fecha_imputacion', [$ms, $me])
-            ->groupBy('i.fecha_imputacion')
-            ->select('i.fecha_imputacion', DB::raw('SUM(d.minutos) as total'))
+        // Horas tareas por día (vm_imputaciones): suma de duracion (minutos) registrada en cada imputación
+        $tareasMin = DB::table('vm_imputaciones')
+            ->where('id_usuario', $userId)
+            ->whereBetween('fecha_imputacion', [$ms, $me])
+            ->groupBy('fecha_imputacion')
+            ->select('fecha_imputacion', DB::raw('SUM(duracion) as total'))
             ->pluck('total', 'fecha_imputacion');
+
+        // Horarios del mes (descanso, etc.)
+        $horariosRaw = DB::table('vm_horarios')
+            ->where('id_usuario', $userId)
+            ->whereBetween('fecha', [$ms, $me])
+            ->get(['fecha', 'tipo']);
+        $horarioDia = $horariosRaw->keyBy('fecha');
 
         // Contratos del usuario ordenados por fecha_alta
         $contratos = DB::table('vm_contratos')
@@ -148,13 +246,14 @@ class InformeImputacionesController extends Controller
             $dow   = $dowLabels[(int) date('w', strtotime($fecha))];
             $f     = $fichajes->get($fecha);
             $aus   = $ausDia[$fecha] ?? null;
+            $hor   = $horarioDia->get($fecha);
 
             $tfMin = null;
             $pMin  = null;
             if ($f && ($f->hora_inicio ?? null) && ($f->hora_fin ?? null)) {
-                $tfMin = self::hmsToMinutes($f->hora_fin) - self::hmsToMinutes($f->hora_inicio);
+                $tfMin = VmHorasService::hmsToMinutes($f->hora_fin) - VmHorasService::hmsToMinutes($f->hora_inicio);
                 if (($f->pausa_inicio ?? null) && ($f->pausa_fin ?? null)) {
-                    $pMin = self::hmsToMinutes($f->pausa_fin) - self::hmsToMinutes($f->pausa_inicio);
+                    $pMin = VmHorasService::hmsToMinutes($f->pausa_fin) - VmHorasService::hmsToMinutes($f->pausa_inicio);
                 }
             }
 
@@ -173,26 +272,18 @@ class InformeImputacionesController extends Controller
 
             $isRotatorio = $f && ($f->fuera_de_turno ?? 0) == 1;
             $isFestTrab  = $f && ($f->festivo ?? 0) == 1;
+            $isFestivo   = isset($festivosDia[$fecha]);
 
-            $isCompensacion = $tipoObj && self::categoriaAusencia($tipoObj->nombre) === 'C';
+            $isCompensacion = $tipoObj && VmHorasService::categoriaAusencia($tipoObj->nombre) === 'C';
 
-            $heMin           = null;
-            $pausaResaltada  = false;
-            if ($contratoDia && $contratoDia->horas_semana) {
-                $esperadoMin    = (int) round(($contratoDia->horas_semana / 5) * 60);
-                $dedPausa       = self::pausaDeducible($pMin, (float) $contratoDia->horas_semana);
-                $pausaResaltada = $dedPausa > 0;
-
-                if ($isRotatorio) {
-                    $heMin = $esperadoMin;
-                } elseif ($isFestTrab && $tfMin !== null) {
-                    $heMin = $tfMin - $dedPausa;
-                } elseif ($isCompensacion) {
-                    $heMin = -$esperadoMin;
-                } elseif ($tfMin !== null) {
-                    $heMin = $tfMin - $esperadoMin - $dedPausa;
-                }
-            }
+            $heMin = VmHorasService::calcularHeDia(
+                $tfMin, $pMin, $tipoObj?->nombre ?? null, $contratoDia,
+                $isFestivo, $isRotatorio, $isFestTrab, (bool) $f,
+                $hor && $hor->tipo === 'descanso',
+                (int) ($f?->ajuste_he ?? 0)
+            );
+            $pausaResaltada = $contratoDia && $pMin !== null
+                && VmHorasService::pausaDeducible($pMin, (float) $contratoDia->horas_semana) > 0;
 
             $dias[] = [
                 'num'             => $d,
@@ -203,6 +294,7 @@ class InformeImputacionesController extends Controller
                 'tf_min'          => $tfMin,
                 'p_min'           => $pMin,
                 'he_min'          => $heMin,
+                'ajuste_he'       => (int) ($f?->ajuste_he ?? 0),
                 'ht_min'          => $htMin,
                 'km'              => $f ? (float) ($f->km ?? 0) : null,
                 'tipo'            => $tipoObj,
@@ -210,28 +302,38 @@ class InformeImputacionesController extends Controller
                 'weekend'         => in_array($dow, ['D', 'S']),
                 'is_rotatorio'    => $isRotatorio,
                 'is_fest_trab'    => $isFestTrab,
-                'is_festivo'      => false,
+                'is_festivo'      => $isFestivo,
                 'pausa_resaltada' => $pausaResaltada,
+                'horario_tipo'    => $hor ? $hor->tipo : null,
             ];
         }
 
-        $histExtras    = $this->calcularSaldoHistorico($userId, $contratos, $me, $tipos);
-        $yearStats     = $this->getYearStats($userId, $year, $month, $tipos, $contratos);
+        $histExtras    = $this->calcularSaldoHistorico($userId, $contratos, $me, $tipos, $sede);
+        $yearStats     = $this->getYearStats($userId, $year, $month, $tipos, $contratos, $sede);
+        $saldoPrevYear = $this->calcularSaldoHistorico($userId, $contratos, ($year - 1) . '-12-31', $tipos, $sede);
 
         return [
             'usuario'          => $usuario,
             'dias'             => $dias,
+            'ajustes_anio'     => DB::table('vm_fichaje')
+                ->where('control_user', $userId)
+                ->where('deleted', 0)
+                ->where('ajuste_he', '!=', 0)
+                ->whereBetween('fecha_fichaje', ["{$year}-01-01", "{$year}-12-31"])
+                ->orderBy('fecha_fichaje')
+                ->get(['id', 'fecha_fichaje', 'ajuste_he', 'ajuste_he_motivo']),
             'tipos'            => $tipos,
             'dim'              => $dim,
             'year_stats'       => $yearStats,
             'hist_extras'      => $histExtras,
+            'saldo_prev_year'  => $saldoPrevYear,
             'is_liquidado'     => false,
             'liquidado_fecha'  => null,
             'fecha_horas_extra'=> null,
         ];
     }
 
-    private function calcularSaldoHistorico(int $userId, $contratos, string $hasta, $tipos): float
+    private function calcularSaldoHistorico(int $userId, $contratos, string $hasta, $tipos, string $sede = ''): float
     {
         $fichajes = DB::table('vm_fichaje')
             ->where('control_user', $userId)
@@ -239,13 +341,24 @@ class InformeImputacionesController extends Controller
             ->whereNotNull('hora_inicio')
             ->where('fecha_fichaje', '<=', $hasta)
             ->get(['fecha_fichaje', 'hora_inicio', 'hora_fin',
-                   'pausa_inicio', 'pausa_fin', 'fuera_de_turno', 'festivo']);
+                   'pausa_inicio', 'pausa_fin', 'fuera_de_turno', 'festivo', 'ajuste_he']);
+
+        // Festivos hasta la fecha para bono +8h
+        $festivosHist = VmHorasService::festivosSet($sede, '2000-01-01', $hasta);
+
+        // Horarios descanso del usuario (para bono festivo sin fichaje)
+        $descansosDias = DB::table('vm_horarios')
+            ->where('id_usuario', $userId)
+            ->where('tipo', 'descanso')
+            ->where('fecha', '<=', $hasta)
+            ->pluck('fecha')->flip()->all();
 
         $total = 0.0;
         foreach ($fichajes as $f) {
             $isRot  = ($f->fuera_de_turno ?? 0) == 1;
             $isFest = ($f->festivo ?? 0) == 1;
             $hasFin = !empty($f->hora_fin);
+            $isFestivo = isset($festivosHist[$f->fecha_fichaje]);
 
             $contratoDia = null;
             foreach ($contratos as $c) {
@@ -260,17 +373,33 @@ class InformeImputacionesController extends Controller
             if ($isRot) {
                 $total += $esperadoMin;
             } elseif ($hasFin) {
-                $tf   = self::hmsToMinutes($f->hora_fin) - self::hmsToMinutes($f->hora_inicio);
+                $tf   = VmHorasService::hmsToMinutes($f->hora_fin) - VmHorasService::hmsToMinutes($f->hora_inicio);
                 $pMin = (($f->pausa_inicio ?? null) && ($f->pausa_fin ?? null))
-                    ? self::hmsToMinutes($f->pausa_fin) - self::hmsToMinutes($f->pausa_inicio)
+                    ? VmHorasService::hmsToMinutes($f->pausa_fin) - VmHorasService::hmsToMinutes($f->pausa_inicio)
                     : null;
-                $ded   = self::pausaDeducible($pMin, (float) $contratoDia->horas_semana);
+                $ded   = VmHorasService::pausaDeducible($pMin, (float) $contratoDia->horas_semana);
                 $total += $isFest ? $tf - $ded : $tf - $esperadoMin - $ded;
+            }
+            if ($isFestivo) $total += 480;
+            $total += (int) ($f->ajuste_he ?? 0);
+        }
+
+        // Bono festivo por días de descanso en festivo (sin fichaje)
+        foreach ($festivosHist as $fDate => $_) {
+            if (!isset($descansosDias[$fDate])) continue;
+            // Comprobar que no hay fichaje ese día (ya contado arriba)
+            $tieneF = $fichajes->contains('fecha_fichaje', $fDate);
+            if ($tieneF) continue;
+            foreach ($contratos as $c) {
+                if ($c->fecha_alta <= $fDate && (is_null($c->fecha_baja) || $c->fecha_baja >= $fDate)) {
+                    $total += 480;
+                    break;
+                }
             }
         }
 
         // Descontar días de compensación (tipo varchar)
-        $compTipos = $tipos->filter(fn($t) => self::categoriaAusencia($t->nombre) === 'C')
+        $compTipos = $tipos->filter(fn($t) => VmHorasService::categoriaAusencia($t->nombre) === 'C')
                            ->keys()->toArray(); // claves = nombres
 
         if (!empty($compTipos)) {
@@ -299,7 +428,7 @@ class InformeImputacionesController extends Controller
         return $total / 60;
     }
 
-    private function getYearStats(int $userId, int $year, int $hastaMs, $tipos, $contratos): array
+    private function getYearStats(int $userId, int $year, int $hastaMs, $tipos, $contratos, string $sede = ''): array
     {
         $labels = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 
@@ -309,8 +438,16 @@ class InformeImputacionesController extends Controller
             ->whereNotNull('hora_inicio')
             ->whereBetween('fecha_fichaje', ["{$year}-01-01", "{$year}-12-31"])
             ->get(['fecha_fichaje', 'hora_inicio', 'hora_fin',
-                   'pausa_inicio', 'pausa_fin', 'fuera_de_turno', 'festivo'])
+                   'pausa_inicio', 'pausa_fin', 'fuera_de_turno', 'festivo', 'ajuste_he'])
             ->groupBy(fn($f) => (int) substr($f->fecha_fichaje, 5, 2));
+
+        $festivosYear = VmHorasService::festivosSet($sede, "{$year}-01-01", "{$year}-12-31");
+
+        $descansosDias = DB::table('vm_horarios')
+            ->where('id_usuario', $userId)
+            ->where('tipo', 'descanso')
+            ->whereBetween('fecha', ["{$year}-01-01", "{$year}-12-31"])
+            ->pluck('fecha')->flip()->all();
 
         $stats = [];
         for ($m = 1; $m <= $hastaMs; $m++) {
@@ -321,11 +458,14 @@ class InformeImputacionesController extends Controller
             $ep      = 0.0;
             $en      = 0.0;
             $tCount  = 0;
+            $fichajesFechas = [];
 
             foreach (($fichajesYear[$m] ?? []) as $f) {
                 $isRot  = ($f->fuera_de_turno ?? 0) == 1;
                 $isFest = ($f->festivo ?? 0) == 1;
                 $hasFin = !empty($f->hora_fin);
+                $isFestivo = isset($festivosYear[$f->fecha_fichaje]);
+                $fichajesFechas[$f->fecha_fichaje] = true;
 
                 $contratoDia = null;
                 foreach ($contratos as $c) {
@@ -342,17 +482,33 @@ class InformeImputacionesController extends Controller
                     if ($isRot) {
                         $he = $esperadoMin;
                     } elseif ($hasFin) {
-                        $tf   = self::hmsToMinutes($f->hora_fin) - self::hmsToMinutes($f->hora_inicio);
+                        $tf   = VmHorasService::hmsToMinutes($f->hora_fin) - VmHorasService::hmsToMinutes($f->hora_inicio);
                         $pMin = (($f->pausa_inicio ?? null) && ($f->pausa_fin ?? null))
-                            ? self::hmsToMinutes($f->pausa_fin) - self::hmsToMinutes($f->pausa_inicio)
+                            ? VmHorasService::hmsToMinutes($f->pausa_fin) - VmHorasService::hmsToMinutes($f->pausa_inicio)
                             : null;
-                        $ded  = self::pausaDeducible($pMin, (float) $contratoDia->horas_semana);
+                        $ded  = VmHorasService::pausaDeducible($pMin, (float) $contratoDia->horas_semana);
                         $he   = $isFest ? $tf - $ded : $tf - $esperadoMin - $ded;
                     } else {
                         continue;
                     }
+                    if ($isFestivo) $he += 480;
+                    $ajMin = (int) ($f->ajuste_he ?? 0);
+                    $he += $ajMin;
                     if ($he > 0) $ep += $he;
                     else         $en += $he;
+                }
+            }
+
+            // Bono festivo por descanso en festivo sin fichaje
+            foreach ($festivosYear as $fDate => $_) {
+                if ($fDate < $ms || $fDate > $me) continue;
+                if (isset($fichajesFechas[$fDate])) continue; // ya contado
+                if (!isset($descansosDias[$fDate])) continue;
+                foreach ($contratos as $c) {
+                    if ($c->fecha_alta <= $fDate && (is_null($c->fecha_baja) || $c->fecha_baja >= $fDate)) {
+                        $ep += 480;
+                        break;
+                    }
                 }
             }
 
@@ -367,7 +523,7 @@ class InformeImputacionesController extends Controller
 
             foreach ($ausRaw as $a) {
                 $nombreTipo = $a->tipo ?? '';
-                $cat        = self::categoriaAusencia($nombreTipo);
+                $cat        = VmHorasService::categoriaAusencia($nombreTipo);
                 if (!array_key_exists($cat, $diasCol)) continue;
                 $cur = max($a->fecha_inicio, $ms);
                 $lim = min($a->fecha_fin,   $me);
@@ -394,11 +550,13 @@ class InformeImputacionesController extends Controller
                 $curLab->modify('+1 day');
             }
 
+            $hasAjuste = collect($fichajesYear[$m] ?? [])->contains(fn($f) => (int)($f->ajuste_he ?? 0) !== 0);
             $stats[$m] = [
                 'label'      => $labels[$m - 1],
                 'ep'         => $ep / 60,
                 'en'         => $en / 60,
                 'total'      => ($ep + $en) / 60,
+                'has_ajuste' => $hasAjuste,
                 'dias_col'   => $diasCol,
                 'total_dias' => array_sum($diasCol),
                 'lab'        => $lab,
@@ -408,7 +566,7 @@ class InformeImputacionesController extends Controller
         return $stats;
     }
 
-    // ── Helpers estáticos ─────────────────────────────────────────────────────
+    // ── Helpers de formato (vista) ────────────────────────────────────────────
 
     public static function fmtMin(?int $min, bool $sign = false): string
     {
@@ -430,28 +588,5 @@ class InformeImputacionesController extends Controller
         $mins = (int) round(($abs - $hrs) * 60);
         $s    = $hrs . 'h ' . str_pad($mins, 2, '0', STR_PAD_LEFT) . 'm';
         return ($neg ? '-' : ($sign ? '+' : '')) . $s;
-    }
-
-    private static function hmsToMinutes(string $t): int
-    {
-        $p = explode(':', $t);
-        return (int) $p[0] * 60 + (int) ($p[1] ?? 0);
-    }
-
-    private static function pausaDeducible(?int $pMin, float $horasSemanales): int
-    {
-        if (!$pMin || $pMin <= 0) return 0;
-        $umbral = $horasSemanales >= 40 ? 30 : 15;
-        return $pMin > $umbral ? ($pMin - $umbral) : 0;
-    }
-
-    private static function categoriaAusencia(string $nombre): string
-    {
-        $n = mb_strtolower($nombre);
-        if (str_starts_with($n, 'comp')) return 'C';
-        if (str_contains($n, 'vacac'))  return 'V';
-        if (str_contains($n, 'baja'))   return 'B';
-        if (str_contains($n, 'asunto')) return 'AA';
-        return 'otro';
     }
 }

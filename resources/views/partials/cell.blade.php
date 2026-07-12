@@ -53,7 +53,16 @@
 
     @case('id')
     @case('desplegable')
-        {{ ($fkOptions[$campo->name][$valor] ?? null) ?: '—' }}
+        @php $fkNombre = ($fkOptions[$campo->name][$valor] ?? null); @endphp
+        @if($campo->name === 'control_user' && $fkNombre)
+            @php $inicial = strtoupper(mb_substr($fkNombre, 0, 1)); @endphp
+            <span class="inline-flex items-center gap-1.5">
+                <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-100 text-orange-700 text-xs font-semibold shrink-0">{{ $inicial }}</span>
+                <span class="text-sm text-gray-700">{{ $fkNombre }}</span>
+            </span>
+        @else
+            {{ $fkNombre ?: '—' }}
+        @endif
         @break
 
     @case('multiusuario')
@@ -68,8 +77,10 @@
                         $nombre  = $uMap[(int) $uid] ?? $uMap[(string) $uid] ?? "#{$uid}";
                         $inicial = strtoupper(mb_substr($nombre, 0, 1));
                     @endphp
-                    <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-100 text-orange-700 text-xs font-semibold"
-                          title="{{ $nombre }}">{{ $inicial }}</span>
+                    <span class="inline-flex items-center gap-1.5">
+                        <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-100 text-orange-700 text-xs font-semibold shrink-0">{{ $inicial }}</span>
+                        <span class="text-sm text-gray-700">{{ $nombre }}</span>
+                    </span>
                 @endforeach
             </div>
         @else
@@ -83,6 +94,10 @@
 
     @case('decimal')
         {{ $valor !== null && $valor !== '' ? number_format((float) $valor, 2, ',', '.') : '—' }}
+        @break
+
+    @case('time')
+        {{ $valor ? substr($valor, 0, 5) : '—' }}
         @break
 
     @default

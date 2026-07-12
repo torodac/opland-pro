@@ -1,0 +1,12 @@
+{
+  "name": "Health by Opland",
+  "short_name": "Health",
+  "start_url": "/pwa/health/",
+  "display": "standalone",
+  "background_color": "#f0faf4",
+  "theme_color": "#2d9e5f",
+  "icons": [
+    { "src": "/pwa/health/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/pwa/health/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

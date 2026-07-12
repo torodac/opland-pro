@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -39,14 +40,17 @@ class IcneaSyncProCommand extends Command
                 $lodgingId = $lodging['lodging_id'] ?? null;
                 if (!$lodgingId) continue;
 
-                $id = DB::table('vm_propiedades')
+                $propiedad = DB::table('vm_propiedades')
                     ->where('icnea_lodging_id', $lodgingId)
-                    ->value('id');
+                    ->where(fn($q) => $q->whereNull('deleted')->orWhere('deleted', 0))
+                    ->first();
 
-                if (!$id) {
+                $newCode = $lodging['acronym'] ?? null;
+
+                if (!$propiedad) {
                     DB::table('vm_propiedades')->insert(array_merge([
-                        'nombre'          => $lodging['lodging_name'] ?? $lodgingId,
-                        'icnea_code'      => $lodging['acronym'] ?? null,
+                        'nombre'     => $lodging['lodging_name'] ?? $lodgingId,
+                        'icnea_code' => $newCode,
                         'hidden'     => 0,
                         'deleted'    => 0,
                         'blocked'    => 0,
@@ -58,9 +62,25 @@ class IcneaSyncProCommand extends Command
                     continue;
                 }
 
+                $extraData = $this->mapFields($lodging);
+
+                // Actualizar icnea_code con historial si cambia
+                if ($newCode && $newCode !== $propiedad->icnea_code) {
+                    $historial = $propiedad->icnea_code_historial ?? '';
+                    $partes    = $historial ? explode(',', $historial) : [];
+                    if ($propiedad->icnea_code && !in_array($propiedad->icnea_code, $partes)) {
+                        $partes[] = $propiedad->icnea_code;
+                    }
+                    $extraData['icnea_code']          = $newCode;
+                    $extraData['icnea_code_historial'] = implode(',', $partes) ?: null;
+                    $this->line("  CÓDIGO CAMBIADO: [{$lodgingId}] {$propiedad->icnea_code} → {$newCode}");
+                } elseif ($newCode && !$propiedad->icnea_code) {
+                    $extraData['icnea_code'] = $newCode;
+                }
+
                 DB::table('vm_propiedades')
-                    ->where('id', $id)
-                    ->update($this->mapFields($lodging));
+                    ->where('id', $propiedad->id)
+                    ->update($extraData);
 
                 $updated++;
                 $this->line("  OK: [{$lodgingId}] " . ($lodging['lodging_name'] ?? ''));
@@ -72,8 +92,13 @@ class IcneaSyncProCommand extends Command
             }
         }
 
-        $this->info("Sincronización completada: {$updated} actualizados, {$skipped} omitidos (sin icnea_code en vm_propiedades), {$errors} errores.");
-        Log::info("IcneaSyncPro: {$updated} actualizados, {$skipped} omitidos, {$errors} errores.");
+        Cache::forever('icnea_sync_result', [
+            'fecha'   => now()->format('d/m/Y H:i'),
+            'errores' => $errors,
+        ]);
+
+        $this->info("Sincronización completada: {$updated} actualizados, {$inserted} insertados, {$skipped} omitidos, {$errors} errores.");
+        Log::info("IcneaSyncPro: {$updated} actualizados, {$inserted} insertados, {$skipped} omitidos, {$errors} errores.");
     }
 
     private function fetchCatalog(): array

@@ -21,10 +21,13 @@ class FieldController extends Controller
 
     public function create(Project $project, ProjectTable $table)
     {
+        $nextOrder = ($table->fields()->where('order', '<', 900)->max('order') ?? 0) + 1;
+        $field = new TableField(['order' => $nextOrder]);
+
         return view('config.fields.form', [
             'project' => $project,
             'table'   => $table,
-            'field'   => new TableField(),
+            'field'   => $field,
             'types'   => array_diff_key(TableField::$typeMap, array_flip(['id', 'multitabla'])),
         ]);
     }

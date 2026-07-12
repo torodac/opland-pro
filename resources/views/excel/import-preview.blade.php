@@ -41,6 +41,9 @@
         </div>
 
         {{-- Preview de datos --}}
+        @php
+            $fieldTypeMap = $projectTable->fields->pluck('type', 'name')->toArray();
+        @endphp
         <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
             <div class="px-4 py-3 border-b border-gray-100">
                 <h2 class="text-sm font-semibold text-gray-700">Primeras filas del archivo</h2>
@@ -58,7 +61,18 @@
                         @foreach($preview as $row)
                         <tr>
                             @foreach($headings as $h)
-                                <td class="px-3 py-2 text-gray-600 truncate max-w-[180px]">{{ $row[$h] ?? '—' }}</td>
+                                @php
+                                    $val = $row[$h] ?? null;
+                                    $ftype = $fieldTypeMap[$h] ?? null;
+                                    if ($val !== null && in_array($ftype, ['fecha','timestamp']) && is_numeric($val)) {
+                                        $s = (float)$val;
+                                        if ($s > 1 && $s < 109574) {
+                                            $dt = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($s);
+                                            $val = $ftype === 'fecha' ? $dt->format('d/m/Y') : $dt->format('d/m/Y H:i');
+                                        }
+                                    }
+                                @endphp
+                                <td class="px-3 py-2 text-gray-600 truncate max-w-[180px]">{{ $val ?? '—' }}</td>
                             @endforeach
                         </tr>
                         @endforeach

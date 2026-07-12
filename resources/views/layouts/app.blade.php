@@ -49,6 +49,10 @@
         <nav class="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2 space-y-0.5">
             @isset($project)
                 @foreach($project->menuItems as $item)
+                    @php
+                        $itemTable = $item->projectTable;
+                        if ($itemTable && !auth()->user()?->canViewTable($project, $itemTable->name)) continue;
+                    @endphp
                     @if($item->children->count())
                         {{-- Ítem con submenú --}}
                         <div x-data="{ open: false }">
@@ -153,5 +157,6 @@
 </div>
 
 @livewireScripts
+@stack('modals')
 </body>
 </html>

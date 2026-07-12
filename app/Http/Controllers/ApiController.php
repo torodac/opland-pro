@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Schema;
 
 class ApiController extends Controller
 {
-    // POST /api/token  { email, password }  → { token }
+    // POST /api/token  { email, password }  → { token }  (token Sanctum de usuario admin)
     public function token(Request $request)
     {
         $request->validate([
@@ -29,9 +29,24 @@ class ApiController extends Controller
         return response()->json(['token' => $token]);
     }
 
-    // Verifica que el usuario tiene acceso al proyecto
-    private function checkProjectAccess(\App\Models\User $user, Project $project): bool
+    // Devuelve el slug autorizado: si viene token de proyecto solo ese slug, si viene usuario admin cualquiera
+    private function authorizedSlug(Request $request): ?string
     {
+        return $request->attributes->get('project_token_slug');
+    }
+
+    private function checkAccess(Request $request, Project $project): bool
+    {
+        // Token de proyecto: solo permite el slug propio
+        $projectSlug = $this->authorizedSlug($request);
+        if ($projectSlug !== null) {
+            return $projectSlug === $project->slug;
+        }
+
+        // Token Sanctum: verifica rol de usuario
+        $user = $request->user();
+        if (!$user) return false;
+
         return DB::table('admin_user_roles')
             ->where('user_id', $user->id)
             ->where(function ($q) use ($project) {
@@ -46,7 +61,7 @@ class ApiController extends Controller
     {
         $project = Project::where('slug', $slug)->firstOrFail();
 
-        abort_unless($this->checkProjectAccess($request->user(), $project), 403, 'Sin acceso al proyecto');
+        abort_unless($this->checkAccess($request, $project), 403, 'Sin acceso al proyecto');
 
         $tables = $project->tables()
             ->where('active', true)
@@ -61,7 +76,7 @@ class ApiController extends Controller
     {
         $project = Project::where('slug', $slug)->firstOrFail();
 
-        abort_unless($this->checkProjectAccess($request->user(), $project), 403, 'Sin acceso al proyecto');
+        abort_unless($this->checkAccess($request, $project), 403, 'Sin acceso al proyecto');
 
         $projectTable = $project->tables()->where('name', $tabla)->firstOrFail();
 
@@ -72,7 +87,7 @@ class ApiController extends Controller
         $perPage = min((int) $request->input('per_page', 500), 5000);
         $page    = max((int) $request->input('page', 1), 1);
 
-        $query = DB::table($fullTable)->where('deleted', 0);
+        $query = DB::table($fullTable);
 
         $total = $query->count();
         $rows  = $query->orderBy('id', 'desc')

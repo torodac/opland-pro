@@ -4,6 +4,29 @@
         @if($registro)
             {{-- Navegación prev/next --}}
             <div class="flex items-center gap-1">
+                @if($projectTable->name === 'fichaje')
+                <a href="{{ route('vm.fichaje_form', [$project->slug, $registro->id]) }}"
+                   class="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors mr-1"
+                   title="Ver formulario de fichaje">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                </a>
+                @elseif($projectTable->name === 'usuarios')
+                <a href="{{ route('vm.usuario_form', [$project->slug, $registro->id]) }}"
+                   class="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors mr-1"
+                   title="Ver formulario de usuario">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                </a>
+                @elseif(in_array($projectTable->name, ['tareas_limpieza', 'tareas_mantenimiento', 'tareas_piscinas']))
+                @php
+                    $tipoMap = ['tareas_limpieza' => 'limpieza', 'tareas_mantenimiento' => 'mantenimiento', 'tareas_piscinas' => 'piscina'];
+                    $tareaTipo = $tipoMap[$projectTable->name];
+                @endphp
+                <a href="{{ url('/vm/tareas_' . $tareaTipo . '_form/' . $registro->id) }}"
+                   class="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors mr-1"
+                   title="Ver formulario de tarea">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                </a>
+                @endif
                 <a href="{{ $prevId ? route('ficha', [$project->slug, $projectTable->name, $prevId]) : '#' }}"
                    class="p-1.5 rounded-lg border border-gray-200 text-gray-400 transition-colors {{ $prevId ? 'hover:bg-gray-50 hover:text-gray-600' : 'opacity-30 cursor-not-allowed pointer-events-none' }}"
                    title="Registro anterior">
@@ -24,10 +47,10 @@
             <div id="grupo-ver" class="flex gap-2">
                 {{-- Reset password: solo en tabla usuarios, solo admins --}}
                 @if($projectTable->name === 'usuarios' && auth()->user()?->isProjectAdmin($project))
-                <form method="POST" action="{{ route('ficha.reset-password', [$project->slug, $projectTable->name, $registro->id]) }}">
+                <form id="form-reset-password" method="POST" action="{{ route('ficha.reset-password', [$project->slug, $projectTable->name, $registro->id]) }}">
                     @csrf
-                    <button type="submit"
-                            onclick="return confirm('¿Restablecer la contraseña a «bienvenido»?')"
+                    <button type="button"
+                            onclick="confirmarResetPassword()"
                             class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors">
                         <i class="fa-solid fa-key text-xs"></i>
                         <span class="hidden sm:inline">Reset password</span>
@@ -165,7 +188,7 @@
         @endif
 
         {{-- Panel Detalles --}}
-        <div @if($registro && !empty($tabs)) x-show="tab === 'detalles'" @endif>
+        <div @if($registro && !empty($tabs)) x-show="tab === 'detalles'" x-cloak @endif>
 
             @php
                 $docPath    = $registro?->documento ?? null;
@@ -290,13 +313,13 @@
                 @endif
 
                 <div class="mt-6 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-gray-300">
-                    @if($registro->createdat)
+                    @if($registro->createdat ?? null)
                         <span>
                             Creado {{ \Carbon\Carbon::parse($registro->createdat)->format('d/m/Y H:i') }}
                             @if($createUser) <span class="text-gray-400">por {{ $createUser }}</span>@endif
                         </span>
                     @endif
-                    @if($registro->updatedat)
+                    @if($registro->updatedat ?? null)
                         <span>
                             Modificado {{ \Carbon\Carbon::parse($registro->updatedat)->format('d/m/Y H:i') }}
                             @if($updateUser) <span class="text-gray-400">por {{ $updateUser }}</span>@endif
@@ -335,7 +358,7 @@
 
         {{-- Paneles de tablas relacionadas --}}
         @foreach($tabs as $tabData)
-            <div x-show="tab === '{{ $tabData['table']->name }}'">
+            <div x-show="tab === '{{ $tabData['table']->name }}'" x-cloak>
                 <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <div class="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-transparent">
                         <span class="text-sm font-medium text-gray-700">
@@ -354,7 +377,7 @@
                     @if($tabData['rows']->isEmpty())
                         <div class="px-4 py-8 text-center text-sm text-gray-400">Sin registros</div>
                     @else
-                        <table class="w-full text-sm">
+                        <table class="w-full text-xs">
                             <thead>
                                 <tr class="border-b border-transparent">
                                     @foreach($tabData['campos'] as $campo)
@@ -518,6 +541,40 @@
 </div>
 @endif
 
+{{-- Modal reset password --}}
+@if($projectTable->name === 'usuarios' && auth()->user()?->isProjectAdmin($project))
+<div id="modal-reset-password" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/40" onclick="cerrarModalResetPassword()"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="relative bg-white rounded-xl shadow-xl w-1/3 min-w-80 p-6">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                    <i class="fa-solid fa-key text-amber-500"></i>
+                </div>
+                <h3 class="text-base font-semibold text-gray-800">Restablecer contraseña</h3>
+            </div>
+            <p class="text-sm text-gray-500 mb-2">
+                La contraseña de <strong>{{ $registro->nombre ?? 'este usuario' }}</strong> se establecerá a:
+            </p>
+            <div class="bg-gray-100 rounded-lg px-4 py-2 mb-4 text-center">
+                <span class="font-mono font-semibold text-gray-800 tracking-widest">bienvenido</span>
+            </div>
+            <p class="text-xs text-gray-400 mb-6">El usuario deberá cambiarla en su próximo acceso.</p>
+            <div class="flex justify-end gap-2">
+                <button onclick="cerrarModalResetPassword()"
+                        class="px-4 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                    Cancelar
+                </button>
+                <button onclick="document.getElementById('form-reset-password').submit()"
+                        class="px-4 py-2 text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition-colors">
+                    Restablecer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
+
 <script>
 const BG_READONLY = '#f3f4f6'; // gray-100
 
@@ -525,7 +582,9 @@ function setFieldsReadonly(readonly) {
     document.querySelectorAll('#ficha-form input, #ficha-form select, #ficha-form textarea')
         .forEach(f => {
             if (f.dataset.readonly) return;
-            f.disabled = readonly;
+            f.style.pointerEvents   = readonly ? 'none' : '';
+            f.style.userSelect      = readonly ? 'none' : '';
+            f.tabIndex              = readonly ? -1 : 0;
             f.style.backgroundColor = readonly ? BG_READONLY : '';
         });
 
@@ -549,6 +608,13 @@ function toggleEdit() {
     if (btnConfig) btnConfig.style.display = isEditing ? 'none' : '';
 }
 
+
+function confirmarResetPassword() {
+    document.getElementById('modal-reset-password').classList.remove('hidden');
+}
+function cerrarModalResetPassword() {
+    document.getElementById('modal-reset-password').classList.add('hidden');
+}
 function confirmarBorrar() {
     document.getElementById('modal-borrar').classList.remove('hidden');
 }
@@ -592,4 +658,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+    // Alias autocomplete from nombre
+    const nombreInput = document.getElementById('campo_nombre');
+    const aliasInput  = document.getElementById('campo_alias');
+    if (nombreInput && aliasInput) {
+        nombreInput.addEventListener('input', () => {
+            if (aliasInput.dataset.edited) return;
+            aliasInput.value = (nombreInput.value.trim().split(' ')[0] || '');
+        });
+        aliasInput.addEventListener('input', () => {
+            aliasInput.dataset.edited = aliasInput.value ? '1' : '';
+        });
+    }
 </script>

@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Project;
 use App\Models\ProjectTable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -42,9 +44,10 @@ class ListadoController extends Controller
             $hoy  = now()->toDateString();
             $query->whereNotNull('icnea_code');
             match ($stat) {
-                'pte_info'        => $query->where('deleted', 0)->whereNull('fecha_inicio'),
-                'posibles_bajas'  => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('icnea_updatedat')->orWhereDate('icnea_updatedat', '<', $ayer)),
+                'pte_info'        => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))->where(fn($q) => $q->whereNull('fecha_inicio')->orWhereNull('tipo_renta')),
+                'posibles_bajas'  => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))->where(fn($q) => $q->whereNull('icnea_updatedat')->orWhereDate('icnea_updatedat', '<', $ayer)),
                 'revisar_borrado' => $query->where('deleted', 1)->whereDate('icnea_updatedat', $hoy),
+                'ocultas'         => $query->where('deleted', 0)->where('hidden', 1),
                 default           => null,
             };
         } else {
@@ -124,6 +127,9 @@ class ListadoController extends Controller
             if (Schema::hasColumn($fullRef, 'deleted')) {
                 $fkQuery->where('deleted', 0);
             }
+            if (Schema::hasColumn($fullRef, 'hidden')) {
+                $fkQuery->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0));
+            }
             if ($restricted && $field->name === 'control_user' && $field->type === 'desplegable' && $fullRef === $usuariosTable) {
                 $fkQuery->where('id', $ownProjectId);
             }
@@ -152,7 +158,7 @@ class ListadoController extends Controller
         // Mapa id→nombre de usuarios del proyecto para campos multiusuario (display)
         $usuariosMap   = [];
         $usuariosTable = $project->slug . '_usuarios';
-        $allUsuarios   = [];
+        $allUsuarios   = collect([]);
         if (Schema::hasTable($usuariosTable)) {
             $allUsuarios = DB::table($usuariosTable)
                 ->where(fn($q) => $q->whereNull('deleted')->orWhere('deleted', 0))
@@ -199,15 +205,18 @@ class ListadoController extends Controller
             ];
         }
 
+        $icneaSync = null;
         if ($fullTable === 'vm_propiedades') {
             $ayer = now()->subDay()->toDateString();
             $hoy  = now()->toDateString();
-            $baseStats = fn() => DB::table($fullTable)->whereNotNull('icnea_code');
+            $baseStats = fn() => DB::table($fullTable)->whereNotNull('icnea_code')->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0));
             $tablStats = [
-                'pte_info'        => $baseStats()->where('deleted', 0)->whereNull('fecha_inicio')->count(),
-                'posibles_bajas'  => $baseStats()->where('deleted', 0)->where(fn($q) => $q->whereNull('icnea_updatedat')->orWhereDate('icnea_updatedat', '<', $ayer))->count(),
-                'revisar_borrado' => $baseStats()->where('deleted', 1)->whereDate('icnea_updatedat', $hoy)->count(),
+                'pte_info'        => $baseStats()->where(fn($q) => $q->whereNull('fecha_inicio')->orWhereNull('tipo_renta'))->count(),
+                'posibles_bajas'  => $baseStats()->where(fn($q) => $q->whereNull('icnea_updatedat')->orWhereDate('icnea_updatedat', '<', $ayer))->count(),
+                'revisar_borrado' => DB::table($fullTable)->whereNotNull('icnea_code')->where('deleted', 1)->whereDate('icnea_updatedat', $hoy)->count(),
+                'ocultas'         => DB::table($fullTable)->where('deleted', 0)->where('hidden', 1)->count(),
             ];
+            $icneaSync = Cache::get('icnea_sync_result');
         }
 
         return view('listado', [
@@ -233,11 +242,13 @@ class ListadoController extends Controller
             'sortField'         => $sortField ?? null,
             'sortDir'           => $sortDir,
             'tablStats'         => $tablStats,
+            'icneaSync'         => $icneaSync,
             'breadcrumb'        => [
                 ['label' => $projectTable->label, 'url' => ''],
             ],
         ]);
     }
+
 
     // Aplica filtro control_user si el rol del usuario no tiene todos_registros
     private function applyControlUserFilter($query, Project $project, string $fullTable): void

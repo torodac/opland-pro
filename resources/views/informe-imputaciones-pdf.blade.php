@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <style>
-@page { margin:2cm 1.5cm; }
+@page { margin:2cm 1.5cm 0.5cm 1.5cm; }
 * { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:DejaVu Sans,sans-serif; font-size:9pt; color:#222; padding:0 0.5cm; }
+body { font-family:DejaVu Sans,sans-serif; font-size:9pt; color:#222; padding:0.5cm 0.5cm 0; }
 
 .pdf-header       { display:table; width:100%; margin-bottom:12pt; }
 .pdf-header-left  { display:table-cell; vertical-align:middle; }
@@ -39,7 +39,12 @@ body { font-family:DejaVu Sans,sans-serif; font-size:9pt; color:#222; padding:0 
 .tbl-main    { width:100%; border-collapse:collapse; font-size:7.5pt; }
 .tbl-main th { background:#f0f2f5; color:#444; font-weight:bold;
                padding:4pt 3pt; text-align:center; border:1pt solid #d5d8dc; }
-.tbl-main td { padding:3pt 3pt; text-align:center; border:1pt solid #e8eaed; }
+.tbl-main td { padding:3pt 3pt; text-align:center; border:1pt solid #e8eaed; white-space:nowrap; }
+.tbl-main .col-dia { width:28pt; }
+.tbl-main .col-time { width:22pt; }
+.tbl-main .col-dur { width:28pt; }
+.tbl-main .col-km { width:22pt; }
+.tbl-main .col-tipo { width:18pt; }
 .tbl-main tr.wk td { background:#fafafa; color:#bbb; }
 
 .tipo-badge { display:inline-block; padding:1pt 5pt; border-radius:8pt;
@@ -53,7 +58,7 @@ body { font-family:DejaVu Sans,sans-serif; font-size:9pt; color:#222; padding:0 
 </style>
 </head>
 <body>
-@php use App\Http\Controllers\InformeImputacionesController as IC; @endphp
+@php use App\Http\Controllers\Vm\InformeImputacionesController as IC; @endphp
 @php
 
 $tipo_color = [
@@ -66,7 +71,7 @@ $tipo_color = [
 ];
 $color_trabajo = '#74aaf8';
 
-function tc($nombre, $map) {
+if (!function_exists('tc')) { function tc($nombre, $map) {
     if (isset($map[$nombre])) return $map[$nombre];
     $n = mb_strtolower($nombre);
     if (str_starts_with($n, 'comp')) return '#e83e8c';
@@ -74,7 +79,7 @@ function tc($nombre, $map) {
     if (str_contains($n, 'baja'))   return '#7b3f8c';
     if (str_contains($n, 'asunto')) return '#34c163';
     return '#888';
-}
+} }
 
 $meses_es = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
              'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -86,7 +91,15 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
 
 <div class="pdf-header">
     <div class="pdf-header-left">
+        @if(!empty($sin_contrato) && $sin_contrato)
+        @php
+            $ffc = \Carbon\Carbon::parse($fecha_fin_contrato)->locale('es');
+            $tituloFecha = $ffc->isoFormat('dddd, D [de] MMMM [de] YYYY');
+        @endphp
+        <div class="pdf-title">Informe liquidación con fecha {{ $tituloFecha }}</div>
+        @else
         <div class="pdf-title">Informe Mensual de Fichaje</div>
+        @endif
         <div class="pdf-period">{{ $meses_es[$month] }} {{ $year }} &mdash; {{ $usuario->nombre ?? '' }}</div>
     </div>
 </div>
@@ -144,6 +157,9 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
             <div class="saldo-box">
                 Saldo historico: <strong>{{ IC::fmtHoras($hist_extras, true) ?: '0h 00m' }}</strong>
             </div>
+            @if(!empty($sin_contrato) && $sin_contrato)
+            <div style="margin-top:6pt;font-size:8pt;color:#374151;">Horas extras compensadas en la liquidación.</div>
+            @endif
         </div>
         @endif
 
@@ -192,6 +208,9 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                     </tr>
                 </tfoot>
             </table>
+            @if(!empty($sin_contrato) && $sin_contrato)
+            <div style="margin-top:6pt;font-size:8pt;color:#374151;">Días de vacaciones saldados en la liquidación.</div>
+            @endif
         </div>
         @endif
 
@@ -201,20 +220,30 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
         <table class="tbl-main">
             <thead>
                 <tr>
-                    <th>Dia</th>
-                    <th>Entrada</th>
-                    <th>Salida</th>
-                    <th>T. Fichado</th>
-                    <th>Pausa</th>
-                    <th>H. Extras</th>
-                    <th>H. Tareas</th>
-                    <th>Km</th>
-                    <th>Tipo</th>
+                    <th class="col-dia">Día</th>
+                    <th class="col-time">Inicio</th>
+                    <th class="col-time">Fin</th>
+                    <th class="col-dur">Jornada</th>
+                    <th class="col-dur">Pausa</th>
+                    <th class="col-dur">Extras</th>
+                    <th class="col-dur">Reales</th>
+                    <th class="col-dur">Tareas</th>
+                    <th class="col-km">Km</th>
+                    <th class="col-tipo">Tipo</th>
                 </tr>
             </thead>
             <tbody>
             @foreach($dias as $dia)
-            <tr class="{{ $dia['weekend'] ? 'wk' : '' }}">
+            @php
+                $badges = [];
+                if ($dia['is_rotatorio'])       $badges[] = ['Desc. Fest.','#6f42c1'];
+                elseif ($dia['is_fest_trab'])   $badges[] = ['Trab. fest.','#0d6efd'];
+                elseif ($dia['tipo'])            $badges[] = [$dia['tipo']->nombre, tc($dia['tipo']->nombre, $tipo_color)];
+                elseif ($dia['entrada'])         $badges[] = ['Trabajo', $color_trabajo];
+                if ($dia['horario_tipo'] === 'descanso') $badges[] = ['Descanso', '#F3F4F6', '#6B7280'];
+                $conflicto = count($badges) > 1;
+            @endphp
+            <tr class="{{ $dia['weekend'] ? 'wk' : '' }}" @if($conflicto) style="background:#ffff00;" @endif>
                 <td style="font-weight:bold{{ $dia['is_festivo'] ? ';background:#ffe0e0;color:#cc0000' : '' }}">
                     {{ $dia['dow'] }} {{ $dia['num'] }}
                 </td>
@@ -227,18 +256,14 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                 <td class="{{ ($dia['he_min'] ?? 0) > 0 ? 'he-pos' : (($dia['he_min'] ?? 0) < 0 ? 'he-neg' : '') }}">
                     {{ $dia['he_min'] !== null ? IC::fmtMin($dia['he_min'], true) : '' }}
                 </td>
+                @php $efMin = ($dia['tf_min'] !== null && $dia['p_min'] !== null) ? $dia['tf_min'] - $dia['p_min'] : $dia['tf_min']; @endphp
+                <td>{{ $efMin !== null ? IC::fmtMin($efMin) : '' }}</td>
                 <td>{{ $dia['ht_min'] > 0 ? IC::fmtMin($dia['ht_min']) : '' }}</td>
-                <td>{{ $dia['km'] !== null && $dia['km'] > 0 ? number_format($dia['km'], 2, ',', '') : ($dia['entrada'] ? '0,00' : '') }}</td>
+                <td>{{ $dia['km'] !== null && $dia['km'] > 0 ? number_format($dia['km'], 1, ',', '') : ($dia['entrada'] ? '0,00' : '') }}</td>
                 <td>
-                    @if($dia['is_rotatorio'])
-                        <span class="tipo-badge" style="background:#6f42c1">Rotatorio</span>
-                    @elseif($dia['is_fest_trab'])
-                        <span class="tipo-badge" style="background:#0d6efd">Trab. fest.</span>
-                    @elseif($dia['tipo'])
-                        <span class="tipo-badge" style="background:{{ tc($dia['tipo']->nombre, $tipo_color) }}">{{ $dia['tipo']->nombre }}</span>
-                    @elseif($dia['entrada'])
-                        <span class="tipo-badge" style="background:{{ $color_trabajo }}">Trabajo</span>
-                    @endif
+                    @foreach($badges as $badge)
+                        <div><span class="tipo-badge" style="background:{{ $badge[1] }};color:{{ $badge[2] ?? '#fff' }}">{{ $badge[0] }}</span></div>
+                    @endforeach
                 </td>
             </tr>
             @endforeach

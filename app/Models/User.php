@@ -43,6 +43,7 @@ class User extends Authenticatable
 
         return $this->roles()
             ->whereIn('role', ["admin_{$project->slug}", "{$project->slug}_usuarios"])
+            ->where(function($q) { $q->whereNull('fecha_baja')->orWhere('fecha_baja', '>', now()); })
             ->exists();
     }
 
@@ -55,7 +56,11 @@ class User extends Authenticatable
     // Returns the project user ID in {slug}_usuarios, or null if not found
     public function projectUserId(Project $project): ?int
     {
-        $row = \Illuminate\Support\Facades\DB::table($project->slug . '_usuarios')
+        $table = $project->slug . '_usuarios';
+        if (!\Illuminate\Support\Facades\Schema::hasTable($table)) {
+            return null;
+        }
+        $row = \Illuminate\Support\Facades\DB::table($table)
             ->where('admin_user_id', $this->id)
             ->value('id');
 

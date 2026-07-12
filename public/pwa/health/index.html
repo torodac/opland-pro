@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2d9e5f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Health by Opland</title>
+  <link rel="manifest" href="/pwa/health/manifest.json">
+  <style>
+    :root {
+      --bg:      #f0faf4;
+      --surface: #ffffff;
+      --border:  #d1e8da;
+      --text:    #1a2e22;
+      --muted:   #6b8f78;
+      --accent:  #2d9e5f;
+      --green:   #22c55e;
+      --amber:   #f59e0b;
+      --red:     #ef4444;
+      --radius:  14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+           background: var(--bg); color: var(--text); min-height: 100dvh; }
+    #login-screen {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; min-height: 100dvh; padding: 2rem;
+    }
+    .login-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 2rem; width: 100%; max-width: 360px;
+      box-shadow: 0 4px 24px rgba(45,158,95,.08);
+    }
+    .login-logo { font-size: 2.5rem; text-align: center; margin-bottom: .5rem; }
+    .login-title { text-align: center; font-size: 1.25rem; font-weight: 700;
+                   color: var(--accent); margin-bottom: .25rem; }
+    .login-sub { text-align: center; font-size: .85rem; color: var(--muted); margin-bottom: 1.5rem; }
+    .field { margin-bottom: 1rem; }
+    .field label { display: block; font-size: .8rem; font-weight: 600;
+                   color: var(--muted); margin-bottom: .3rem; }
+    .field input {
+      width: 100%; padding: .7rem 1rem; border: 1.5px solid var(--border);
+      border-radius: calc(var(--radius) - 4px); background: var(--bg);
+      color: var(--text); font-size: 1rem; outline: none; transition: border-color .2s;
+    }
+    .field input:focus { border-color: var(--accent); }
+    .btn-primary {
+      width: 100%; padding: .8rem; background: var(--accent); color: #fff;
+      border: none; border-radius: calc(var(--radius) - 4px); font-size: 1rem;
+      font-weight: 600; cursor: pointer; transition: background .2s;
+    }
+    .btn-primary:hover { background: #248a50; }
+    .btn-primary:disabled { opacity: .6; cursor: not-allowed; }
+    .login-error { color: var(--red); font-size: .85rem; margin-top: .75rem; text-align: center; }
+    #app-screen { display: none; }
+    .app-header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: .9rem 1rem; display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 10;
+    }
+    .app-header h1 { font-size: 1.05rem; font-weight: 700; color: var(--accent); }
+    .header-right { display: flex; align-items: center; gap: .75rem; }
+    .user-name { font-size: .8rem; color: var(--muted); }
+    .btn-icon { background: none; border: none; cursor: pointer; font-size: 1.2rem;
+                padding: .2rem; color: var(--muted); }
+    .main { padding: 1rem; max-width: 600px; margin: 0 auto; }
+    .date-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: .6rem 1rem; margin-bottom: 1rem;
+    }
+    .date-nav button { background: none; border: none; font-size: 1.3rem;
+                       cursor: pointer; color: var(--accent); padding: .2rem .5rem; }
+    .date-label { font-weight: 600; font-size: .95rem; }
+    .today-btn {
+      font-size: .75rem; color: var(--accent); background: none; border: 1.5px solid var(--accent);
+      border-radius: 20px; padding: .2rem .6rem; cursor: pointer; font-weight: 600;
+    }
+    .chart-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1rem; margin-bottom: 1rem;
+    }
+    .chart-title { font-size: .8rem; font-weight: 600; color: var(--muted);
+                   text-transform: uppercase; letter-spacing: .05em; margin-bottom: .75rem; }
+    #weight-chart { width: 100%; height: 140px; }
+    .section-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); margin-bottom: .75rem; overflow: hidden;
+    }
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: .85rem 1rem; cursor: pointer; user-select: none;
+      border-bottom: 1px solid transparent; transition: border-color .2s;
+    }
+    .section-header.open { border-bottom-color: var(--border); }
+    .section-left { display: flex; align-items: center; gap: .6rem; }
+    .section-icon { font-size: 1.15rem; }
+    .section-name { font-weight: 600; font-size: .95rem; }
+    .section-right { display: flex; align-items: center; gap: .5rem; }
+    .bad-btn {
+      background: none; border: 1.5px solid var(--border); border-radius: 20px;
+      padding: .2rem .5rem; font-size: .85rem; cursor: pointer; transition: all .2s;
+      color: var(--muted);
+    }
+    .bad-btn.active { background: #fff3cd; border-color: var(--amber); color: var(--amber); }
+    .chevron { font-size: .9rem; color: var(--muted); transition: transform .2s; }
+    .chevron.open { transform: rotate(180deg); }
+    .section-body { padding: .85rem 1rem; display: none; }
+    .section-body.open { display: block; }
+    .section-body textarea, .section-body input[type=number] {
+      width: 100%; padding: .6rem .8rem; border: 1.5px solid var(--border);
+      border-radius: calc(var(--radius) - 6px); background: var(--bg);
+      color: var(--text); font-size: .95rem; font-family: inherit;
+      outline: none; resize: none; transition: border-color .2s;
+    }
+    .section-body textarea:focus, .section-body input[type=number]:focus { border-color: var(--accent); }
+    .weight-row { display: flex; align-items: center; gap: .5rem; }
+    .weight-unit { color: var(--muted); font-size: .9rem; }
+    .save-bar {
+      position: sticky; bottom: 1rem; margin-top: 1rem;
+      display: flex; justify-content: center; align-items: center;
+    }
+    .btn-save {
+      background: var(--accent); color: #fff; border: none;
+      border-radius: 30px; padding: .8rem 2.5rem; font-size: 1rem;
+      font-weight: 700; cursor: pointer; box-shadow: 0 4px 16px rgba(45,158,95,.35);
+      transition: background .2s, transform .1s;
+    }
+    .btn-save:active { transform: scale(.97); }
+    .btn-save:disabled { opacity: .6; cursor: not-allowed; }
+    .saved-msg { color: var(--green); font-size: .85rem; margin-left: .75rem;
+                 font-weight: 600; opacity: 0; transition: opacity .3s; }
+    .saved-msg.show { opacity: 1; }
+    .toast {
+      position: fixed; bottom: 5rem; left: 50%; transform: translateX(-50%);
+      background: var(--text); color: #fff; padding: .6rem 1.2rem;
+      border-radius: 30px; font-size: .85rem; opacity: 0;
+      transition: opacity .3s; pointer-events: none; z-index: 100;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">🌿</div>
+    <div class="login-title">Health by Opland</div>
+    <div class="login-sub">Tu seguimiento personal de salud</div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="login-email" placeholder="tu@email.com" autocomplete="email">
+    </div>
+    <div class="field">
+      <label>Contraseña</label>
+      <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn-primary" id="login-btn">Entrar</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<div id="app-screen">
+  <header class="app-header">
+    <h1>🌿 Health</h1>
+    <div class="header-right">
+      <span class="user-name" id="header-user"></span>
+      <button class="btn-icon" id="logout-btn" title="Cerrar sesión">↩</button>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="date-nav">
+      <button id="prev-day">‹</button>
+      <div style="display:flex;align-items:center;gap:.6rem;">
+        <span class="date-label" id="date-label"></span>
+        <button class="today-btn" id="today-btn">Hoy</button>
+      </div>
+      <button id="next-day">›</button>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-title">Evolución del peso — últimos 15 días</div>
+      <svg id="weight-chart" viewBox="0 0 560 140" preserveAspectRatio="none"></svg>
+    </div>
+
+    <div class="section-card">
+      <div class="section-header" data-section="peso">
+        <div class="section-left">
+          <span class="section-icon">⚖️</span>
+          <span class="section-name">Peso</span>
+        </div>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="section-body" id="body-peso">
+        <div class="weight-row">
+          <input type="number" id="f-weight" step="0.1" min="30" max="300" placeholder="70.5">
+          <span class="weight-unit">kg</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="section-header" data-section="breakfast">
+        <div class="section-left">
+          <span class="section-icon">☕</span>
+          <span class="section-name">Desayuno</span>
+        </div>
+        <div class="section-right">
+          <button class="bad-btn" data-field="breakfast_bad">😈</button>
+          <span class="chevron">▾</span>
+        </div>
+      </div>
+      <div class="section-body" id="body-breakfast">
+        <textarea id="f-breakfast" rows="2" placeholder="¿Qué desayunaste?"></textarea>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="section-header" data-section="mid_morning">
+        <div class="section-left">
+          <span class="section-icon">🍎</span>
+          <span class="section-name">Almuerzo</span>
+        </div>
+        <div class="section-right">
+          <button class="bad-btn" data-field="mid_morning_bad">😈</button>
+          <span class="chevron">▾</span>
+        </div>
+      </div>
+      <div class="section-body" id="body-mid_morning">
+        <textarea id="f-mid_morning" rows="2" placeholder="Media mañana..."></textarea>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="section-header" data-section="lunch">
+        <div class="section-left">
+          <span class="section-icon">🍽️</span>
+          <span class="section-name">Comida</span>
+        </div>
+        <div class="section-right">
+          <button class="bad-btn" data-field="lunch_bad">😈</button>
+          <span class="chevron">▾</span>
+        </div>
+      </div>
+      <div class="section-body" id="body-lunch">
+        <textarea id="f-lunch" rows="2" placeholder="¿Qué comiste?"></textarea>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="section-header" data-section="snack">
+        <div class="section-left">
+          <span class="section-icon">🫐</span>
+          <span class="section-name">Merienda</span>
+        </div>
+        <div class="section-right">
+          <button class="bad-btn" data-field="snack_bad">😈</button>
+          <span class="chevron">▾</span>
+        </div>
+      </div>
+      <div class="section-body" id="body-snack">
+        <textarea id="f-snack" rows="2" placeholder="Merienda..."></textarea>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="section-header" data-section="dinner">
+        <div class="section-left">
+          <span class="section-icon">🌙</span>
+          <span class="section-name">Cena</span>
+        </div>
+        <div class="section-right">
+          <button class="bad-btn" data-field="dinner_bad">😈</button>
+          <span class="chevron">▾</span>
+        </div>
+      </div>
+      <div class="section-body" id="body-dinner">
+        <textarea id="f-dinner" rows="2" placeholder="¿Qué cenaste?"></textarea>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="section-header" data-section="sport">
+        <div class="section-left">
+          <span class="section-icon">🏃</span>
+          <span class="section-name">Deporte</span>
+        </div>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="section-body" id="body-sport">
+        <textarea id="f-sport" rows="2" placeholder="Actividad física del día..."></textarea>
+      </div>
+    </div>
+
+    <div class="save-bar">
+      <button class="btn-save" id="save-btn">Guardar</button>
+      <span class="saved-msg" id="saved-msg">✓ Guardado</span>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/pwa/health/app.js"></script>
+</body>
+</html>

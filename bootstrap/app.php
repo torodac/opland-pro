@@ -19,6 +19,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth.api'           => \App\Http\Middleware\ApiTokenAuth::class,
             'role.admin'         => \App\Http\Middleware\EnsureAdmin::class,
             'role.project-admin' => \App\Http\Middleware\EnsureProjectAdmin::class,
+            'vm.only'            => \App\Http\Middleware\EnsureVmProject::class,
+            'table.access'       => \App\Http\Middleware\CheckTableAccess::class,
         ]);
         $middleware->appendToGroup('web', \App\Http\Middleware\ForcePasswordChange::class);
     })

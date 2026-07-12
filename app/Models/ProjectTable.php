@@ -14,9 +14,11 @@ use Illuminate\Database\Schema\Blueprint;
  */
 class ProjectTable extends Model
 {
+    protected $table = 'admin_project_tables';
+
     protected $fillable = [
         'project_id', 'name', 'label', 'icon', 'order',
-        'has_kanban', 'has_calendar', 'has_matrix', 'active', 'admin_only', 'permite_eliminar', 'tab_tables',
+        'has_kanban', 'has_calendar', 'has_matrix', 'active', 'admin_only', 'is_virtual', 'permite_eliminar', 'tab_tables',
         'nombre_formula', 'nombre_ocultar_ficha', 'nombre_ocultar_listado',
     ];
 
@@ -26,6 +28,7 @@ class ProjectTable extends Model
         'has_matrix'              => 'boolean',
         'active'                  => 'boolean',
         'admin_only'              => 'boolean',
+        'is_virtual'              => 'boolean',
         'permite_eliminar'        => 'boolean',
         'tab_tables'              => 'array',
         'nombre_ocultar_ficha'    => 'boolean',
