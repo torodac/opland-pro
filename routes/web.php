@@ -123,6 +123,9 @@ Route::middleware('auth')->group(function () {
     // Rutas dentro de un proyecto (con verificación de acceso)
     Route::prefix('{project:slug}')->middleware('project.access')->group(function () {
 
+        // Rutas exclusivas de VacationMarbella (dashboard, tareas, fichajes, pyg, liquidacion, novaciones, km, horario, calendario, informe-imputaciones)
+        Route::middleware('vm.only')->group(function () {
+
         Route::get('calendario-reservas', [CalendarioReservasController::class, 'index'])->name('calendario-reservas');
 
         Route::get('informe-imputaciones', [InformeImputacionesController::class, 'index'])->name('informe-imputaciones');
@@ -220,6 +223,8 @@ Route::middleware('auth')->group(function () {
         Route::get('liquidacion', [LiquidacionController::class, 'index'])->name('vm.liquidacion');
         Route::get('liquidacion/pdf', [LiquidacionController::class, 'pdf'])->name('vm.liquidacion.pdf');
         Route::post('liquidacion/{reserva}/toggle', [LiquidacionController::class, 'toggleLiquidado'])->name('vm.liquidacion.toggle');
+
+        }); // fin vm.only
 
         Route::get('{table}', [ListadoController::class, 'index'])->name('listado');
         Route::post('{table}/upload-doc', [FichaController::class, 'uploadDoc'])->name('listado.upload-doc');

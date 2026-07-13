@@ -49,7 +49,7 @@ class MenuItem extends Model
                 'tareas_mantenimiento' => 'mantenimiento',
                 'tareas_piscinas'      => 'piscina',
             ];
-            if (isset($taskMap[$this->projectTable->name])) {
+            if (isset($taskMap[$this->projectTable->name]) && $this->project->slug === 'vm') {
                 return route('vm.tarea.list', [
                     'project' => $this->project->slug,
                     'tipo'    => $taskMap[$this->projectTable->name],

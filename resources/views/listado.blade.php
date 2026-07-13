@@ -618,7 +618,7 @@
                         @else
                             {{-- ── FILA NORMAL (solo lectura) ── --}}
                             <tr class="hover:bg-gray-50 cursor-pointer"
-                                onclick="window.location='{{ $projectTable->name === 'fichaje' ? route('vm.fichaje_form', [$project->slug, $registro->id]) : ($projectTable->name === 'usuarios' ? route('vm.usuario_form', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : route('ficha', [$project->slug, $projectTable->name, $registro->id]))) }}'">
+                                onclick="window.location='{{ $projectTable->name === 'fichaje' ? route('vm.fichaje_form', [$project->slug, $registro->id]) : ($projectTable->name === 'usuarios' && $project->slug === 'vm' ? route('vm.usuario_form', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : route('ficha', [$project->slug, $projectTable->name, $registro->id]))) }}'">
                                 @foreach($campos as $campo)
                                     @php
                                         $colAlign = match(true) {

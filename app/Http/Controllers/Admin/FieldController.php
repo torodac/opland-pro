@@ -131,7 +131,7 @@ class FieldController extends Controller
         $request->validate([
             'new_name'         => 'required|alpha_dash|max:50',
             'new_label'        => 'required|string|max:100',
-            'target_project_id'=> 'required|exists:projects,id',
+            'target_project_id'=> 'required|exists:admin_projects,id',
         ]);
 
         $target    = Project::findOrFail($request->target_project_id);

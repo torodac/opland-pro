@@ -12,6 +12,10 @@ class CalendarioReservasController extends Controller
 {
     public function index(Request $request, Project $project)
     {
+        if ($project->slug === 'alegre') {
+            return app(\App\Http\Controllers\Alegre\CalendarioReservasController::class)->index($request, $project);
+        }
+
         $dias        = max(14, min(60, (int) $request->input('dias', 30)));
         $desdeRaw    = $request->input('desde', now()->toDateString());
         try { $desdeCarbon = \Carbon\Carbon::parse($desdeRaw); }

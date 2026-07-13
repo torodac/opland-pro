@@ -126,7 +126,7 @@ class TableController extends Controller
     public function store(Request $request, Project $project)
     {
         $data = $request->validate([
-            'name'  => 'required|alpha_dash|max:50|unique:project_tables,name,NULL,id,project_id,' . $project->id,
+            'name'  => 'required|alpha_dash|max:50|unique:admin_project_tables,name,NULL,id,project_id,' . $project->id,
             'label' => 'required|string|max:100',
             'icon'  => 'nullable|string|max:50',
             'order' => 'integer',

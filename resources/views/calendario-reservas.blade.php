@@ -105,9 +105,16 @@
         Tareas de checkout generadas automáticamente para los próximos 7 días
     </span>
     <div class="flex items-center gap-3 text-xs text-gray-500 shrink-0">
-        <span class="flex items-center gap-1.5"><span style="width:14px;height:10px;border-radius:2px;background:#86efac;display:inline-block;"></span>En curso</span>
-        <span class="flex items-center gap-1.5"><span style="width:14px;height:10px;border-radius:2px;background:#93c5fd;display:inline-block;"></span>Confirmada</span>
-        <span class="flex items-center gap-1.5"><span style="width:14px;height:10px;border-radius:2px;background:#fde68a;display:inline-block;"></span>Solicitada</span>
+        @php
+            $legendItems = $legend ?? [
+                ['color' => '#86efac', 'label' => 'En curso'],
+                ['color' => '#93c5fd', 'label' => 'Confirmada'],
+                ['color' => '#fde68a', 'label' => 'Solicitada'],
+            ];
+        @endphp
+        @foreach($legendItems as $item)
+            <span class="flex items-center gap-1.5"><span style="width:14px;height:10px;border-radius:2px;background:{{ $item['color'] }};display:inline-block;"></span>{{ $item['label'] }}</span>
+        @endforeach
     </div>
 </div>
 

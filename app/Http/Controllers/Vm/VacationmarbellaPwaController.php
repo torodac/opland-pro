@@ -43,6 +43,10 @@ class VacationmarbellaPwaController extends Controller
             return response()->json(['error' => 'Usuario sin acceso a la app'], 403);
         }
 
+        if ($user && in_array($user->acceso, ['web', 'sin acceso'])) {
+            return response()->json(['error' => 'Sin acceso a la app'], 403);
+        }
+
         $ttl       = $request->boolean('remember') ? 30 : 1;
         $token     = Str::random(64);
         $expiresAt = now()->addDays($ttl);

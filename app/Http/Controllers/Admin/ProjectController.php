@@ -26,7 +26,7 @@ class ProjectController extends Controller
     {
         $data = $request->validate([
             'name'        => 'required|string|max:100',
-            'slug'        => 'required|string|max:50|unique:projects|alpha_dash',
+            'slug'        => 'required|string|max:50|unique:admin_projects|alpha_dash',
             'description' => 'nullable|string|max:255',
             'logo'        => 'nullable|image|max:2048',
             'favicon'     => 'nullable|file|mimes:ico,png,svg|max:512',

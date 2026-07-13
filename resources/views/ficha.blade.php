@@ -10,7 +10,7 @@
                    title="Ver formulario de fichaje">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
                 </a>
-                @elseif($projectTable->name === 'usuarios')
+                @elseif($projectTable->name === 'usuarios' && $project->slug === 'vm')
                 <a href="{{ route('vm.usuario_form', [$project->slug, $registro->id]) }}"
                    class="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors mr-1"
                    title="Ver formulario de usuario">
@@ -256,22 +256,26 @@
                             @php $campo2 = (!$mostrarPdf && $i + 1 < $total && $camposList[$i + 1]->type !== 'text') ? $camposList[$i + 1] : null; @endphp
                             <div class="{{ $mostrarPdf ? 'grid grid-cols-1' : 'grid grid-cols-1 sm:grid-cols-2' }}">
                                 <div class="px-5 py-4">
-                                    <label for="campo_{{ $campo->name }}"
-                                           class="block text-xs font-bold text-gray-600 mb-1.5">
-                                        {{ $campo->label }}
-                                        @if($campo->required)<span class="text-red-400">*</span>@endif
-                                    </label>
                                     @php $valor = $registro ? ($registro->{$campo->name} ?? null) : (old($campo->name) ?? ($prefill[$campo->name] ?? null)); @endphp
+                                    <div class="flex items-center gap-1.5 mb-1.5">
+                                        <label for="campo_{{ $campo->name }}" class="block text-xs font-bold text-gray-600">
+                                            {{ $campo->label }}
+                                            @if($campo->required)<span class="text-red-400">*</span>@endif
+                                        </label>
+                                        @include('partials.ref-link', ['campo' => $campo, 'valor' => $valor, 'project' => $project])
+                                    </div>
                                     @include('partials.field', ['campo' => $campo, 'valor' => $valor])
                                 </div>
                                 @if($campo2)
                                     <div class="px-5 py-4">
-                                        <label for="campo_{{ $campo2->name }}"
-                                               class="block text-xs font-bold text-gray-600 mb-1.5">
-                                            {{ $campo2->label }}
-                                            @if($campo2->required)<span class="text-red-400">*</span>@endif
-                                        </label>
                                         @php $valor = $registro ? ($registro->{$campo2->name} ?? null) : (old($campo2->name) ?? ($prefill[$campo2->name] ?? null)); @endphp
+                                        <div class="flex items-center gap-1.5 mb-1.5">
+                                            <label for="campo_{{ $campo2->name }}" class="block text-xs font-bold text-gray-600">
+                                                {{ $campo2->label }}
+                                                @if($campo2->required)<span class="text-red-400">*</span>@endif
+                                            </label>
+                                            @include('partials.ref-link', ['campo' => $campo2, 'valor' => $valor, 'project' => $project])
+                                        </div>
                                         @include('partials.field', ['campo' => $campo2, 'valor' => $valor])
                                     </div>
                                 @endif
