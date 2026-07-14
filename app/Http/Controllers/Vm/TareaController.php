@@ -267,7 +267,7 @@ class TareaController extends Controller
 
     public function toggleBorrar(Request $request, Project $project, string $tipo, int $id): JsonResponse
     {
-        abort_unless(auth()->user()->isProjectAdmin($project), 403);
+        abort_unless(auth()->user()->canEditTable($project, 'tareas_' . $this->tableSuffix($tipo)), 403);
         $tabla  = 'vm_tareas_' . $this->tableSuffix($tipo);
         $tarea  = DB::table($tabla)->where('id', $id)->firstOrFail();
         $newVal = $tarea->deleted ? 0 : 1;
@@ -277,7 +277,7 @@ class TareaController extends Controller
 
     public function toggleOcultar(Request $request, Project $project, string $tipo, int $id): JsonResponse
     {
-        abort_unless(auth()->user()->isProjectAdmin($project), 403);
+        abort_unless(auth()->user()->canEditTable($project, 'tareas_' . $this->tableSuffix($tipo)), 403);
         $tabla  = 'vm_tareas_' . $this->tableSuffix($tipo);
         $tarea  = DB::table($tabla)->where('id', $id)->firstOrFail();
         $newVal = $tarea->hidden ? 0 : 1;
@@ -359,7 +359,7 @@ class TareaController extends Controller
 
         $tabla   = 'vm_' . $tableName;
         $fotoCol = ['limpieza' => 'id_tareas_limpieza', 'mantenimiento' => 'id_tareas_mantenimiento', 'piscina' => 'id_tareas_piscinas'][$tipo];
-        $canEdit = auth()->user()->isProjectAdmin($project);
+        $canEdit = auth()->user()->canEditTable($project, $tableName);
 
         // Usuarios disponibles (filtrados por rol si procede)
         $ptId     = DB::table('admin_project_tables')->where('project_id', $project->id)->where('name', $tableName)->value('id');
@@ -488,7 +488,7 @@ class TareaController extends Controller
     {
         abort_unless(in_array($tipo, self::$TIPOS), 404);
         $tableName = 'tareas_' . $this->tableSuffix($tipo);
-        abort_unless(auth()->user()->isProjectAdmin($project), 403);
+        abort_unless(auth()->user()->canEditTable($project, $tableName), 403);
 
         $data = $request->validate([
             'nombre'            => 'required|string|max:255',

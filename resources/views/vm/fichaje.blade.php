@@ -65,6 +65,8 @@ $heIcon   = $heMin === null ? 'ti-minus' : ($heMin > 0 ? 'ti-trending-up' : ($he
   </div>
 </x-slot>
 
+@include('partials.role-badge', ['project' => $project, 'texto' => 'Solo Dirección general y Director RRHH (o admin) pueden ajustar las horas extra y editar fecha/horario sin el límite de 2 días.'])
+
 <style>
 .section-card{background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px;padding:1.1rem 1.25rem;margin-bottom:12px}
 .dark .section-card{background:#1a1a1a;border-color:rgba(255,255,255,.08)}
@@ -214,7 +216,9 @@ $heIcon   = $heMin === null ? 'ti-minus' : ($heMin > 0 ? 'ti-trending-up' : ($he
       </div>
       <div>
         <div style="font-size:11px;color:#999;margin-bottom:4px">Fecha</div>
-        <input type="date" id="e-fecha_fichaje" class="f-input" value="{{ $fichaje->fecha_fichaje }}">
+        <input type="date" id="e-fecha_fichaje" class="f-input" value="{{ $fichaje->fecha_fichaje }}"
+               max="{{ now()->toDateString() }}"
+               @if(!($puedeSinLimiteFecha ?? false)) min="{{ now()->subDays(2)->toDateString() }}" @endif>
       </div>
       <div style="grid-column:1/-1;display:flex;gap:20px;margin-top:4px">
         <label class="toggle-wrap">
@@ -304,7 +308,7 @@ $heIcon   = $heMin === null ? 'ti-minus' : ($heMin > 0 ? 'ti-trending-up' : ($he
         ] as [$lbl,$col])
           <div>
             <div style="font-size:11px;color:#bbb;margin-bottom:4px">{{ $lbl }}</div>
-            <input type="time" id="e-{{ $col }}" class="f-input f-time" style="background:rgba(0,0,0,.02);color:#888" value="{{ $fichaje->$col ? substr($fichaje->$col,0,5) : '' }}">
+            <input type="time" id="e-{{ $col }}" class="f-input f-time" style="background:rgba(0,0,0,.02);color:#888" value="{{ $fichaje->$col ? substr($fichaje->$col,0,5) : '' }}" disabled>
           </div>
         @endforeach
       </div>
@@ -551,8 +555,35 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 function chk(id) { return document.getElementById(id)?.checked ? 1 : 0; }
 
+const SIN_LIMITE_FECHA = @json($puedeSinLimiteFecha ?? false);
+
+function validarHorarioFichaje(inicio, fin, pausaIni, pausaFin) {
+  const toMin = t => { if (!t) return null; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const i = toMin(inicio), f = toMin(fin), pi = toMin(pausaIni), pf = toMin(pausaFin);
+  if (i !== null && f !== null && f < i)   return 'La salida no puede ser anterior a la entrada';
+  if (pi !== null && pf !== null && pf < pi) return 'El fin de pausa no puede ser anterior al inicio de pausa';
+  if (pi !== null && i !== null && pi < i)   return 'El inicio de pausa no puede ser anterior a la entrada';
+  if (pi !== null && f !== null && pi > f)   return 'El inicio de pausa no puede ser posterior a la salida';
+  if (pf !== null && i !== null && pf < i)   return 'El fin de pausa no puede ser anterior a la entrada';
+  if (pf !== null && f !== null && pf > f)   return 'El fin de pausa no puede ser posterior a la salida';
+  return null;
+}
+
 async function guardar() {
   const btn = document.getElementById('btn-save');
+
+  const fechaVal = val('e-fecha_fichaje');
+  const hoyMenos2 = (() => { const d = new Date(); d.setDate(d.getDate() - 2); return d.toLocaleDateString('en-CA'); })();
+  if (!SIN_LIMITE_FECHA && fechaVal && fechaVal < hoyMenos2) {
+    alert('Solo se pueden editar fichajes de los últimos 2 días');
+    return;
+  }
+  const horarioError = validarHorarioFichaje(val('e-hora_inicio'), val('e-hora_fin'), val('e-pausa_inicio'), val('e-pausa_fin'));
+  if (horarioError) {
+    alert(horarioError);
+    return;
+  }
+
   btn.textContent = 'Guardando…'; btn.disabled = true;
 
   const body = {
@@ -590,7 +621,11 @@ async function guardar() {
       headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (!r.ok) throw new Error(await r.text());
+    if (!r.ok) {
+      let msg = await r.text();
+      try { msg = JSON.parse(msg).error || msg; } catch {}
+      throw new Error(msg);
+    }
     location.reload();
   } catch (e) {
     alert('Error al guardar: ' + e.message);

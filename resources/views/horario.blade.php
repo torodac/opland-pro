@@ -57,6 +57,8 @@ function ausenciaCellHtml(string $tipo): string {
     </a>
 </x-slot>
 
+@include('partials.role-badge', ['project' => $project, 'texto' => 'Solo Dirección general y Director RRHH (o admin) pueden editar fechas pasadas de este horario.'])
+
 <style>
 .hor-nav { display:flex; align-items:center; gap:8px; margin-bottom:1.25rem; }
 .hor-nav h2 { font-size:1rem; font-weight:600; flex:1; }

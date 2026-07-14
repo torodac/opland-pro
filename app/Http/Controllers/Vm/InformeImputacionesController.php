@@ -158,7 +158,8 @@ class InformeImputacionesController extends Controller
             ->get(['id', 'nombre', 'id_rol']);
 
         $currentVmUserId = $user->projectUserId($project);
-        $canSelect       = $isAdmin;
+        $authRol         = $currentVmUserId ? DB::table('vm_usuarios')->where('id', $currentVmUserId)->value('id_rol') : null;
+        $canSelect       = $isAdmin || in_array((int) $authRol, [3, 11]); // Dirección general, Director RRHH
 
         if ($canSelect) {
             $userId = (int) $request->input('user_id', $currentVmUserId ?? ($allUsuarios->first()->id ?? 0));

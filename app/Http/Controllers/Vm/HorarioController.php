@@ -16,11 +16,11 @@ class HorarioController extends Controller
         $user    = auth()->user();
         $isAdmin = $user->isProjectAdmin($project);
 
-        $rolesEditPast = ['Dirección general', 'Recursos humanos'];
+        $rolesEditPast = [3, 11]; // Dirección general, Director RRHH
         $canEditPast = $isAdmin;
         if (!$canEditPast) {
             $vmRole = $user->getProjectRolePublic($project);
-            $canEditPast = $vmRole && in_array($vmRole->nombre, $rolesEditPast);
+            $canEditPast = $vmRole && in_array((int) $vmRole->id, $rolesEditPast);
         }
 
         $weekStart = $request->filled('semana')

@@ -138,9 +138,12 @@ class KmController extends Controller
 
     public function informePdfTodos(Request $request, Project $project)
     {
-        $user    = auth()->user();
-        $isAdmin = $user->isProjectAdmin($project);
-        if (!$isAdmin) abort(403);
+        $user       = auth()->user();
+        $isAdmin    = $user->isProjectAdmin($project);
+        $authUserId = $user->projectUserId($project);
+        $authRol    = $authUserId ? DB::table('vm_usuarios')->where('id', $authUserId)->value('id_rol') : null;
+        $puedeVerTodos = $isAdmin || in_array((int) $authRol, [3, 11]); // Dirección general, Director RRHH
+        if (!$puedeVerTodos) abort(403);
 
         $year  = max(2020, min(2040, (int) $request->input('year',  now()->year)));
         $month = max(1,    min(12,   (int) $request->input('month', now()->month)));
@@ -176,7 +179,8 @@ class KmController extends Controller
     {
         $allUsuarios     = DB::table('vm_usuarios')->where('deleted', 0)->orderBy('nombre')->get(['id', 'nombre']);
         $currentVmUserId = $user->projectUserId($project);
-        $canSelect       = $isAdmin;
+        $authRol         = $currentVmUserId ? DB::table('vm_usuarios')->where('id', $currentVmUserId)->value('id_rol') : null;
+        $canSelect       = $isAdmin || in_array((int) $authRol, [3, 11]); // Dirección general, Director RRHH
 
         if ($canSelect) {
             $userId = (int) $request->input('user_id', $currentVmUserId ?? ($allUsuarios->first()->id ?? 0));

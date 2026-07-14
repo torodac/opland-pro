@@ -23,7 +23,9 @@
     @case('fecha')
         <input type="date" id="campo_{{ $campo->name }}" name="{{ $campo->name }}"
                value="{{ $valor ? \Carbon\Carbon::parse($valor)->format('Y-m-d') : '' }}"
-               {{ $req }} class="{{ $base }}">
+               {{ $req }} class="{{ $base }}"
+               @if(isset($min)) min="{{ $min }}" @endif
+               @if(isset($max)) max="{{ $max }}" @endif>
         @break
 
     @case('time')

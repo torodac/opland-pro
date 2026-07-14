@@ -161,6 +161,10 @@
 
     </x-slot>
 
+    @if($projectTable->name === 'fichaje' && $project->slug === 'vm')
+        @include('partials.role-badge', ['project' => $project, 'texto' => 'Solo Dirección general, Director RRHH o admin pueden ver/ajustar las horas extra y editar la fecha de este fichaje sin el límite de 2 días.'])
+    @endif
+
     @if(session('success'))
         <div class="mb-4 px-4 py-3 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg">
             {{ session('success') }}
@@ -227,6 +231,19 @@
                 @csrf
                 @if($registro) @method('PUT') @endif
 
+                @if($errors->any())
+                <div class="mx-5 mt-4 flex items-start gap-3 px-4 py-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl">
+                    <svg class="w-5 h-5 shrink-0 mt-0.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+                    </svg>
+                    <div>
+                        @foreach($errors->all() as $error)
+                            <p>{{ $error }}</p>
+                        @endforeach
+                    </div>
+                </div>
+                @endif
+
                 <div class="bg-white rounded-xl">
 
                     @php
@@ -264,7 +281,14 @@
                                         </label>
                                         @include('partials.ref-link', ['campo' => $campo, 'valor' => $valor, 'project' => $project])
                                     </div>
-                                    @include('partials.field', ['campo' => $campo, 'valor' => $valor])
+                                    @php
+                                        $fieldExtra = [];
+                                        if ($campo->name === 'fecha_fichaje' && $projectTable->name === 'fichaje' && $project->slug === 'vm') {
+                                            $fieldExtra['max'] = now()->toDateString();
+                                            if (!($puedeSinLimiteFecha ?? false)) $fieldExtra['min'] = now()->subDays(2)->toDateString();
+                                        }
+                                    @endphp
+                                    @include('partials.field', array_merge(['campo' => $campo, 'valor' => $valor], $fieldExtra))
                                 </div>
                                 @if($campo2)
                                     <div class="px-5 py-4">
@@ -276,7 +300,14 @@
                                             </label>
                                             @include('partials.ref-link', ['campo' => $campo2, 'valor' => $valor, 'project' => $project])
                                         </div>
-                                        @include('partials.field', ['campo' => $campo2, 'valor' => $valor])
+                                        @php
+                                            $fieldExtra = [];
+                                            if ($campo2->name === 'fecha_fichaje' && $projectTable->name === 'fichaje' && $project->slug === 'vm') {
+                                                $fieldExtra['max'] = now()->toDateString();
+                                                if (!($puedeSinLimiteFecha ?? false)) $fieldExtra['min'] = now()->subDays(2)->toDateString();
+                                            }
+                                        @endphp
+                                        @include('partials.field', array_merge(['campo' => $campo2, 'valor' => $valor], $fieldExtra))
                                     </div>
                                 @endif
                             </div>

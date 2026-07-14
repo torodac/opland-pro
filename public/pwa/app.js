@@ -804,7 +804,7 @@ function fichajeHoyHtml(f, horasContrato = null, tareasMin = 0) {
         ${botones}
         ${cerrado ? '<div style="text-align:center;color:var(--muted);font-size:14px;padding-top:8px">Jornada cerrada</div>' : ''}
         <button id="btn-editar-fichaje" style="background:none;border:none;color:var(--muted);font-size:12px;padding:10px 0 0;cursor:pointer;text-decoration:underline;display:block;width:100%;text-align:center">
-          Editar tiempos manualmente
+          Completar/Modificar fichaje
         </button>
         ${editFormHtml(f, hoy)}
       </div>`,

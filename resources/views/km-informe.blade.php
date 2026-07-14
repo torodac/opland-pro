@@ -1,5 +1,7 @@
 <x-app-layout :project="$project" :breadcrumb="$breadcrumb">
 
+@include('partials.role-badge', ['project' => $project, 'texto' => 'Solo los administradores pueden generar el informe de kilometraje de otro usuario; el resto del equipo solo puede generar el suyo.'])
+
 @php
 $meses_es = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 $year_min = now()->year - 3;

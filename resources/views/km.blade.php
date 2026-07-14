@@ -1,5 +1,7 @@
 <x-app-layout :project="$project" :breadcrumb="$breadcrumb">
 
+@include('partials.role-badge', ['project' => $project, 'texto' => 'Solo los administradores pueden consultar el kilometraje de otro usuario; el resto del equipo solo ve el suyo.'])
+
 @php
 $meses_es = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 $dowLabel = fn($ds) => ['D','L','M','X','J','V','S'][(int)date('w', strtotime($ds))];

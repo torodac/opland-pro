@@ -2,6 +2,8 @@
 
 <x-app-layout :project="$project" :breadcrumb="$breadcrumb">
 
+@include('partials.role-badge', ['project' => $project, 'texto' => 'Solo los administradores pueden generar el informe mensual de otro usuario; el resto del equipo solo puede generar el suyo.'])
+
 @php
 $tipo_color = [
     'Asuntos propios' => '#34c163',

@@ -104,18 +104,29 @@ class FichajeController extends Controller
         $puedeAjustar = auth()->user()->isAdmin()
             || auth()->user()->isProjectAdmin($project)
             || in_array((int) $authRol, [3, 11]);
+        $puedeSinLimiteFecha = $puedeAjustar;
 
         return view('vm.fichaje', compact(
             'project', 'fichaje', 'usuario', 'usuarios',
             'imputaciones', 'totalImputado',
             'fichadoMin', 'esperadoMin', 'heMin', 'efectivasMin',
-            'puedeAjustar'
+            'puedeAjustar', 'puedeSinLimiteFecha'
         ));
     }
 
     public function update(Request $request, Project $project, int $id)
     {
         abort_unless(auth()->user()->canViewTable($project, 'fichaje'), 403);
+
+        $user       = auth()->user();
+        $authUserId = $user->projectUserId($project);
+        $authRol    = $authUserId
+            ? DB::table($project->slug . '_usuarios')->where('id', $authUserId)->value('id_rol')
+            : null;
+        $puedeSinLimiteFecha = $user->isAdmin()
+            || $user->isProjectAdmin($project)
+            || in_array((int) $authRol, [3, 11]);
+
         $data = $request->validate([
             'control_user'   => 'required|integer',
             'fecha_fichaje'  => 'required|date',
@@ -137,6 +148,20 @@ class FichajeController extends Controller
             'ajuste_he_motivo' => 'nullable|string|max:500',
             'deleted'        => 'nullable|integer',
         ]);
+
+        if (!$puedeSinLimiteFecha && $data['fecha_fichaje'] < now()->subDays(2)->toDateString()) {
+            return response()->json(['error' => 'Solo se pueden editar fichajes de los últimos 2 días'], 422);
+        }
+
+        $horarioError = \App\Services\FichajeValidator::validarHorario(
+            $data['hora_inicio']  ?? null,
+            $data['hora_fin']     ?? null,
+            $data['pausa_inicio'] ?? null,
+            $data['pausa_fin']    ?? null,
+        );
+        if ($horarioError) {
+            return response()->json(['error' => $horarioError], 422);
+        }
 
         $data['ajuste_he']        = (int) ($data['ajuste_he'] ?? 0);
         $data['festivo']        = (int) ($data['festivo'] ?? 0);

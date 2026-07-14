@@ -1,5 +1,7 @@
 <x-app-layout :project="$project" :breadcrumb="[['label'=>'Inicio','url'=>'']]">
 
+@include('partials.role-badge', ['project' => $project, 'texto' => 'Algunos bloques de este dashboard (Reservas, RRHH, Ausencias sin conciliar, Limpieza/Mantenimiento sin imputar) solo son visibles para ciertos roles (Dirección general, Dirección de Operaciones, Coordinador limpieza, Coordinador mantenimiento, Director RRHH). Los ves todos por ser admin.'])
+
 <style>
 .db-grid    { display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:12px; margin-bottom:12px; }
 .db-card    { background:#fff; border:0.5px solid rgba(0,0,0,.08); border-radius:12px; padding:1rem 1.25rem; }
@@ -326,7 +328,7 @@
           @foreach($conflictosFichaje as $c)
           @php
             $c = (object)$c;
-            $fichajeUrl = route('ficha', [$project->slug, 'fichaje', $c->fichaje_id]);
+            $fichajeUrl = route('vm.fichaje_form', [$project->slug, $c->fichaje_id]);
             $horarioSemana = \Carbon\Carbon::parse($c->fecha)->startOfWeek(\Carbon\Carbon::MONDAY)->toDateString();
             $horarioUrl = route('horario', $project->slug) . '?semana=' . $horarioSemana;
             $fichaUsuarioUrl = route('vm.usuario', [$project->slug, $c->id_usuario]);
@@ -387,7 +389,7 @@
             $ih  = intdiv($d->imputado_min, 60) . 'h ' . str_pad($d->imputado_min % 60, 2, '0', STR_PAD_LEFT) . 'm';
             $dh  = intdiv($d->diferencia_min, 60) . 'h ' . str_pad($d->diferencia_min % 60, 2, '0', STR_PAD_LEFT) . 'm';
             $pos = $d->fichaje_min > $d->imputado_min;
-            $fichajeUrl = route('ficha', [$project->slug, 'fichaje', $d->fichaje_id]);
+            $fichajeUrl = route('vm.fichaje_form', [$project->slug, $d->fichaje_id]);
           @endphp
           <tr data-fid="{{ $d->fichaje_id }}">
             <td style="font-weight:500;">{{ $d->usuario }}</td>

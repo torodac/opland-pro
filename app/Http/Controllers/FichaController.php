@@ -96,6 +96,21 @@ class FichaController extends Controller
             ? $projectTable->fields->where('name', '!=', 'nombre')->values()
             : $projectTable->fields;
 
+        $puedeSinLimiteFecha = null;
+        if ($projectTable->name === 'fichaje' && $project->slug === 'vm') {
+            $authUserId = Auth::user()->projectUserId($project);
+            $authRol    = $authUserId
+                ? DB::table($project->slug . '_usuarios')->where('id', $authUserId)->value('id_rol')
+                : null;
+            $puedeSinLimiteFecha = Auth::user()->isAdmin()
+                || Auth::user()->isProjectAdmin($project)
+                || in_array((int) $authRol, [3, 11]);
+
+            if (!$puedeSinLimiteFecha) {
+                $camposFicha = $camposFicha->whereNotIn('name', ['ajuste_he', 'ajuste_he_motivo'])->values();
+            }
+        }
+
         return view('ficha', [
             'project'          => $project,
             'projectTable'     => $projectTable,
@@ -112,6 +127,7 @@ class FichaController extends Controller
             'projectUsuarios'  => $this->loadUsuariosForForm($project, $projectTable),
             'createUser'       => $usuarios[(int) $registro->createuser] ?? null,
             'updateUser'       => $usuarios[(int) $registro->updateuser] ?? null,
+            'puedeSinLimiteFecha' => $puedeSinLimiteFecha,
             'prevId'           => $this->getAdjacentId($project, $projectTable, $fullTable, $id, 'prev'),
             'nextId'           => $this->getAdjacentId($project, $projectTable, $fullTable, $id, 'next'),
             'breadcrumb'       => [
@@ -201,6 +217,35 @@ class FichaController extends Controller
             $registro = DB::table($projectTable->getFullTableName())->find($id);
             $rowData  = array_merge((array) $registro, $data);
             $data['nombre'] = $projectTable->resolveNombre($rowData);
+        }
+
+        if ($projectTable->name === 'fichaje' && $project->slug === 'vm') {
+            $authUserId = Auth::user()->projectUserId($project);
+            $authRol    = $authUserId
+                ? DB::table($project->slug . '_usuarios')->where('id', $authUserId)->value('id_rol')
+                : null;
+            $puedeSinLimiteFecha = Auth::user()->isAdmin()
+                || Auth::user()->isProjectAdmin($project)
+                || in_array((int) $authRol, [3, 11]);
+
+            if (!$puedeSinLimiteFecha) {
+                unset($data['ajuste_he'], $data['ajuste_he_motivo']);
+            }
+
+            $fechaFichaje = $data['fecha_fichaje'] ?? $registro->fecha_fichaje ?? null;
+            if ($fechaFichaje && !$puedeSinLimiteFecha && $fechaFichaje < now()->subDays(2)->toDateString()) {
+                return back()->withErrors(['fecha_fichaje' => 'Solo se pueden editar fichajes de los últimos 2 días'])->withInput();
+            }
+
+            $horarioError = \App\Services\FichajeValidator::validarHorario(
+                $data['hora_inicio']  ?? $registro->hora_inicio  ?? null,
+                $data['hora_fin']     ?? $registro->hora_fin     ?? null,
+                $data['pausa_inicio'] ?? $registro->pausa_inicio ?? null,
+                $data['pausa_fin']    ?? $registro->pausa_fin    ?? null,
+            );
+            if ($horarioError) {
+                return back()->withErrors(['hora_inicio' => $horarioError])->withInput();
+            }
         }
 
         DB::table($projectTable->getFullTableName())->where('id', $id)->update($data);
