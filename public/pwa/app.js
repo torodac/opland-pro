@@ -40,7 +40,7 @@ let state = {
   tareas: [],
   fichajeHoy: null,
   detalleActivo: null,
-  tareasFecha: new Date().toISOString().slice(0, 10),
+  tareasFecha: new Date().toLocaleDateString('en-CA'),
   propiedades: [],
   filtroUsuarioId: null,
   usuariosSubordinados: [],
@@ -225,7 +225,7 @@ function moverDia(delta) {
 }
 
 function diaNavHtml(fecha) {
-  const hoy    = new Date().toISOString().slice(0, 10);
+  const hoy    = new Date().toLocaleDateString('en-CA');
   const esHoy  = fecha === hoy;
   const label  = esHoy
     ? 'Hoy'
@@ -342,7 +342,7 @@ function cardHtml(t) {
 // ── Detalle ───────────────────────────────────────────────────────────────────
 function imputacionesListHtml(tarea) {
   const limite = new Date(); limite.setDate(limite.getDate() - 2);
-  const minFecha = limite.toISOString().slice(0, 10);
+  const minFecha = limite.toLocaleDateString('en-CA');
   const imputaciones = tarea.mis_imputaciones || [];
 
   if (!imputaciones.length) {
@@ -495,7 +495,7 @@ function bindFiltroUsuario() {
 function bindDiaNav() {
   document.getElementById('btn-dia-prev')?.addEventListener('click', () => moverDia(-1));
   document.getElementById('btn-dia-next')?.addEventListener('click', () => moverDia(+1));
-  document.getElementById('btn-dia-hoy')?.addEventListener('click',  () => loadTareas(new Date().toISOString().slice(0, 10)));
+  document.getElementById('btn-dia-hoy')?.addEventListener('click',  () => loadTareas(new Date().toLocaleDateString('en-CA')));
 }
 
 document.getElementById('detalle-back').addEventListener('click', () => {
@@ -506,9 +506,9 @@ document.getElementById('detalle-back').addEventListener('click', () => {
 function abrirModalImputar(imputacion) {
   state.imputacionEditando = imputacion;
 
-  const hoy    = new Date().toISOString().slice(0, 10);
+  const hoy    = new Date().toLocaleDateString('en-CA');
   const limite = new Date(); limite.setDate(limite.getDate() - 2);
-  const minFecha = limite.toISOString().slice(0, 10);
+  const minFecha = limite.toLocaleDateString('en-CA');
 
   const fechaInput = document.getElementById('modal-fecha-imputacion');
   fechaInput.min = minFecha;
@@ -698,6 +698,19 @@ function editFormHtml(f, fecha) {
           ${inp('edit-pausa-fin-' + fecha, f?.pausa_fin)}
         </label>
       </div>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:12px">Observación
+        <textarea id="edit-observacion-${fecha}" rows="2"
+          style="display:block;width:100%;margin-top:4px;padding:7px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:15px;font-family:inherit;resize:vertical">${esc(f?.observacion || '')}</textarea>
+      </label>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:12px">Trayecto
+        <textarea id="edit-trayecto-${fecha}" rows="2"
+          style="display:block;width:100%;margin-top:4px;padding:7px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:15px;font-family:inherit;resize:vertical">${esc(f?.trayecto || '')}</textarea>
+      </label>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:12px">Kilómetros
+        <input type="number" id="edit-km-${fecha}" inputmode="decimal" step="0.01" min="0"
+          value="${f?.km ?? ''}"
+          style="display:block;width:100%;margin-top:4px;padding:7px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:15px">
+      </label>
       <div id="edit-error-${fecha}" class="error-msg" style="display:none"></div>
       <div style="display:flex;gap:10px">
         <button class="btn btn-outline btn-edit-cancelar" style="flex:1;font-size:14px;padding:10px">Cancelar</button>
@@ -709,29 +722,29 @@ function editFormHtml(f, fecha) {
 function validarHorarioFichaje(inicio, fin, pausaIni, pausaFin) {
   const toMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 
-  if (inicio && fin && toMin(fin) <= toMin(inicio)) {
-    return 'La salida debe ser posterior a la entrada';
+  if (inicio && fin && toMin(fin) < toMin(inicio)) {
+    return 'La salida no puede ser anterior a la entrada';
   }
-  if (pausaIni && pausaFin && toMin(pausaFin) <= toMin(pausaIni)) {
-    return 'El fin de pausa debe ser posterior al inicio de pausa';
+  if (pausaIni && pausaFin && toMin(pausaFin) < toMin(pausaIni)) {
+    return 'El fin de pausa no puede ser anterior al inicio de pausa';
   }
-  if (pausaIni && inicio && toMin(pausaIni) <= toMin(inicio)) {
-    return 'El inicio de pausa debe ser posterior a la entrada';
+  if (pausaIni && inicio && toMin(pausaIni) < toMin(inicio)) {
+    return 'El inicio de pausa no puede ser anterior a la entrada';
   }
-  if (pausaIni && fin && toMin(pausaIni) >= toMin(fin)) {
-    return 'El inicio de pausa debe ser anterior a la salida';
+  if (pausaIni && fin && toMin(pausaIni) > toMin(fin)) {
+    return 'El inicio de pausa no puede ser posterior a la salida';
   }
-  if (pausaFin && inicio && toMin(pausaFin) <= toMin(inicio)) {
-    return 'El fin de pausa debe ser posterior a la entrada';
+  if (pausaFin && inicio && toMin(pausaFin) < toMin(inicio)) {
+    return 'El fin de pausa no puede ser anterior a la entrada';
   }
-  if (pausaFin && fin && toMin(pausaFin) >= toMin(fin)) {
-    return 'El fin de pausa debe ser anterior a la salida';
+  if (pausaFin && fin && toMin(pausaFin) > toMin(fin)) {
+    return 'El fin de pausa no puede ser posterior a la salida';
   }
   return null;
 }
 
 function fichajeHoyHtml(f, horasContrato = null, tareasMin = 0) {
-  const hoy    = new Date().toISOString().slice(0, 10);
+  const hoy    = new Date().toLocaleDateString('en-CA');
   const hoyStr = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
 
   if (!f) {
@@ -822,6 +835,10 @@ function bindEditForm(fecha, esCrear = false) {
     const horaFin     = document.getElementById('edit-hora-fin-'     + fecha).value || null;
     const pausaInicio = document.getElementById('edit-pausa-inicio-' + fecha).value || null;
     const pausaFin    = document.getElementById('edit-pausa-fin-'    + fecha).value || null;
+    const observacion = document.getElementById('edit-observacion-'  + fecha).value.trim() || null;
+    const trayecto    = document.getElementById('edit-trayecto-'     + fecha).value.trim() || null;
+    const kmVal       = document.getElementById('edit-km-'           + fecha).value;
+    const km          = kmVal !== '' ? kmVal : null;
 
     const error = validarHorarioFichaje(horaInicio, horaFin, pausaInicio, pausaFin);
     if (error) {
@@ -838,6 +855,9 @@ function bindEditForm(fecha, esCrear = false) {
         hora_fin:     horaFin,
         pausa_inicio: pausaInicio,
         pausa_fin:    pausaFin,
+        observacion,
+        trayecto,
+        km,
       };
       if (esCrear) {
         await api('POST', '/fichaje/crear', payload);
@@ -1006,7 +1026,7 @@ function fichajeHistoricoHtml(mes, hoy) {
 
 function renderFichaje(f, mes = [], horasContrato = null, tareasMin = 0) {
   const content = document.getElementById('fichaje-content');
-  const hoy     = new Date().toISOString().slice(0, 10);
+  const hoy     = new Date().toLocaleDateString('en-CA');
   const { html, bind } = fichajeHoyHtml(f, horasContrato, tareasMin);
   content.innerHTML = html + fichajeHistoricoHtml(mes, hoy);
   bind();
@@ -1040,7 +1060,7 @@ function abrirModalNuevoFichaje(mes, hoy) {
   input.min   = antesAyer;
   input.max   = ayerStr;
   input.value = ayerStr;
-  ['nf-hora-inicio','nf-hora-fin','nf-pausa-inicio','nf-pausa-fin'].forEach(id => {
+  ['nf-hora-inicio','nf-hora-fin','nf-pausa-inicio','nf-pausa-fin','nf-observacion','nf-trayecto','nf-km'].forEach(id => {
     document.getElementById(id).value = '';
   });
   document.getElementById('nf-fecha-error').style.display = 'none';
@@ -1069,6 +1089,10 @@ function abrirModalNuevoFichaje(mes, hoy) {
     const horaFin     = document.getElementById('nf-hora-fin').value      || null;
     const pausaInicio = document.getElementById('nf-pausa-inicio').value  || null;
     const pausaFin    = document.getElementById('nf-pausa-fin').value     || null;
+    const observacion = document.getElementById('nf-observacion').value.trim() || null;
+    const trayecto    = document.getElementById('nf-trayecto').value.trim()    || null;
+    const kmValNuevo  = document.getElementById('nf-km').value;
+    const km          = kmValNuevo !== '' ? kmValNuevo : null;
 
     const horarioError = validarHorarioFichaje(horaInicio, horaFin, pausaInicio, pausaFin);
     if (horarioError) {
@@ -1084,6 +1108,9 @@ function abrirModalNuevoFichaje(mes, hoy) {
         hora_fin:     horaFin,
         pausa_inicio: pausaInicio,
         pausa_fin:    pausaFin,
+        observacion,
+        trayecto,
+        km,
       });
       document.getElementById('modal-nuevo-fichaje').classList.remove('open');
       await recargarFichaje();
@@ -1382,7 +1409,7 @@ async function loadHorario(semana) {
 
 function renderHorario(data) {
   const content  = document.getElementById('horario-content');
-  const hoyStr   = new Date().toISOString().slice(0, 10);
+  const hoyStr   = new Date().toLocaleDateString('en-CA');
   const diasSem  = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   const diasMap  = {};
   (data.dias || []).forEach(d => { diasMap[d.fecha] = d; });
@@ -1462,7 +1489,7 @@ async function loadHorarioEquipo(semana) {
 
 function renderHorarioEquipo(data) {
   const content  = document.getElementById('horario-equipo-content');
-  const hoyStr   = new Date().toISOString().slice(0, 10);
+  const hoyStr   = new Date().toLocaleDateString('en-CA');
   const diasCortos = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 
   // Cabecera de fechas
@@ -1653,9 +1680,9 @@ async function cargarPropiedades() {
 async function abrirModalNuevaTarea() {
   await cargarPropiedades();
 
-  const hoy     = new Date().toISOString().slice(0, 10);
+  const hoy     = new Date().toLocaleDateString('en-CA');
   const limite  = new Date(); limite.setDate(limite.getDate() - 2);
-  const minFecha = limite.toISOString().slice(0, 10);
+  const minFecha = limite.toLocaleDateString('en-CA');
 
   const sel = document.getElementById('nt-propiedad');
   sel.innerHTML = state.propiedades.map(p =>

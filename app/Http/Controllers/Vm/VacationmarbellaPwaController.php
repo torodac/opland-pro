@@ -802,6 +802,8 @@ class VacationmarbellaPwaController extends Controller
             'pausa_fin'    => 'nullable|date_format:H:i',
             'hora_fin'     => 'nullable|date_format:H:i',
             'observacion'  => 'nullable|string|max:500',
+            'trayecto'     => 'nullable|string|max:255',
+            'km'           => 'nullable|numeric|min:0|max:9999.99',
         ]);
 
         $update = ['updateuser' => $user->id, 'updatedat' => now()];
@@ -812,6 +814,12 @@ class VacationmarbellaPwaController extends Controller
         }
         if ($request->has('observacion')) {
             $update['observacion'] = $request->input('observacion') ?: null;
+        }
+        if ($request->has('trayecto')) {
+            $update['trayecto'] = $request->input('trayecto') ?: null;
+        }
+        if ($request->has('km')) {
+            $update['km'] = $request->input('km') !== '' ? $request->input('km') : null;
         }
 
         DB::table('vm_fichaje')->where('id', $fichaje->id)->update($update);
@@ -830,6 +838,8 @@ class VacationmarbellaPwaController extends Controller
             'pausa_inicio' => 'nullable|date_format:H:i',
             'pausa_fin'    => 'nullable|date_format:H:i',
             'observacion'  => 'nullable|string|max:500',
+            'trayecto'     => 'nullable|string|max:255',
+            'km'           => 'nullable|numeric|min:0|max:9999.99',
         ]);
 
         $fecha = $request->input('fecha');
@@ -859,6 +869,8 @@ class VacationmarbellaPwaController extends Controller
             'pausa_inicio'  => $request->input('pausa_inicio') ? $request->input('pausa_inicio') . ':00' : null,
             'pausa_fin'     => $request->input('pausa_fin')    ? $request->input('pausa_fin') . ':00'    : null,
             'observacion'   => $request->input('observacion') ?: null,
+            'trayecto'      => $request->input('trayecto') ?: null,
+            'km'            => $request->input('km') !== '' && $request->input('km') !== null ? $request->input('km') : null,
             'createuser'    => $user->id,
             'createdat'     => now(),
         ]);
