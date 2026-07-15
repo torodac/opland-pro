@@ -10,6 +10,7 @@ class Kernel extends ConsoleKernel
     protected $commands = [
         Commands\IcneaSyncProCommand::class,
         Commands\VmNotificarTurno::class,
+        Commands\BreezewaySyncTasksCommand::class,
     ];
 
     protected function schedule(Schedule $schedule): void

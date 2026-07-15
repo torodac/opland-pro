@@ -192,6 +192,12 @@ class DashboardController extends Controller
 
         $tareasMantPisc = $tareasMantenimiento->concat($tareasPiscinas)->sortBy('fecha_planificada')->values();
 
+        // ── Personas de Breezeway sin usuario mapeado en Opland ──────────────
+        $breezewayPendientes = DB::table('vm_breezeway_pendientes')
+            ->where('deleted', 0)
+            ->orderByDesc('fecha_alta')
+            ->get(['nombre', 'breezeway_id', 'fecha_alta', 'num_tareas']);
+
         // ── Turno sin fichaje ────────────────────────────────────────────────
         $turnoSinFichaje = DB::table('vm_horarios as h')
             ->join('vm_usuarios as u', 'u.id', '=', 'h.id_usuario')
@@ -338,7 +344,7 @@ class DashboardController extends Controller
             'checkinHoy', 'checkoutHoy',
             'checkinProximos', 'checkoutProximos', 'dias7',
             'conciliaciones',
-            'tareasLimpieza', 'tareasMantPisc',
+            'tareasLimpieza', 'tareasMantPisc', 'breezewayPendientes',
             'turnoSinFichaje', 'desviaciones',
             'conflictosFichaje',
             'vmUsuario', 'proximasAusencias',

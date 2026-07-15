@@ -471,6 +471,30 @@
   </div>
 @endif
 
+@if($verRRHH)
+  {{-- Personas de Breezeway sin usuario mapeado en Opland --}}
+  <div class="db-card" style="margin-bottom:12px;">
+    <p class="db-title"><i class="ti ti-user-question"></i> Personas de Breezeway sin usuario en Opland <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Personas que aparecen asignadas a tareas en Breezeway pero no tienen ningún usuario de Opland con ese ID de Breezeway. Para que dejen de salir aquí, hay que dar de alta (o editar) el usuario en Opland con este ID en el campo Breezeway ID.</span></span></p>
+    @if($breezewayPendientes->isEmpty())
+      <p class="empty">Sin pendientes</p>
+    @else
+    <table class="db-table">
+      <thead><tr><th>Nombre</th><th>Breezeway ID</th><th>Alta</th><th>Tareas</th></tr></thead>
+      <tbody>
+        @foreach($breezewayPendientes as $p)
+        <tr>
+          <td>{{ $p->nombre }}</td>
+          <td style="color:#888;">{{ $p->breezeway_id }}</td>
+          <td style="color:#888;">{{ \Carbon\Carbon::parse($p->fecha_alta)->translatedFormat('d M') }}</td>
+          <td style="color:#dc3545;">{{ $p->num_tareas }}</td>
+        </tr>
+        @endforeach
+      </tbody>
+    </table>
+    @endif
+  </div>
+@endif
+
 </div>
 
 <script>
