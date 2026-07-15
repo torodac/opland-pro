@@ -166,8 +166,7 @@ class TareaController extends Controller
         $data['updatedat'] = now();
         DB::table('vm_' . $tableName)->where('id', $id)->update($data);
 
-        return redirect()->route('vm.tarea', [$project->slug, $tipo, $id])
-            ->with('success', 'Tarea actualizada.');
+        return response()->json(['ok' => true]);
     }
 
     public function updateAsignados(Request $request, Project $project, string $tipo, int $id)
