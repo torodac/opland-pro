@@ -49,6 +49,7 @@ class ListadoController extends Controller
                 'posibles_bajas'  => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))->where(fn($q) => $q->whereNull('icnea_updatedat')->orWhereDate('icnea_updatedat', '<', $ayer)),
                 'revisar_borrado' => $query->where('deleted', 1)->whereDate('icnea_updatedat', $hoy),
                 'ocultas'         => $query->where('deleted', 0)->where('hidden', 1),
+                'sin_breezeway'   => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))->whereNull('breezeway_home_id'),
                 default           => null,
             };
         } else {
@@ -212,6 +213,7 @@ class ListadoController extends Controller
                 'posibles_bajas'  => $baseStats()->where(fn($q) => $q->whereNull('icnea_updatedat')->orWhereDate('icnea_updatedat', '<', $ayer))->count(),
                 'revisar_borrado' => DB::table($fullTable)->whereNotNull('icnea_code')->where('deleted', 1)->whereDate('icnea_updatedat', $hoy)->count(),
                 'ocultas'         => DB::table($fullTable)->where('deleted', 0)->where('hidden', 1)->count(),
+                'sin_breezeway'   => $baseStats()->whereNull('breezeway_home_id')->count(),
             ];
             $icneaSync = Cache::get('icnea_sync_result');
         }

@@ -137,6 +137,7 @@
                 'posibles_bajas'  => ['label' => 'Posibles bajas',       'color' => 'red',    'count' => $tablStats['posibles_bajas'],   'tooltip' => 'Propiedades activas sin sincronización con Icnea en las últimas 24 h ¿siguen estando en cartera o hay que borrarlas?'],
                 'revisar_borrado' => ['label' => 'Revisar borrado',      'color' => 'blue',   'count' => $tablStats['revisar_borrado'],  'tooltip' => 'Propiedades marcadas como eliminadas que Icnea ha actualizado hoy ¿es correcto mantenerlas borradas?'],
                 'ocultas'         => ['label' => 'Propiedades ocultas',  'color' => 'gray',   'count' => $tablStats['ocultas'],          'tooltip' => 'Propiedades archivadas — no se muestran en desplegables ni en otros módulos'],
+                'sin_breezeway'   => ['label' => 'Sin ID Breezeway',      'color' => 'red',    'count' => $tablStats['sin_breezeway'],    'tooltip' => 'Propiedades activas y visibles sin breezeway_home_id — no se sincronizarán tareas de limpieza/mantenimiento para ellas.'],
             ];
         $colorMap = [
             'yellow' => ['bg' => '#fefce8', 'border' => '#fde047', 'text' => '#854d0e', 'num' => '#a16207', 'active_bg' => '#fef08a'],
