@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Services\RoleHierarchy;
 use Illuminate\Support\Str;
 use Minishlink\WebPush\WebPush;
 use Minishlink\WebPush\Subscription;
@@ -1205,55 +1206,17 @@ class VacationmarbellaPwaController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    // Jerarquia de roles
+    // Jerarquia de roles (delegado en App\Services\RoleHierarchy, compartido con el backoffice)
 
     private function resolveRoleHierarchy(int $startRoleId): array
     {
-        $allRoles = DB::table('vm_roles')
-            ->where('deleted', 0)
-            ->get(['id', 'roles_supervisados'])
-            ->keyBy('id');
-
-        $root = $allRoles[$startRoleId] ?? null;
-        if (!$root) return [];
-
-        $directSubs = json_decode($root->roles_supervisados ?? '[]', true) ?? [];
-        if (empty($directSubs)) return [];
-
-        $visited = [];
-        $toVisit = $directSubs;
-
-        while (!empty($toVisit)) {
-            $roleId = array_shift($toVisit);
-            if (in_array($roleId, $visited)) continue;
-            $visited[] = $roleId;
-            $r = $allRoles[$roleId] ?? null;
-            if (!$r) continue;
-            $subs = json_decode($r->roles_supervisados ?? '[]', true) ?? [];
-            foreach ($subs as $sub) {
-                if (!in_array($sub, $visited)) $toVisit[] = $sub;
-            }
-        }
-
-        return $visited;
+        return RoleHierarchy::subordinateRoleIds('vm_roles', $startRoleId);
     }
 
     private function getVisibleUserIds(object $user): array
     {
-        $ids = $user->id ? [(string) $user->id] : [];
-        if (!$user->id_rol) return $ids;
-
-        $subRoleIds = $this->resolveRoleHierarchy($user->id_rol);
-        if (empty($subRoleIds)) return $ids;
-
-        $subUserIds = DB::table('vm_usuarios')
-            ->whereIn('id_rol', $subRoleIds)
-            ->where('deleted', 0)
-            ->pluck('id')
-            ->map(fn($id) => (string) $id)
-            ->toArray();
-
-        return array_unique(array_merge($ids, $subUserIds));
+        if (!$user->id) return [];
+        return RoleHierarchy::visibleUserIds('vm_roles', 'vm_usuarios', (int) $user->id, $user->id_rol ? (int) $user->id_rol : null);
     }
 
 }

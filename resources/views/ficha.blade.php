@@ -94,10 +94,10 @@
                     <span class="hidden sm:inline">Editar</span>
                 </button>
                 @elseif(!($registro->blocked ?? false))
-                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-400 border border-gray-200 rounded-lg cursor-not-allowed"
-                      title="No tienes permisos para editar esta tabla">
+                <span class="app-tooltip inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-400 border border-gray-200 rounded-lg cursor-not-allowed">
                     <i class="fa-solid fa-ban text-sm"></i>
                     <span class="hidden sm:inline">Sin permisos</span>
+                    <span class="app-tooltip-box">No tienes permisos para editar esta tabla</span>
                 </span>
                 @endif
             </div>
@@ -258,11 +258,14 @@
                         @if($campo->type === 'text')
                             {{-- Campo texto: fila completa --}}
                             <div class="px-5 py-4 border-b border-transparent">
-                                <label for="campo_{{ $campo->name }}"
-                                       class="block text-xs font-bold text-gray-600 mb-1.5">
-                                    {{ $campo->label }}
-                                    @if($campo->required)<span class="text-red-400">*</span>@endif
-                                </label>
+                                <div class="flex items-center gap-1.5 mb-1.5">
+                                    <label for="campo_{{ $campo->name }}"
+                                           class="block text-xs font-bold text-gray-600">
+                                        {{ $campo->label }}
+                                        @if($campo->required)<span class="text-red-400">*</span>@endif
+                                    </label>
+                                    @include('partials.field-help', ['campo' => $campo])
+                                </div>
                                 @php $valor = $registro ? ($registro->{$campo->name} ?? null) : (old($campo->name) ?? ($prefill[$campo->name] ?? null)); @endphp
                                 @include('partials.field', ['campo' => $campo, 'valor' => $valor])
                             </div>
@@ -280,6 +283,7 @@
                                             @if($campo->required)<span class="text-red-400">*</span>@endif
                                         </label>
                                         @include('partials.ref-link', ['campo' => $campo, 'valor' => $valor, 'project' => $project])
+                                        @include('partials.field-help', ['campo' => $campo])
                                     </div>
                                     @php
                                         $fieldExtra = [];
@@ -299,6 +303,7 @@
                                                 @if($campo2->required)<span class="text-red-400">*</span>@endif
                                             </label>
                                             @include('partials.ref-link', ['campo' => $campo2, 'valor' => $valor, 'project' => $project])
+                                            @include('partials.field-help', ['campo' => $campo2])
                                         </div>
                                         @php
                                             $fieldExtra = [];
@@ -516,7 +521,7 @@
                     Cancelar
                 </button>
                 <button onclick="document.getElementById('form-eliminar').submit()"
-                        class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors">
+                        class="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors">
                     Eliminar definitivamente
                 </button>
             </div>

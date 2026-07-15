@@ -32,6 +32,16 @@
                            placeholder="ej: Fecha de alta" required>
                 </div>
 
+                <div class="px-5 py-4 flex items-start gap-4">
+                    <label class="w-36 shrink-0 text-sm text-gray-400 pt-2">Ayuda</label>
+                    <div class="flex-1">
+                        <textarea name="help_text" rows="2"
+                                  class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300"
+                                  placeholder="Texto que se muestra en el icono de ayuda junto a la etiqueta (opcional)">{{ old('help_text', $field->help_text) }}</textarea>
+                        <p class="text-xs text-gray-400 mt-1">Si se rellena, se muestra un icono "i" junto a la etiqueta con este texto.</p>
+                    </div>
+                </div>
+
                 @if(!$field->exists)
                 <div class="px-5 py-4 flex items-start gap-4">
                     <label class="w-36 shrink-0 text-sm text-gray-400 pt-2">Tipo <span class="text-red-400">*</span></label>

@@ -69,19 +69,19 @@
   @if($verReservas)
   <div class="db-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:12px;">
     <div class="db-card">
-      <p class="db-title"><i class="ti ti-login-2"></i> Check-ins hoy <span title="Reservas con fecha de check-in hoy." style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span></p>
+      <p class="db-title"><i class="ti ti-login-2"></i> Check-ins hoy <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Reservas con fecha de check-in hoy.</span></span></p>
       <p class="db-count" style="color:#185FA5;">{{ $checkinHoy->count() }}</p>
     </div>
     <div class="db-card">
-      <p class="db-title"><i class="ti ti-logout-2"></i> Check-outs hoy <span title="Reservas con fecha de check-out hoy, ordenadas por tiempo de limpieza descendente." style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span></p>
+      <p class="db-title"><i class="ti ti-logout-2"></i> Check-outs hoy <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Reservas con fecha de check-out hoy, ordenadas por tiempo de limpieza descendente.</span></span></p>
       <p class="db-count" style="color:#0F6E56;">{{ $checkoutHoy->count() }}</p>
     </div>
     <div class="db-card">
-      <p class="db-title"><i class="ti ti-wash"></i> Tareas limpieza vencidas <span title="Tareas de limpieza con fecha planificada anterior a hoy que no tienen tiempo imputado." style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span></p>
+      <p class="db-title"><i class="ti ti-wash"></i> Tareas limpieza vencidas <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Tareas de limpieza con fecha planificada anterior a hoy que no tienen tiempo imputado.</span></span></p>
       <p class="db-count" style="color:#854F0B;">{{ $tareasLimpieza->count() }}</p>
     </div>
     <div class="db-card">
-      <p class="db-title"><i class="ti ti-tool"></i> Tareas mant.+pisc. vencidas <span title="Tareas de mantenimiento y piscinas con fecha planificada anterior a hoy que no tienen tiempo imputado." style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span></p>
+      <p class="db-title"><i class="ti ti-tool"></i> Tareas mant.+pisc. vencidas <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Tareas de mantenimiento y piscinas con fecha planificada anterior a hoy que no tienen tiempo imputado.</span></span></p>
       <p class="db-count" style="color:#854F0B;">{{ $tareasMantPisc->count() }}</p>
     </div>
   </div>
@@ -92,7 +92,7 @@
   <div class="db-grid">
 
     <div class="db-card">
-      <p class="db-title"><i class="ti ti-login-2"></i> Check-ins hoy <span title="Reservas con fecha de check-in hoy." style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span></p>
+      <p class="db-title"><i class="ti ti-login-2"></i> Check-ins hoy <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Reservas con fecha de check-in hoy.</span></span></p>
       @if($checkinHoy->isEmpty())
         <p class="empty">Sin check-ins hoy</p>
       @else
@@ -108,7 +108,7 @@
     </div>
 
     <div class="db-card">
-      <p class="db-title"><i class="ti ti-logout-2"></i> Check-outs hoy <span title="Reservas con fecha de check-out hoy, ordenadas por tiempo de limpieza descendente." style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span></p>
+      <p class="db-title"><i class="ti ti-logout-2"></i> Check-outs hoy <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Reservas con fecha de check-out hoy, ordenadas por tiempo de limpieza descendente.</span></span></p>
       @if($checkoutHoy->isEmpty())
         <p class="empty">Sin check-outs hoy</p>
       @else
@@ -132,7 +132,7 @@
 
     {{-- Check-ins próximos --}}
     <div class="db-card">
-      <p class="db-title"><i class="ti ti-login-2"></i> Check-ins próximos 7 días <span title="Reservas con fecha de check-in en los próximos 7 días, agrupadas por día." style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span></p>
+      <p class="db-title"><i class="ti ti-login-2"></i> Check-ins próximos 7 días <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Reservas con fecha de check-in en los próximos 7 días, agrupadas por día.</span></span></p>
       @php $dayLetters = [0=>'D',1=>'L',2=>'M',3=>'X',4=>'J',5=>'V',6=>'S']; @endphp
       <table class="dias7-table">
         <thead>
@@ -151,8 +151,12 @@
               $tooltip     = $reservasDia->pluck('vm_propiedades_nombre')->implode("\n");
               $cnt         = $reservasDia->count();
             @endphp
-            <td class="count-cell {{ $cnt === 0 ? 'zero' : '' }}" title="{{ $tooltip }}">
-              {{ $cnt ?: '·' }}
+            <td class="count-cell {{ $cnt === 0 ? 'zero' : '' }}">
+              @if($tooltip)
+                <span class="app-tooltip">{{ $cnt ?: '·' }}<span class="app-tooltip-box">{{ $tooltip }}</span></span>
+              @else
+                {{ $cnt ?: '·' }}
+              @endif
             </td>
             @endforeach
           </tr>
@@ -162,7 +166,7 @@
 
     {{-- Check-outs próximos --}}
     <div class="db-card">
-      <p class="db-title"><i class="ti ti-logout-2"></i> Check-outs próximos 7 días <span title="Reservas con fecha de check-out en los próximos 7 días, agrupadas por día y ordenadas por tiempo de limpieza." style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span></p>
+      <p class="db-title"><i class="ti ti-logout-2"></i> Check-outs próximos 7 días <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Reservas con fecha de check-out en los próximos 7 días, agrupadas por día y ordenadas por tiempo de limpieza.</span></span></p>
       @php $dayLetters = [0=>'D',1=>'L',2=>'M',3=>'X',4=>'J',5=>'V',6=>'S']; @endphp
       <table class="dias7-table">
         <thead>
@@ -183,8 +187,12 @@
                 $r->vm_propiedades_nombre . ($r->tiempo_limpieza ? ' (' . $r->tiempo_limpieza . 'h)' : '')
               )->implode("\n");
             @endphp
-            <td class="count-cell {{ $cnt === 0 ? 'zero' : '' }}" title="{{ $tooltipLines }}">
-              {{ $cnt ?: '·' }}
+            <td class="count-cell {{ $cnt === 0 ? 'zero' : '' }}">
+              @if($tooltipLines)
+                <span class="app-tooltip">{{ $cnt ?: '·' }}<span class="app-tooltip-box">{{ $tooltipLines }}</span></span>
+              @else
+                {{ $cnt ?: '·' }}
+              @endif
             </td>
             @endforeach
           </tr>
@@ -208,7 +216,7 @@
     {{-- Próximas ausencias del usuario --}}
     @if($vmUsuario)
     <div class="db-card">
-      <p class="db-title"><i class="ti ti-calendar-user"></i> Mis próximas ausencias <span title="Ausencias registradas para tu usuario con fecha de fin igual o posterior a hoy." style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span></p>
+      <p class="db-title"><i class="ti ti-calendar-user"></i> Mis próximas ausencias <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Ausencias registradas para tu usuario con fecha de fin igual o posterior a hoy.</span></span></p>
       @if($proximasAusencias->isEmpty())
         <p class="db-empty">No hay ausencias próximas registradas.</p>
       @else
@@ -252,7 +260,7 @@
     {{-- Conciliaciones ausencias --}}
     @if($verAusenciasSin)
     <div class="db-card">
-      <p class="db-title"><i class="ti ti-calendar-exclamation"></i> Ausencias en Horario no registradas por RRHH <span title="Muestra horarios de tipo distinto a turno y descanso (vacaciones, baja, comp_festivo, comp_horas, asuntos, absentismo) en fechas pasadas para los que no existe ninguna ausencia registrada que cubra ese día para ese usuario. En otras palabras: el horario dice que el empleado estaba de vacaciones/baja/etc., pero no hay una ausencia registrada que lo respalde." style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span></p>
+      <p class="db-title"><i class="ti ti-calendar-exclamation"></i> Ausencias en Horario no registradas por RRHH <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Muestra horarios de tipo distinto a turno y descanso (vacaciones, baja, comp_festivo, comp_horas, asuntos, absentismo) en fechas pasadas para los que no existe ninguna ausencia registrada que cubra ese día para ese usuario. En otras palabras: el horario dice que el empleado estaba de vacaciones/baja/etc., pero no hay una ausencia registrada que lo respalde.</span></span></p>
       @if($conciliaciones->isEmpty())
         <p class="empty">Sin incidencias</p>
       @else
@@ -286,7 +294,7 @@
     {{-- Turno sin fichaje --}}
     @if($verRRHH)
     <div class="db-card">
-      <p class="db-title"><i class="ti ti-clock-exclamation"></i> Turno sin fichaje <span title="Usuarios con horario de tipo turno en fechas pasadas que no tienen ningún fichaje registrado ese día." style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span></p>
+      <p class="db-title"><i class="ti ti-clock-exclamation"></i> Turno sin fichaje <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Usuarios con horario de tipo turno en fechas pasadas que no tienen ningún fichaje registrado ese día.</span></span></p>
       @if($turnoSinFichaje->isEmpty())
         <p class="empty">Sin incidencias</p>
       @else
@@ -312,7 +320,7 @@
 
     {{-- Conflictos fichaje --}}
     <div class="db-card">
-      <p class="db-title"><i class="ti ti-alert-triangle"></i> Conflictos en fichaje <span title="Fichajes que coinciden con un horario de descanso o con una ausencia registrada ese mismo día." style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span></p>
+      <p class="db-title"><i class="ti ti-alert-triangle"></i> Conflictos en fichaje <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Fichajes que coinciden con un horario de descanso o con una ausencia registrada ese mismo día.</span></span></p>
       @if($conflictosFichaje->isEmpty())
         <p class="empty">Sin conflictos</p>
       @else
@@ -367,7 +375,7 @@
 
     {{-- Fichaje vs imputaciones --}}
     <div class="db-card">
-      <p class="db-title"><i class="ti ti-scale"></i> Fichaje vs imputaciones (diff &gt; 30 min) <span title="Fichajes cuya duración real difiere en más de 30 minutos respecto al total de imputaciones registradas ese día para ese usuario." style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span></p>
+      <p class="db-title"><i class="ti ti-scale"></i> Fichaje vs imputaciones (diff &gt; 30 min) <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Fichajes cuya duración real difiere en más de 30 minutos respecto al total de imputaciones registradas ese día para ese usuario.</span></span></p>
       @if($desviaciones->isEmpty())
         <p class="empty">Sin desviaciones</p>
       @else
@@ -417,7 +425,7 @@
     @if($verLimpSinImp)
     {{-- Tareas limpieza vencidas --}}
     <div class="db-card">
-      <p class="db-title"><i class="ti ti-wash"></i> Tareas limpieza vencidas sin imputar <span title="Tareas de limpieza con fecha planificada pasada que no tienen ninguna imputación registrada." style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span></p>
+      <p class="db-title"><i class="ti ti-wash"></i> Tareas limpieza vencidas sin imputar <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Tareas de limpieza con fecha planificada pasada que no tienen ninguna imputación registrada.</span></span></p>
       @if($tareasLimpieza->isEmpty())
         <p class="empty">Sin tareas vencidas</p>
       @else
@@ -443,7 +451,7 @@
   @if($verMantSinImp)
   {{-- Tareas mantenimiento + piscinas --}}
   <div class="db-card" style="margin-bottom:12px;">
-    <p class="db-title"><i class="ti ti-tool"></i> Tareas mantenimiento y piscinas vencidas sin imputar <span title="Tareas de mantenimiento y piscinas con fecha planificada pasada que no tienen ninguna imputación registrada." style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span></p>
+    <p class="db-title"><i class="ti ti-tool"></i> Tareas mantenimiento y piscinas vencidas sin imputar <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Tareas de mantenimiento y piscinas con fecha planificada pasada que no tienen ninguna imputación registrada.</span></span></p>
     @if($tareasMantPisc->isEmpty())
       <p class="empty">Sin tareas vencidas</p>
     @else

@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use App\Services\RoleHierarchy;
 
 /**
  * Ficha de un registro: ver, editar, archivar, borrar.
@@ -22,15 +23,10 @@ class FichaController extends Controller
 {
     private function abortIfNoRecordAccess(Project $project, string $fullTable, object $registro): void
     {
-        $user = Auth::user();
-        if (!$user || $user->isProjectAdmin($project)) return;
         if (!\Illuminate\Support\Facades\Schema::hasColumn($fullTable, 'control_user')) return;
 
-        $projectUserId = $user->projectUserId($project);
-        if (!$projectUserId) return;
-
-        $role = $user->getProjectRolePublic($project);
-        if (!$role || $role->todos_registros) return;
+        $visibleIds = $this->resolveVisibleUserIds($project);
+        if ($visibleIds === null) return;
 
         $valor = $registro->control_user ?? null;
 
@@ -40,14 +36,39 @@ class FichaController extends Controller
         if ($fieldType === 'desplegable') {
             // Valor único (entero): null = sin restricción
             if ($valor === null || $valor === '') return;
-            abort_if((string) $valor !== (string) $projectUserId, 403);
+            abort_if(!in_array((string) $valor, $visibleIds), 403);
         } else {
             // multiusuario: JSON array — vacío = sin restricción
             $ids = json_decode($valor ?? '[]', true) ?? [];
             if (empty($ids)) return;
             $ids = array_map('strval', $ids);
-            abort_if(!in_array((string) $projectUserId, $ids), 403);
+            abort_if(empty(array_intersect($visibleIds, $ids)), 403);
         }
+    }
+
+    // Ids de usuario visibles para el usuario actual: null = sin restriccion (ve todos),
+    // array = propio id (+ equipo supervisado si el rol es 'supervisados')
+    private function resolveVisibleUserIds(Project $project): ?array
+    {
+        $user = Auth::user();
+        if (!$user || $user->isProjectAdmin($project)) return null;
+
+        $projectUserId = $user->projectUserId($project);
+        if (!$projectUserId) return null;
+
+        $role = $user->getProjectRolePublic($project);
+        if (!$role || ($role->todos_registros ?? null) === 'todos') return null;
+
+        if (($role->todos_registros ?? null) === 'supervisados') {
+            return RoleHierarchy::visibleUserIds(
+                $project->slug . '_roles',
+                $project->slug . '_usuarios',
+                (int) $projectUserId,
+                (int) $role->id
+            );
+        }
+
+        return [(string) $projectUserId];
     }
 
     private function getControlUserFieldType(Project $project, string $fullTable): string
@@ -384,8 +405,7 @@ class FichaController extends Controller
     // $registro: registro actual (para filtros |parent:CAMPO)
     private function loadFkOptions(Project $project, ProjectTable $projectTable, ?object $registro = null): array
     {
-        $restricted    = !$this->userCanSeeAllRecords($project);
-        $ownProjectId  = $restricted ? Auth::user()?->projectUserId($project) : null;
+        $visibleIds    = $this->resolveVisibleUserIds($project);
         $usuariosTable = $project->slug . '_usuarios';
 
         $options = [];
@@ -410,9 +430,9 @@ class FichaController extends Controller
                 }
             }
 
-            // Si es control_user como desplegable y el rol está restringido, solo el propio usuario
-            if ($restricted && $field->name === 'control_user' && $field->type === 'desplegable' && $fullRef === $usuariosTable) {
-                $query->where('id', $ownProjectId);
+            // Si es control_user como desplegable y el rol tiene visibilidad restringida
+            if ($visibleIds !== null && $field->name === 'control_user' && $field->type === 'desplegable' && $fullRef === $usuariosTable) {
+                $query->whereIn('id', $visibleIds);
             }
 
             $options[$field->name] = $query->pluck('nombre', 'id')->toArray();
@@ -520,32 +540,15 @@ class FichaController extends Controller
         }
 
         $all = $this->loadUsuarios($project, $allowedRolIds);
-        if ($this->userCanSeeAllRecords($project)) return $all;
+        $visibleIds = $this->resolveVisibleUserIds($project);
+        if ($visibleIds === null) return $all;
 
-        $ownId = Auth::user()?->projectUserId($project);
-        if (!$ownId) return $all;
-
-        return array_values(array_filter($all, fn($u) => (string) $u['id'] === (string) $ownId));
+        return array_values(array_filter($all, fn($u) => in_array((string) $u['id'], $visibleIds)));
     }
 
     private function userCanSeeAllRecords(Project $project): bool
     {
-        $user = Auth::user();
-        if (!$user || $user->isProjectAdmin($project)) return true;
-
-        $projectUserId = $user->projectUserId($project);
-        if (!$projectUserId) return true;
-
-        $usuariosTable = $project->slug . '_usuarios';
-        $rolesTable    = $project->slug . '_roles';
-        if (!\Illuminate\Support\Facades\Schema::hasTable($usuariosTable) ||
-            !\Illuminate\Support\Facades\Schema::hasTable($rolesTable)) return true;
-
-        $usuario = DB::table($usuariosTable)->find($projectUserId);
-        if (!$usuario || !$usuario->id_rol) return true;
-
-        $role = DB::table($rolesTable)->find($usuario->id_rol);
-        return !$role || $role->todos_registros;
+        return $this->resolveVisibleUserIds($project) === null;
     }
 
     private function loadUsuariosMap(Project $project): array

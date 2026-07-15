@@ -35,11 +35,12 @@ class FieldController extends Controller
     public function store(Request $request, Project $project, ProjectTable $table)
     {
         $data = $request->validate([
-            'name'   => 'required|alpha_dash|max:50',
-            'label'  => 'required|string|max:100',
-            'type'   => 'required|in:' . implode(',', array_keys(TableField::$typeMap)),
-            'order'  => 'integer',
-            'extras' => 'nullable|string|max:255',
+            'name'      => 'required|alpha_dash|max:50',
+            'label'     => 'required|string|max:100',
+            'type'      => 'required|in:' . implode(',', array_keys(TableField::$typeMap)),
+            'order'     => 'integer',
+            'extras'    => 'nullable|string|max:255',
+            'help_text' => 'nullable|string|max:500',
         ]);
 
         $data['required'] = $request->boolean('required');
@@ -73,9 +74,10 @@ class FieldController extends Controller
     public function update(Request $request, Project $project, ProjectTable $table, TableField $field)
     {
         $data = $request->validate([
-            'label'  => 'required|string|max:100',
-            'order'  => 'integer',
-            'extras' => 'nullable|string|max:255',
+            'label'     => 'required|string|max:100',
+            'order'     => 'integer',
+            'extras'    => 'nullable|string|max:255',
+            'help_text' => 'nullable|string|max:500',
         ]);
 
         $data['required'] = $request->boolean('required');

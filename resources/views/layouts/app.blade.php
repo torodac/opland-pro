@@ -6,6 +6,30 @@
     <title>{{ $title ?? config('app.name') }}</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
+    <style>
+        /* Tooltip por defecto de la aplicacion */
+        .app-tooltip { position: relative; display: inline-flex; }
+        .app-tooltip-box {
+            display: none;
+            position: absolute;
+            left: 50%;
+            bottom: 100%;
+            transform: translateX(-50%);
+            margin-bottom: 6px;
+            width: 14rem;
+            z-index: 30;
+            border-radius: 0.5rem;
+            background: #f9fafb;
+            color: #1f2937;
+            border: 1px solid #166534;
+            font-size: 11px;
+            line-height: 1.4;
+            padding: 6px 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,.12);
+            pointer-events: none;
+        }
+        .app-tooltip:hover .app-tooltip-box { display: block; }
+    </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
 

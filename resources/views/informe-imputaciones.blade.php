@@ -216,9 +216,12 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                     <td>{{ $s['label'] }}</td>
                     <td style="color:#28a745">{{ $s['ep'] != 0 ? number_format($s['ep'],1,',','') : '' }}</td>
                     <td style="color:#dc3545">{{ $s['en'] != 0 ? number_format($s['en'],1,',','') : '' }}</td>
-                    <td style="{{ $running >= 0 ? 'color:#28a745' : 'color:#dc3545' }}"
-                        title="{{ ($s['has_ajuste'] ?? false) ? 'Incluye ajuste manual' : '' }}">
-                        {{ number_format($running,1,',','') }}{{ ($s['has_ajuste'] ?? false) ? '*' : '' }}
+                    <td style="{{ $running >= 0 ? 'color:#28a745' : 'color:#dc3545' }}">
+                        @if($s['has_ajuste'] ?? false)
+                            <span class="app-tooltip">{{ number_format($running,1,',','') }}*<span class="app-tooltip-box">Incluye ajuste manual</span></span>
+                        @else
+                            {{ number_format($running,1,',','') }}
+                        @endif
                     </td>
                 </tr>
                 @endforeach
@@ -259,13 +262,13 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                 <thead>
                     <tr>
                         <th>Mes</th>
-                        <th title="Trabajado"       style="color:#4e8ef7">T</th>
-                        <th title="Compensado"      style="color:#f0960a">C</th>
-                        <th title="Vacaciones"      style="color:#e8b800">V</th>
-                        <th title="Baja"            style="color:#7b3f8c">B</th>
-                        <th title="Asuntos propios" style="color:#34c163">AP</th>
+                        <th style="color:#4e8ef7"><span class="app-tooltip">T<span class="app-tooltip-box">Trabajado</span></span></th>
+                        <th style="color:#f0960a"><span class="app-tooltip">C<span class="app-tooltip-box">Compensado</span></span></th>
+                        <th style="color:#e8b800"><span class="app-tooltip">V<span class="app-tooltip-box">Vacaciones</span></span></th>
+                        <th style="color:#7b3f8c"><span class="app-tooltip">B<span class="app-tooltip-box">Baja</span></span></th>
+                        <th style="color:#34c163"><span class="app-tooltip">AP<span class="app-tooltip-box">Asuntos propios</span></span></th>
                         <th>&#931;</th>
-                        <th title="Días laborables" style="color:#999">Lab.</th>
+                        <th style="color:#999"><span class="app-tooltip">Lab.<span class="app-tooltip-box">Días laborables</span></span></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -344,9 +347,12 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                     <td @if($dia['pausa_resaltada']) style="font-weight:700;color:#4e8ef7" @endif>
                         {{ $dia['p_min'] !== null && $dia['p_min'] > 0 ? $dia['p_min']."'" : '' }}
                     </td>
-                    <td class="{{ ($dia['he_min'] ?? 0) > 0 ? 'he-pos' : (($dia['he_min'] ?? 0) < 0 ? 'he-neg' : '') }}"
-                        title="{{ ($dia['ajuste_he'] ?? 0) != 0 ? 'Incluye ajuste manual: '.($dia['ajuste_he'] > 0 ? '+' : '').$dia['ajuste_he'].' min' : '' }}">
-                        {{ $dia['he_min'] !== null ? IC::fmtMin($dia['he_min'], true) : '' }}{{ ($dia['ajuste_he'] ?? 0) != 0 ? '*' : '' }}
+                    <td class="{{ ($dia['he_min'] ?? 0) > 0 ? 'he-pos' : (($dia['he_min'] ?? 0) < 0 ? 'he-neg' : '') }}">
+                        @if(($dia['ajuste_he'] ?? 0) != 0)
+                            <span class="app-tooltip">{{ $dia['he_min'] !== null ? IC::fmtMin($dia['he_min'], true) : '' }}*<span class="app-tooltip-box">Incluye ajuste manual: {{ $dia['ajuste_he'] > 0 ? '+' : '' }}{{ $dia['ajuste_he'] }} min</span></span>
+                        @else
+                            {{ $dia['he_min'] !== null ? IC::fmtMin($dia['he_min'], true) : '' }}
+                        @endif
                     </td>
                     @php $efMin = ($dia['tf_min'] !== null && $dia['p_min'] !== null) ? $dia['tf_min'] - $dia['p_min'] : $dia['tf_min']; @endphp
                     <td>{{ $efMin !== null ? IC::fmtMin($efMin) : '' }}</td>

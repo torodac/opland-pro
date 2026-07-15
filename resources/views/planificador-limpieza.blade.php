@@ -148,10 +148,12 @@
 
                     {{-- Fila 1: nombre + duración --}}
                     <div style="display:flex;align-items:baseline;gap:4px;">
+                        <span class="app-tooltip" style="flex:1;">
                         <a href="{{ route('ficha', [$project->slug, 'tareas_limpieza', $tarea->id]) }}"
-                       style="flex:1;font-size:11px;font-weight:600;color:{{ $checkinUrgente ? '#111827' : '#6b7280' }};line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;text-decoration:none;"
-                       title="{{ $tarea->propiedad }}"
+                       style="font-size:11px;font-weight:600;color:{{ $checkinUrgente ? '#111827' : '#6b7280' }};line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;text-decoration:none;"
                        onclick="event.stopPropagation()">{{ $tarea->propiedad }}</a>
+                        <span class="app-tooltip-box">{{ $tarea->propiedad }}</span>
+                        </span>
                         <span style="font-size:10px;color:#9ca3af;white-space:nowrap;flex-shrink:0;padding-right:2px;">{{ $horas }} h</span>
                     </div>
 

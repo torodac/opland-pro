@@ -153,7 +153,9 @@
             {{-- Nombre propiedad --}}
             <td style="position:sticky;left:0;background:white;z-index:2;border-right:1px solid #e5e7eb;border-bottom:0.5px solid #f3f4f6;padding:0;width:{{ $propW }}px;min-width:{{ $propW }}px;height:{{ $rowH }}px;overflow:hidden;">
                 <div style="height:{{ $rowH }}px;display:flex;align-items:center;padding:0 10px;overflow:hidden;">
-                    <span style="font-size:11px;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ $propiedad }}">{{ $propiedad }}</span>
+                    <span class="res-tip" data-tip-nombre="{{ $propiedad }}" style="max-width:100%;display:block;">
+                        <span style="font-size:11px;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;">{{ $propiedad }}</span>
+                    </span>
                 </div>
             </td>
 
@@ -191,7 +193,10 @@
                         $nombre = explode(' ', trim($r->guest_name))[0];
                     @endphp
                     <a href="{{ route('ficha', [$project->slug, 'reservas', $r->id]) }}"
-                       title="{{ $r->guest_name }} · {{ $checkin->format('d/m') }} → {{ $checkout->format('d/m') }}"
+                       class="res-tip"
+                       data-tip-nombre="{{ $r->guest_name }}"
+                       data-tip-in="{{ $checkin->format('d/m/Y') }}"
+                       data-tip-out="{{ $checkout->format('d/m/Y') }}"
                        style="position:absolute;top:3px;left:{{ $left }}px;width:{{ $width }}px;height:22px;border-radius:3px;background:{{ $color['bg'] }};display:flex;align-items:center;padding:0 5px;box-sizing:border-box;text-decoration:none;overflow:hidden;">
                         <span style="font-size:10px;font-weight:500;color:{{ $color['text'] }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ $nombre }}</span>
                     </a>
@@ -238,6 +243,48 @@
     </tbody>
 </table>
 </div>
+
+{{-- Tooltip de reserva (estilo mockup Villas Alegre, sin estado) --}}
+<div id="res-tooltip" style="display:none;position:fixed;z-index:9999;pointer-events:none;min-width:150px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 8px 20px -8px rgba(15,23,42,.18);padding:8px 11px;font-size:11.5px;color:#374151;">
+    <div id="res-tip-nombre" style="font-weight:700;"></div>
+    <div id="res-tip-fechas" style="margin-top:4px;">
+        <div style="display:flex;justify-content:space-between;gap:14px;padding:1px 0;">
+            <span style="color:#9ca3af;">Check-in</span>
+            <span id="res-tip-in" style="font-weight:600;"></span>
+        </div>
+        <div style="display:flex;justify-content:space-between;gap:14px;padding:1px 0;">
+            <span style="color:#9ca3af;">Check-out</span>
+            <span id="res-tip-out" style="font-weight:600;"></span>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    const tip = document.getElementById('res-tooltip');
+    document.querySelectorAll('.res-tip').forEach(el => {
+        el.addEventListener('mouseenter', function(e) {
+            document.getElementById('res-tip-nombre').textContent = this.dataset.tipNombre;
+            const hasFechas = !!this.dataset.tipIn;
+            document.getElementById('res-tip-in').textContent  = this.dataset.tipIn  || '';
+            document.getElementById('res-tip-out').textContent = this.dataset.tipOut || '';
+            document.getElementById('res-tip-fechas').style.display = hasFechas ? '' : 'none';
+            tip.style.display = 'block';
+            positionResTip(e);
+        });
+        el.addEventListener('mousemove', positionResTip);
+        el.addEventListener('mouseleave', function() { tip.style.display = 'none'; });
+    });
+    function positionResTip(e) {
+        const margin = 12;
+        const tw = tip.offsetWidth, th = tip.offsetHeight;
+        let x = e.clientX + margin, y = e.clientY + margin;
+        if (x + tw > window.innerWidth  - margin) x = e.clientX - tw - margin;
+        if (y + th > window.innerHeight - margin) y = e.clientY - th - margin;
+        tip.style.left = x + 'px';
+        tip.style.top  = y + 'px';
+    }
+})();
+</script>
 
 {{-- Tooltip custom --}}
 <div id="cal-tooltip" style="display:none;position:fixed;z-index:9999;pointer-events:none;min-width:200px;max-width:260px;background:white;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.14),0 1px 4px rgba(0,0,0,0.08);overflow:hidden;">

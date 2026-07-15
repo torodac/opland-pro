@@ -19,7 +19,7 @@
         @endif
         {{-- PyG: ir al importador --}}
         @if($projectTable->name === 'pyg_valores')
-        <a href="{{ url('/vm/pyg') }}"
+        <a href="{{ url('/vm/pyg_form') }}"
            title="Importar PyG"
            class="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors">
             <i class="fa-solid fa-file-import"></i>
@@ -154,7 +154,10 @@
             <span style="font-size:1.25rem;font-weight:700;color:{{ $c['num'] }}">{{ $stat['count'] }}</span>
             <span style="font-size:0.75rem;font-weight:500;color:{{ $c['text'] }}">{{ $stat['label'] }}</span>
             @if(!empty($stat['tooltip']))
-            <span title="{{ $stat['tooltip'] }}" style="font-size:0.7rem;color:{{ $c['text'] }};opacity:0.6;flex-shrink:0" onclick="event.preventDefault()">&#9432;</span>
+            <span class="app-tooltip" onclick="event.preventDefault()">
+                <span style="font-size:0.7rem;color:{{ $c['text'] }};opacity:0.6;flex-shrink:0">&#9432;</span>
+                <span class="app-tooltip-box">{{ $stat['tooltip'] }}</span>
+            </span>
             @endif
         </a>
         @endforeach
@@ -627,7 +630,7 @@
                                             default                                        => 'text-left',
                                         };
                                     @endphp
-                                    <td class="px-4 py-3 text-gray-700 {{ $colAlign }}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;{{ in_array($campo->type, ['fecha','time']) ? 'min-width:90px' : '' }}" title="{{ $registro->{$campo->name} ?? '' }}">
+                                    <td class="px-4 py-3 text-gray-700 {{ $colAlign }}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;{{ in_array($campo->type, ['fecha','time']) ? 'min-width:90px' : '' }}">
                                         @include('partials.cell', ['campo' => $campo, 'valor' => $registro->{$campo->name} ?? null, 'fkOptions' => $fkOptions, 'usuariosMap' => $usuariosMap ?? []])
                                     </td>
                                 @endforeach
@@ -805,7 +808,7 @@
                     Cancelar
                 </button>
                 <button id="modal-borrar-btn" onclick="ejecutarBorrar()"
-                        class="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors">
+                        class="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors bg-red-500 hover:bg-red-600">
                     Confirmar
                 </button>
             </div>
@@ -831,7 +834,7 @@
                     Cancelar
                 </button>
                 <button onclick="ejecutarEliminar()"
-                        class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors">
+                        class="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors">
                     Eliminar definitivamente
                 </button>
             </div>

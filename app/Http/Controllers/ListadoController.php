@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use App\Services\RoleHierarchy;
 
 class ListadoController extends Controller
 {
@@ -115,8 +116,7 @@ class ListadoController extends Controller
         $registros = $query->paginate(50)->withQueryString();
 
         // Opciones para campos FK (type='id'/'desplegable')
-        $restricted   = !$this->userCanSeeAllRecords($project);
-        $ownProjectId = $restricted ? Auth::user()?->projectUserId($project) : null;
+        $visibleIds    = $this->resolveVisibleUserIds($project);
         $usuariosTable = $project->slug . '_usuarios';
 
         $fkOptions = [];
@@ -130,8 +130,8 @@ class ListadoController extends Controller
             if (Schema::hasColumn($fullRef, 'hidden')) {
                 $fkQuery->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0));
             }
-            if ($restricted && $field->name === 'control_user' && $field->type === 'desplegable' && $fullRef === $usuariosTable) {
-                $fkQuery->where('id', $ownProjectId);
+            if ($visibleIds !== null && $field->name === 'control_user' && $field->type === 'desplegable' && $fullRef === $usuariosTable) {
+                $fkQuery->whereIn('id', $visibleIds);
             }
             $fkOptions[$field->name] = $fkQuery->pluck('nombre', 'id')->toArray();
         }
@@ -183,11 +183,8 @@ class ListadoController extends Controller
 
         // Lista filtrada para el formulario: solo el propio usuario si el rol está restringido
         $projectUsuarios = $allUsuarios->map(fn($u) => ['id' => $u->id, 'label' => $u->nombre ?? "#{$u->id}"])->values()->toArray();
-        if (!$this->userCanSeeAllRecords($project)) {
-            $ownId = Auth::user()?->projectUserId($project);
-            if ($ownId) {
-                $projectUsuarios = array_values(array_filter($projectUsuarios, fn($u) => (string) $u['id'] === (string) $ownId));
-            }
+        if ($visibleIds !== null) {
+            $projectUsuarios = array_values(array_filter($projectUsuarios, fn($u) => in_array((string) $u['id'], $visibleIds)));
         }
 
         // Stats específicas por tabla
@@ -250,35 +247,57 @@ class ListadoController extends Controller
     }
 
 
-    // Aplica filtro control_user si el rol del usuario no tiene todos_registros
+    // Aplica filtro control_user segun visibilidad del rol (personales/supervisados/todos)
     private function applyControlUserFilter($query, Project $project, string $fullTable): void
     {
-        $user = Auth::user();
-        if (!$user || $user->isProjectAdmin($project)) return;
         if (!Schema::hasColumn($fullTable, 'control_user')) return;
 
-        $projectUserId = $user->projectUserId($project);
-        if (!$projectUserId) return;
-
-        $role = $this->getUserProjectRole($project, $projectUserId);
-        if (!$role || $role->todos_registros) return;
+        $visibleIds = $this->resolveVisibleUserIds($project);
+        if ($visibleIds === null) return;
 
         $fieldType = $this->getControlUserFieldType($project, $fullTable);
 
         if ($fieldType === 'desplegable') {
-            $query->where(function ($q) use ($projectUserId) {
+            $query->where(function ($q) use ($visibleIds) {
                 $q->whereNull('control_user')
-                  ->orWhere('control_user', $projectUserId);
+                  ->orWhereIn('control_user', $visibleIds);
             });
         } else {
             $isPgsql = DB::connection()->getDriverName() === 'pgsql';
             $cast    = $isPgsql ? '::text' : '';
-            $query->where(function ($q) use ($projectUserId, $cast) {
+            $query->where(function ($q) use ($visibleIds, $cast) {
                 $q->whereNull('control_user')
-                  ->orWhereRaw("control_user{$cast} = '[]'")
-                  ->orWhereRaw("control_user{$cast} LIKE ?", ["%\"{$projectUserId}\"%"]);
+                  ->orWhereRaw("control_user{$cast} = '[]'");
+                foreach ($visibleIds as $vid) {
+                    $q->orWhereRaw("control_user{$cast} LIKE ?", ["%\"{$vid}\"%"]);
+                }
             });
         }
+    }
+
+    // Ids de usuario visibles para el usuario actual: null = sin restriccion (ve todos),
+    // array = propio id (+ equipo supervisado si el rol es 'supervisados')
+    private function resolveVisibleUserIds(Project $project): ?array
+    {
+        $user = Auth::user();
+        if (!$user || $user->isProjectAdmin($project)) return null;
+
+        $projectUserId = $user->projectUserId($project);
+        if (!$projectUserId) return null;
+
+        $role = $this->getUserProjectRole($project, $projectUserId);
+        if (!$role || ($role->todos_registros ?? null) === 'todos') return null;
+
+        if (($role->todos_registros ?? null) === 'supervisados') {
+            return RoleHierarchy::visibleUserIds(
+                $project->slug . '_roles',
+                $project->slug . '_usuarios',
+                (int) $projectUserId,
+                (int) $role->id
+            );
+        }
+
+        return [(string) $projectUserId];
     }
 
     private function getControlUserFieldType(Project $project, string $fullTable): string
@@ -303,14 +322,7 @@ class ListadoController extends Controller
 
     private function userCanSeeAllRecords(Project $project): bool
     {
-        $user = Auth::user();
-        if (!$user || $user->isProjectAdmin($project)) return true;
-
-        $projectUserId = $user->projectUserId($project);
-        if (!$projectUserId) return true;
-
-        $role = $this->getUserProjectRole($project, $projectUserId);
-        return !$role || $role->todos_registros;
+        return $this->resolveVisibleUserIds($project) === null;
     }
 
     // Carga el registro de rol del usuario en {slug}_roles

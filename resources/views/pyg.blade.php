@@ -31,9 +31,11 @@
         <thead>
             <tr style="border-bottom:2px solid #e5e7eb;">
                 <th style="text-align:left;padding:6px 10px;color:#6b7280;font-weight:600;">Período</th>
+                <th style="text-align:right;padding:6px 10px;color:#6b7280;font-weight:600;">Registros</th>
                 <th style="text-align:right;padding:6px 10px;color:#6b7280;font-weight:600;">Cuentas</th>
+                <th style="text-align:right;padding:6px 10px;color:#6b7280;font-weight:600;">Ingresos</th>
+                <th style="text-align:right;padding:6px 10px;color:#6b7280;font-weight:600;">Gastos</th>
                 <th style="text-align:left;padding:6px 10px;color:#6b7280;font-weight:600;">Centros de coste</th>
-                <th style="padding:6px 10px;"></th>
             </tr>
         </thead>
         <tbody id="pyg-periodos-body">
@@ -42,18 +44,12 @@
             <td style="padding:8px 10px;font-weight:600;color:#111827;">
                 {{ \Carbon\Carbon::parse($p->periodo)->translatedFormat('F Y') }}
             </td>
+            <td style="padding:8px 10px;text-align:right;color:#374151;">{{ number_format($p->num_registros, 0, ',', '.') }}</td>
             <td style="padding:8px 10px;text-align:right;color:#374151;">{{ $p->num_cuentas }}</td>
+            <td style="padding:8px 10px;text-align:right;color:#16a34a;">{{ number_format($p->importe_ingresos, 2, ',', '.') }} €</td>
+            <td style="padding:8px 10px;text-align:right;color:#dc2626;">{{ number_format($p->importe_gastos, 2, ',', '.') }} €</td>
             <td style="padding:8px 10px;color:#6b7280;">
-                @php
-                    $cecos = is_string($p->cecos)
-                        ? array_map('trim', explode(',', trim($p->cecos, '{}')))
-                        : (array)$p->cecos;
-                @endphp
-                {{ implode(', ', $cecos) }}
-            </td>
-            <td style="padding:8px 10px;text-align:right;">
-                <button onclick="deletePeriodo('{{ $p->periodo }}')"
-                        style="font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px;">✕ Eliminar</button>
+                {{ $p->num_cecos }} {{ Str::plural('centro de coste', $p->num_cecos) }}, {{ $p->num_propiedades }} {{ Str::plural('propiedad', $p->num_propiedades) }}
             </td>
         </tr>
         @endforeach
@@ -95,8 +91,8 @@
 <script>
 (function(){
     const CSRF    = '{{ csrf_token() }}';
-    const URL_IMP = '{{ route("vm.pyg.import", $project->slug) }}';
-    const URL_DEL = '{{ route("vm.pyg.delete", [$project->slug, "__periodo__"]) }}';
+    const URL_IMP = '{{ route("vm.pyg_form.import", $project->slug) }}';
+    const URL_DEL = '{{ route("vm.pyg_form.delete", [$project->slug, "__periodo__"]) }}';
 
     const zone    = document.getElementById('pyg-dropzone');
     const input   = document.getElementById('pyg-file-input');
@@ -131,7 +127,7 @@
             .then(data => {
                 if (data.needs_mapping) {
                     pendingTmpId = data.tmp_id;
-                    showMappingPopup(data.unknown_codes, data.propiedades);
+                    showMappingPopup(data.unknown_codes, data.propiedades, data.cecos);
                 } else if (data.ok) {
                     const sust = data.sustituido ? ' (período sustituido)' : '';
                     setStatus('<span style="color:#16a34a;font-weight:600;">✓ ' + esc(data.periodo) + ' · ' + data.cuentas + ' cuentas nuevas · ' + data.valores + ' valores' + sust + '</span>');
@@ -145,11 +141,84 @@
 
     // --- Popup ---
     let propiedadesList = [];
+    let cecosList = [];
 
-    function showMappingPopup(unknownCodes, propiedades) {
+    // --- Combobox buscable (estilo select2): boton + panel con input de busqueda + lista ---
+    function buscadorHtml(items, dataAttr, code, placeholderTexto) {
+        const itemsJson = JSON.stringify(items).replace(/</g, '\\u003c');
+        return `
+            <div class="bs-wrap" data-items='${itemsJson}' data-placeholder="${esc(placeholderTexto)}" style="position:relative;">
+                <button type="button" class="bs-toggle"
+                        style="width:100%;text-align:left;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;background:#fff;display:flex;justify-content:space-between;align-items:center;gap:6px;cursor:pointer;color:#9ca3af;">
+                    <span class="bs-label" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(placeholderTexto)}</span>
+                    <span style="flex-shrink:0;color:#9ca3af;">▾</span>
+                </button>
+                <div class="bs-panel" style="display:none;position:absolute;z-index:30;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 6px 16px rgba(0,0,0,.12);">
+                    <input type="text" class="bs-search" placeholder="Buscar…"
+                           style="width:100%;box-sizing:border-box;padding:6px 8px;border:none;border-bottom:1px solid #e5e7eb;font-size:12px;outline:none;border-radius:6px 6px 0 0;">
+                    <ul class="bs-list" style="list-style:none;margin:0;padding:2px 0;max-height:180px;overflow-y:auto;"></ul>
+                </div>
+                <input type="hidden" ${dataAttr}="${esc(code)}" class="bs-value" value="">
+            </div>`;
+    }
+
+    function initBuscador(wrap) {
+        const items   = JSON.parse(wrap.dataset.items);
+        const toggle  = wrap.querySelector('.bs-toggle');
+        const label   = wrap.querySelector('.bs-label');
+        const panel   = wrap.querySelector('.bs-panel');
+        const search  = wrap.querySelector('.bs-search');
+        const list    = wrap.querySelector('.bs-list');
+        const hidden  = wrap.querySelector('.bs-value');
+        const placeholderTexto = wrap.dataset.placeholder;
+
+        function renderList(q) {
+            const ql = q.trim().toLowerCase();
+            const filtrados = items.filter(o => o.label.toLowerCase().includes(ql));
+            list.innerHTML = filtrados.length
+                ? filtrados.map(o => `<li data-id="${esc(String(o.id))}" style="padding:6px 8px;font-size:12px;cursor:pointer;color:#374151;">${esc(o.label)}</li>`).join('')
+                : '<li style="padding:6px 8px;font-size:12px;color:#9ca3af;">Sin resultados</li>';
+        }
+
+        toggle.addEventListener('click', () => {
+            const willOpen = panel.style.display === 'none';
+            document.querySelectorAll('.bs-panel').forEach(p => p.style.display = 'none');
+            panel.style.display = willOpen ? 'block' : 'none';
+            if (willOpen) { search.value = ''; renderList(''); search.focus(); }
+        });
+
+        search.addEventListener('input', () => renderList(search.value));
+
+        list.addEventListener('mousedown', (e) => {
+            e.preventDefault(); // evita perder el foco/click antes del listener
+            const li = e.target.closest('li[data-id]');
+            if (!li) return;
+            hidden.value = li.dataset.id;
+            const item = items.find(o => String(o.id) === li.dataset.id);
+            label.textContent = item ? item.label : placeholderTexto;
+            label.style.color = '#111827';
+            panel.style.display = 'none';
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!wrap.contains(e.target)) panel.style.display = 'none';
+        });
+    }
+
+    function showMappingPopup(unknownCodes, propiedades, cecos) {
         propiedadesList = propiedades;
+        cecosList = cecos || [];
         const container = document.getElementById('pyg-map-rows');
         container.innerHTML = '';
+
+        const itemsPropiedades = propiedades.map(p => ({
+            id: p.id,
+            label: `${p.nombre}${p.a3_code ? ' [' + p.a3_code + ']' : ''}${p.deleted ? ' (borrada)' : ''}`,
+        }));
+        const itemsCecos = [
+            { id: '', label: '— Nuevo centro de coste con este código —' },
+            ...cecosList.map(c => ({ id: c.id, label: c.nombre })),
+        ];
 
         unknownCodes.forEach((code, idx) => {
             const block = document.createElement('div');
@@ -164,27 +233,30 @@
                         <span>Propiedad existente en Opland</span>
                     </label>
                     <div id="sel_${idx}" style="display:block;padding-left:1.5rem;">
-                        <select data-for="${esc(code)}" style="width:100%;padding:5px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;">
-                            <option value="">— selecciona una propiedad —</option>
-                            ${propiedades.map(p => `<option value="${p.id}">${esc(p.nombre)}${p.a3_code ? ' [' + esc(p.a3_code) + ']' : ''}</option>`).join('')}
-                        </select>
+                        ${buscadorHtml(itemsPropiedades, 'data-for', code, '— selecciona una propiedad —')}
                     </div>
                     <label style="display:flex;align-items:center;gap:.5rem;font-size:13px;cursor:pointer;">
                         <input type="radio" name="tipo_${idx}" value="ceco" onchange="toggleTipo(this,'${esc(code)}')">
                         <span>Centro de coste sin propiedad (ej: SANTI, GASTOS GENE)</span>
                     </label>
+                    <div id="selceco_${idx}" style="display:none;padding-left:1.5rem;">
+                        ${buscadorHtml(itemsCecos, 'data-forceco', code, '— Nuevo centro de coste con este código —')}
+                    </div>
                 </div>`;
             container.appendChild(block);
+            block.querySelectorAll('.bs-wrap').forEach(initBuscador);
         });
 
         overlay.style.display = 'flex';
     }
 
     window.toggleTipo = function(radio, code) {
-        // Buscar el select asociado dentro del mismo bloque
+        // Buscar los selects asociados dentro del mismo bloque
         const block = radio.closest('[data-code]');
-        const selDiv = block.querySelector('[id^="sel_"]');
-        if (selDiv) selDiv.style.display = radio.value === 'propiedad' ? 'block' : 'none';
+        const selDiv     = block.querySelector('[id^="sel_"]');
+        const selCecoDiv = block.querySelector('[id^="selceco_"]');
+        if (selDiv)     selDiv.style.display     = radio.value === 'propiedad' ? 'block' : 'none';
+        if (selCecoDiv) selCecoDiv.style.display = radio.value === 'ceco'      ? 'block' : 'none';
     };
 
     window.cancelMapping = function() {
@@ -201,10 +273,14 @@
             if (!checked) return;
             const type = checked.value;
             if (type === 'propiedad') {
-                const sel = block.querySelector('select[data-for]');
+                const sel = block.querySelector('[data-for]');
                 const id  = sel ? parseInt(sel.value) || null : null;
                 if (!id) return;
                 mappings.push({ code, type, id });
+            } else if (type === 'ceco') {
+                const selCeco = block.querySelector('[data-forceco]');
+                const id      = selCeco ? (parseInt(selCeco.value) || null) : null;
+                mappings.push(id ? { code, type, id } : { code, type });
             } else {
                 mappings.push({ code, type });
             }

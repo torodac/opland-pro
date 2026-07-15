@@ -82,18 +82,18 @@
     <a href="{{ $listUrl(['stat' => $stat === 'sin_imp' ? null : 'sin_imp', 'page' => null]) }}"
        class="tl-stat {{ $stat === 'sin_imp' ? 'active' : '' }}">
         <span class="tl-stat-num">{{ $sinImp }}</span>
-        <span class="tl-stat-lbl">Sin imputar <span title="Tareas en trámite sin ninguna imputación de tiempo registrada." style="font-size:0.7rem;color:#6b7280;opacity:0.6;flex-shrink:0" onclick="event.preventDefault()">&#9432;</span></span>
+        <span class="tl-stat-lbl">Sin imputar <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;opacity:0.6;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Tareas en trámite sin ninguna imputación de tiempo registrada.</span></span></span>
     </a>
 
     <a href="{{ $listUrl(['stat' => $stat === 'pte_imp' ? null : 'pte_imp', 'page' => null]) }}"
        class="tl-stat {{ $stat === 'pte_imp' ? 'active' : '' }}">
         <span class="tl-stat-num">{{ $pteImp }}</span>
-        <span class="tl-stat-lbl">Pendientes de completar <span title="Tareas con al menos un responsable que aún no ha imputado tiempo." style="font-size:0.7rem;color:#6b7280;opacity:0.6;flex-shrink:0" onclick="event.preventDefault()">&#9432;</span></span>
+        <span class="tl-stat-lbl">Pendientes de completar <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;opacity:0.6;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Tareas con al menos un responsable que aún no ha imputado tiempo.</span></span></span>
     </a>
 
     <div class="tl-stat" style="cursor:default">
         <span class="tl-stat-num">{{ $totalTramite }}</span>
-        <span class="tl-stat-lbl">En trámite <span title="Total de tareas activas (no borradas, no ocultas)." style="font-size:0.7rem;color:#6b7280;opacity:0.6;flex-shrink:0" onclick="event.preventDefault()">&#9432;</span></span>
+        <span class="tl-stat-lbl">En trámite <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;opacity:0.6;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Total de tareas activas (no borradas, no ocultas).</span></span></span>
     </div>
 
 </div>
@@ -291,7 +291,7 @@
                         $uNombre  = isset($usuariosMap[$uid]) ? $usuariosMap[$uid]->nombre : 'Usuario '.$uid;
                         $initials = collect(explode(' ', $uNombre))->filter()->take(2)->map(fn($w)=>mb_strtoupper(mb_substr($w,0,1)))->implode('');
                     @endphp
-                    <span class="tl-chip" style="background:{{ $dotColor }}" title="{{ $uNombre }}">{{ $initials }}</span>
+                    <span class="tl-chip app-tooltip" style="background:{{ $dotColor }}">{{ $initials }}<span class="app-tooltip-box">{{ $uNombre }}</span></span>
                 @empty
                     <span class="text-gray-300">—</span>
                 @endforelse
@@ -306,7 +306,7 @@
         {{-- Foto --}}
         <td class="px-4 py-2 text-center text-gray-400">
             @if($tarea->foto_count > 0)
-                <i class="ti ti-camera" title="{{ $tarea->foto_count }} foto(s)"></i>
+                <span class="app-tooltip"><i class="ti ti-camera"></i><span class="app-tooltip-box">{{ $tarea->foto_count }} foto(s)</span></span>
             @endif
         </td>
 

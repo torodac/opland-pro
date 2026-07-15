@@ -76,7 +76,8 @@ class Project extends Model
                 $t->string('tabla_default', 100)->nullable();
                 $t->json('ver')->nullable();
                 $t->json('editar')->nullable();
-                $t->tinyInteger('todos_registros')->default(1);
+                $t->json('roles_supervisados')->nullable();
+                $t->string('todos_registros', 20)->default('personales');
                 $t->tinyInteger('hidden')->default(0);
                 $t->tinyInteger('deleted')->default(0);
                 $t->unsignedBigInteger('createuser')->nullable();
@@ -89,9 +90,10 @@ class Project extends Model
         $fields = [
             ['name' => 'nombre',          'label' => 'Nombre',                  'type' => 'string',       'order' => 1,  'in_list' => true,  'in_form' => true,  'required' => true],
             ['name' => 'tabla_default',   'label' => 'Tabla por defecto',       'type' => 'string',       'order' => 10, 'in_list' => true,  'in_form' => true,  'required' => false],
-            ['name' => 'todos_registros', 'label' => 'Ver todos los registros', 'type' => 'tinyint',      'order' => 20, 'in_list' => true,  'in_form' => true,  'required' => false],
+            ['name' => 'todos_registros', 'label' => 'Visibilidad de registros', 'type' => 'select',    'order' => 20, 'in_list' => true,  'in_form' => true,  'required' => false, 'extras' => 'opt:personales,supervisados,todos|enables:roles_supervisados:supervisados'],
             ['name' => 'ver',             'label' => 'Puede ver',               'type' => 'multitabla',   'order' => 30, 'in_list' => false, 'in_form' => true,  'required' => false],
             ['name' => 'editar',          'label' => 'Puede editar',            'type' => 'multitabla',   'order' => 40, 'in_list' => false, 'in_form' => true,  'required' => false],
+            ['name' => 'roles_supervisados', 'label' => 'Roles supervisados',   'type' => 'multiusuario', 'order' => 45, 'in_list' => false, 'in_form' => true,  'required' => false, 'extras' => 'source:roles'],
             ['name' => 'hidden',          'label' => 'Oculto',                  'type' => 'tinyint',      'order' => 997,'in_list' => false, 'in_form' => false, 'required' => false],
             ['name' => 'deleted',         'label' => 'Borrado',                 'type' => 'tinyint',      'order' => 998,'in_list' => false, 'in_form' => false, 'required' => false],
         ];

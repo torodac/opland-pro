@@ -17,7 +17,7 @@ class TableField extends Model
 
     protected $fillable = [
         'project_table_id', 'name', 'label', 'type',
-        'order', 'required', 'in_list', 'in_form', 'extras',
+        'order', 'required', 'in_list', 'in_form', 'extras', 'help_text',
     ];
 
     public function getRouteKeyName(): string
@@ -89,10 +89,23 @@ class TableField extends Model
     // Devuelve las opciones si el tipo es "select" (extras: "opt:Sí,No,Pendiente")
     public function getOptions(): array
     {
-        if (!str_starts_with($this->extras ?? '', 'opt:')) {
+        $base = explode('|', $this->extras ?? '', 2)[0];
+        if (!str_starts_with($base, 'opt:')) {
             return [];
         }
-        return explode(',', substr($this->extras, 4));
+        return explode(',', substr($base, 4));
+    }
+
+    // Lee una directiva adicional de extras separada por "|", ej: "opt:a,b|enables:campo:valor"
+    public function getExtraDirective(string $key): ?string
+    {
+        $parts = explode('|', $this->extras ?? '');
+        foreach ($parts as $part) {
+            if (str_starts_with($part, $key . ':')) {
+                return substr($part, strlen($key) + 1);
+            }
+        }
+        return null;
     }
 
     // ¿Es un campo de FK a otra tabla dinámica?

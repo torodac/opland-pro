@@ -178,7 +178,7 @@ $deptLabel = $deptNombre ?: 'Sin departamento';
         <tbody>
             @foreach($usuarios as $u)
             <tr>
-                <td class="col-user" title="{{ $u->nombre }}">{{ $u->nombre }}</td>
+                <td class="col-user"><span class="app-tooltip">{{ $u->nombre }}<span class="app-tooltip-box">{{ $u->nombre }}</span></span></td>
                 @foreach($dates as $di => $d)
                 @php
                     $ds     = $d->toDateString();
@@ -206,8 +206,12 @@ $deptLabel = $deptNombre ?: 'Sin departamento';
                         {!! horarioCellHtml($horario) !!}
                     </td>
                 @else
-                    <td class="{{ $tdCls }}" title="{{ $isPastWeek ? 'Semana pasada — solo lectura' : '' }}">
-                        {!! horarioCellHtml($horario) !!}
+                    <td class="{{ $tdCls }}">
+                        @if($isPastWeek)
+                            <span class="app-tooltip">{!! horarioCellHtml($horario) !!}<span class="app-tooltip-box">Semana pasada — solo lectura</span></span>
+                        @else
+                            {!! horarioCellHtml($horario) !!}
+                        @endif
                     </td>
                 @endif
                 @endforeach

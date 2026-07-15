@@ -49,7 +49,7 @@
                     <tr class="hover:bg-red-50/40">
                         <td class="px-4 py-2 text-gray-400 font-mono">{{ $e['row'] }}</td>
                         <td class="px-4 py-2 font-mono text-gray-700">{{ $e['col'] }}</td>
-                        <td class="px-4 py-2 text-gray-600 max-w-[200px] truncate" title="{{ $e['value'] }}">{{ $e['value'] }}</td>
+                        <td class="px-4 py-2 text-gray-600 max-w-[200px] truncate">{{ $e['value'] }}</td>
                         <td class="px-4 py-2 text-red-600">{{ $e['error'] }}</td>
                     </tr>
                     @endforeach

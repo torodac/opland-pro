@@ -12,6 +12,31 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     @livewireStyles
+    <style>
+        /* Tooltip por defecto de la aplicacion */
+        .app-tooltip { position: relative; display: inline-flex; }
+        .app-tooltip-box {
+            display: none;
+            white-space: pre-line;
+            position: absolute;
+            left: 50%;
+            bottom: 100%;
+            transform: translateX(-50%);
+            margin-bottom: 6px;
+            width: 14rem;
+            z-index: 30;
+            border-radius: 0.5rem;
+            background: #f9fafb;
+            color: #1f2937;
+            border: 1px solid #166534;
+            font-size: 11px;
+            line-height: 1.4;
+            padding: 6px 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,.12);
+            pointer-events: none;
+        }
+        .app-tooltip:hover .app-tooltip-box { display: block; }
+    </style>
 </head>
 <body class="bg-gray-50 text-gray-800 overflow-hidden">
 <script>document.documentElement.classList.remove('invisible');</script>
@@ -99,7 +124,7 @@
                         </div>
                     @else
                         <a href="{{ $item->resolveUrl() }}"
-                           title="{{ $item->label }}"
+                           :title="sidebarOpen ? '' : {{ Illuminate\Support\Js::from($item->label) }}"
                            class="flex items-center gap-2 px-2 py-2 text-sm rounded-lg {{ request()->url() === $item->resolveUrl() ? 'bg-orange-50 text-orange-700 font-medium' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900' }}">
                             @if($item->icon)<i class="{{ $item->icon }} w-5 text-center shrink-0 text-xs"></i>@endif
                             <span class="truncate" :class="sidebarOpen ? 'opacity-100' : 'opacity-0 hidden'">{{ $item->label }}</span>

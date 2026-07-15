@@ -403,8 +403,10 @@ $heIcon   = $heMin === null ? 'ti-minus' : ($heMin > 0 ? 'ti-trending-up' : ($he
 <div class="section-card">
   <div class="sec-title">
     <i class="ti ti-adjustments-horizontal"></i>Ajuste horas extra
-    <span title="Corrección manual de horas extra. Valor en minutos (positivo suma, negativo resta). Ejemplo: 180 equivale a 3 horas. Requiere motivo obligatorio.&#10;Visible para: role admin, role vm_admin y roles 3 (Dirección general) u 11 (Director RRHH)."
-          style="font-size:11px;color:#aaa;margin-left:4px;cursor:default">&#9432;</span>
+    <span class="app-tooltip">
+          <span style="font-size:11px;color:#aaa;margin-left:4px;cursor:default">&#9432;</span>
+          <span class="app-tooltip-box">Corrección manual de horas extra. Valor en minutos (positivo suma, negativo resta). Ejemplo: 180 equivale a 3 horas. Requiere motivo obligatorio.&#10;Visible para: role admin, role vm_admin y roles 3 (Dirección general) u 11 (Director RRHH).</span>
+    </span>
   </div>
   <div id="v-ajuste_he" class="field-grid">
     <div class="field-row">

@@ -68,7 +68,14 @@ $fmtKm    = fn($v) => $v > 0 ? number_format($v, 2, ',', '') : '';
         <td class="col-user">{{ $u->nombre }}</td>
         @foreach($dias as $d)
           @php $km = $kmMap[$u->id][$d]['km'] ?? 0; $w = $isWk($d); @endphp
-          <td class="{{ $w ? '' : '' }}{{ $km > 0 ? ' has-km' : '' }}" title="{{ $km > 0 && ($kmMap[$u->id][$d]['trayecto'] ?? '') ? $kmMap[$u->id][$d]['trayecto'] : '' }}">{{ $fmtKm($km) }}</td>
+          @php $trayecto = $km > 0 ? ($kmMap[$u->id][$d]['trayecto'] ?? '') : ''; @endphp
+          <td class="{{ $w ? '' : '' }}{{ $km > 0 ? ' has-km' : '' }}">
+            @if($trayecto)
+                <span class="app-tooltip">{{ $fmtKm($km) }}<span class="app-tooltip-box">{{ $trayecto }}</span></span>
+            @else
+                {{ $fmtKm($km) }}
+            @endif
+          </td>
         @endforeach
         <td class="total-col">{{ number_format($totalUsuario[$u->id], 2, ',', '') }}</td>
       </tr>

@@ -216,9 +216,9 @@ Route::middleware('auth')->group(function () {
         Route::patch('tareas/{tipo}/{id}/ocultar', [TareaController::class, 'toggleOcultar'])->name('vm.tarea.ocultar')->where(['tipo' => 'limpieza|mantenimiento|piscina']);
         Route::patch('tareas_limpieza/{id}/replanificar', [PlanificadorLimpiezaController::class, 'replanificar'])->name('planificador-limpieza.replanificar');
 
-        Route::get('pyg', [PygController::class, 'index'])->name('vm.pyg');
-        Route::post('pyg/import', [PygController::class, 'import'])->name('vm.pyg.import');
-        Route::delete('pyg/{periodo}', [PygController::class, 'deletePeriodo'])->name('vm.pyg.delete');
+        Route::get('pyg_form', [PygController::class, 'index'])->name('vm.pyg_form');
+        Route::post('pyg_form/import', [PygController::class, 'import'])->name('vm.pyg_form.import');
+        Route::delete('pyg_form/{periodo}', [PygController::class, 'deletePeriodo'])->name('vm.pyg_form.delete');
 
         Route::get('liquidacion', [LiquidacionController::class, 'index'])->name('vm.liquidacion');
         Route::get('liquidacion/pdf', [LiquidacionController::class, 'pdf'])->name('vm.liquidacion.pdf');

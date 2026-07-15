@@ -89,22 +89,132 @@
 
     @case('id')
     @case('desplegable')
-        @php $opciones = $fkOptions[$campo->name] ?? []; @endphp
-        <select id="campo_{{ $campo->name }}" name="{{ $campo->name }}" {{ $req }} class="{{ $base }}">
-            <option value="">— Selecciona —</option>
-            @foreach($opciones as $id => $nombre)
-                <option value="{{ $id }}" {{ (string)$valor === (string)$id ? 'selected' : '' }}>{{ $nombre }}</option>
-            @endforeach
-        </select>
+        @php
+            $opciones = $fkOptions[$campo->name] ?? [];
+            $selLabel = ($valor !== null && $valor !== '' && isset($opciones[$valor])) ? $opciones[$valor] : null;
+        @endphp
+        <div class="fk-combo" data-required="{{ $campo->required ? '1' : '0' }}"
+             style="position:relative;{{ $hasError ? 'outline:1px solid #f87171;border-radius:0.5rem;' : '' }}">
+            <button type="button" class="fk-combo-toggle"
+                    style="width:100%;text-align:left;padding:0.5rem 0.75rem;border:1px solid {{ $hasError ? '#f87171' : '#e5e7eb' }};border-radius:0.5rem;background:#fff;font-size:0.75rem;display:flex;justify-content:space-between;align-items:center;gap:6px;cursor:pointer;color:{{ $selLabel ? '#111827' : '#9ca3af' }};">
+                <span class="fk-combo-label" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ $selLabel ?? '— Selecciona —' }}</span>
+                <span style="flex-shrink:0;color:#9ca3af;">▾</span>
+            </button>
+            <div class="fk-combo-panel" style="display:none;position:absolute;z-index:30;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid #e5e7eb;border-radius:0.5rem;box-shadow:0 6px 16px rgba(0,0,0,.12);">
+                <input type="text" class="fk-combo-search" placeholder="Buscar…"
+                       style="width:100%;box-sizing:border-box;padding:0.5rem 0.75rem;border:none;border-bottom:1px solid #f3f4f6;font-size:0.75rem;outline:none;border-radius:0.5rem 0.5rem 0 0;">
+                <ul class="fk-combo-list" style="list-style:none;margin:0;padding:2px 0;max-height:12rem;overflow-y:auto;">
+                    <li data-id="" style="padding:0.5rem 0.75rem;font-size:0.75rem;cursor:pointer;color:#9ca3af;">— Selecciona —</li>
+                    @foreach($opciones as $id => $nombre)
+                        <li data-id="{{ $id }}" style="padding:0.5rem 0.75rem;font-size:0.75rem;cursor:pointer;color:#374151;">{{ $nombre }}</li>
+                    @endforeach
+                </ul>
+            </div>
+            <input type="hidden" id="campo_{{ $campo->name }}" name="{{ $campo->name }}"
+                   class="fk-combo-value" value="{{ $valor }}">
+        </div>
+        @once
+            <script>
+            (function() {
+                function initFkCombo(wrap) {
+                    if (wrap.dataset.fkInit) return;
+                    wrap.dataset.fkInit = '1';
+
+                    const toggle = wrap.querySelector('.fk-combo-toggle');
+                    const label  = wrap.querySelector('.fk-combo-label');
+                    const panel  = wrap.querySelector('.fk-combo-panel');
+                    const search = wrap.querySelector('.fk-combo-search');
+                    const list   = wrap.querySelector('.fk-combo-list');
+                    const hidden = wrap.querySelector('.fk-combo-value');
+                    const items  = Array.from(list.querySelectorAll('li'));
+
+                    function filtrar(q) {
+                        const ql = q.trim().toLowerCase();
+                        items.forEach(li => {
+                            li.style.display = (li.dataset.id === '' || li.textContent.toLowerCase().includes(ql)) ? '' : 'none';
+                        });
+                    }
+
+                    toggle.addEventListener('click', () => {
+                        const willOpen = panel.style.display === 'none';
+                        document.querySelectorAll('.fk-combo-panel').forEach(p => p.style.display = 'none');
+                        panel.style.display = willOpen ? 'block' : 'none';
+                        if (willOpen) { search.value = ''; filtrar(''); search.focus(); }
+                    });
+
+                    search.addEventListener('input', () => filtrar(search.value));
+
+                    list.addEventListener('mousedown', (e) => {
+                        const li = e.target.closest('li[data-id]');
+                        if (!li) return;
+                        e.preventDefault();
+                        hidden.value = li.dataset.id;
+                        label.textContent = li.dataset.id !== '' ? li.textContent : '— Selecciona —';
+                        label.style.color = li.dataset.id !== '' ? '#111827' : '#9ca3af';
+                        toggle.style.borderColor = '#e5e7eb';
+                        panel.style.display = 'none';
+                        hidden.dispatchEvent(new Event('change', { bubbles: true }));
+                    });
+
+                    document.addEventListener('click', (e) => {
+                        if (!wrap.contains(e.target)) panel.style.display = 'none';
+                    });
+                }
+
+                function initAll() {
+                    document.querySelectorAll('.fk-combo').forEach(initFkCombo);
+                }
+
+                document.addEventListener('DOMContentLoaded', initAll);
+                initAll();
+
+                new MutationObserver(() => initAll())
+                    .observe(document.body, { childList: true, subtree: true });
+
+                // Validacion basica de "obligatorio" en el submit del formulario (los inputs hidden no la soportan de forma nativa)
+                document.addEventListener('submit', (e) => {
+                    const invalidos = Array.from(e.target.querySelectorAll?.('.fk-combo[data-required="1"]') || [])
+                        .filter(wrap => !wrap.querySelector('.fk-combo-value').value);
+                    invalidos.forEach(wrap => wrap.querySelector('.fk-combo-toggle').style.borderColor = '#f87171');
+                    if (invalidos.length) {
+                        e.preventDefault();
+                        invalidos[0].querySelector('.fk-combo-toggle').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }, true);
+            })();
+            </script>
+        @endonce
         @break
 
     @case('select')
-        <select id="campo_{{ $campo->name }}" name="{{ $campo->name }}" {{ $req }} class="{{ $base }}">
+        @php $enables = $campo->getExtraDirective('enables'); @endphp
+        <select id="campo_{{ $campo->name }}" name="{{ $campo->name }}" {{ $req }} class="{{ $base }}"
+                @if($enables) data-enables="{{ $enables }}" onchange="window.__fieldToggleEnables(this)" @endif>
             <option value="">— Selecciona —</option>
             @foreach($campo->getOptions() as $opcion)
                 <option value="{{ $opcion }}" {{ $valor === $opcion ? 'selected' : '' }}>{{ $opcion }}</option>
             @endforeach
         </select>
+        @if($enables)
+            @once
+                <script>
+                function __fieldToggleEnables(select) {
+                    var spec = select.dataset.enables;
+                    if (!spec) return;
+                    var parts = spec.split(':');
+                    var targetField = parts[0], activeValue = parts[1];
+                    var target = document.querySelector('[data-field="' + targetField + '"]');
+                    if (!target) return;
+                    var active = select.value === activeValue;
+                    target.classList.toggle('opacity-40', !active);
+                    target.classList.toggle('pointer-events-none', !active);
+                }
+                document.addEventListener('DOMContentLoaded', function () {
+                    document.querySelectorAll('[data-enables]').forEach(__fieldToggleEnables);
+                });
+                </script>
+            @endonce
+        @endif
         @break
 
     @case('multitabla')
@@ -130,6 +240,7 @@
              }"
              @click.outside="open = false"
              data-multitabla
+             data-field="{{ $campo->name }}"
              class="relative">
 
             {{-- Tags seleccionadas + input --}}
@@ -207,6 +318,7 @@
              }"
              @click.outside="open = false"
              data-multitabla
+             data-field="{{ $campo->name }}"
              class="relative">
 
             <div @click="$refs.input.focus(); open = filtered.length > 0"
