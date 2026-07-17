@@ -36,7 +36,26 @@ class BreezewaySyncTasksCommand extends Command
 
         $usuariosPorBreezeway = DB::table('vm_usuarios')
             ->whereNotNull('breezeway')
-            ->pluck('id', 'breezeway');
+            ->pluck('id', 'breezeway')
+            ->all(); // array puro y mutable: el auto-mapeo por email lo actualiza sobre la marcha
+
+        // Auto-mapeo por email: si un assignee_id no está en vm_usuarios.breezeway, se busca su email
+        // real en Breezeway y se compara contra vm_usuarios.mail — evita tener que rellenar el ID a
+        // mano cuando el alta en Opland ya se hizo con el mismo email que tiene en Breezeway.
+        $people = $this->fetchAllPeople($token);
+        $emailPorBreezewayId = [];
+        foreach ($people as $p) {
+            $email = strtolower(trim($p['emails'][0] ?? ''));
+            if ($email !== '') $emailPorBreezewayId[$p['id']] = $email;
+        }
+        $vmUsuariosPorEmail = [];
+        foreach (DB::table('vm_usuarios')
+            ->whereNull('breezeway')
+            ->whereNotNull('mail')
+            ->where(fn($q) => $q->whereNull('deleted')->orWhere('deleted', 0))
+            ->get(['id', 'mail']) as $u) {
+            $vmUsuariosPorEmail[strtolower(trim($u->mail))] = $u->id;
+        }
 
         $propiedades = DB::table('vm_propiedades')
             ->where('deleted', 0)
@@ -79,14 +98,19 @@ class BreezewaySyncTasksCommand extends Command
                     if (!$aid) continue;
                     if (isset($usuariosPorBreezeway[$aid])) {
                         $controlUserIds[] = (int) $usuariosPorBreezeway[$aid];
-                    } else {
-                        $nombreAsignado = trim($a['name'] ?? "Breezeway #{$aid}");
-                        $sinMapear[] = $nombreAsignado;
-                        if (!isset($pendientesVistos[$aid])) {
-                            $pendientesVistos[$aid] = ['nombre' => $nombreAsignado, 'count' => 0];
-                        }
-                        $pendientesVistos[$aid]['count']++;
+                        continue;
                     }
+                    $autoId = $this->resolverPorEmail($aid, $emailPorBreezewayId, $vmUsuariosPorEmail, $usuariosPorBreezeway);
+                    if ($autoId) {
+                        $controlUserIds[] = $autoId;
+                        continue;
+                    }
+                    $nombreAsignado = trim($a['name'] ?? "Breezeway #{$aid}");
+                    $sinMapear[] = $nombreAsignado;
+                    if (!isset($pendientesVistos[$aid])) {
+                        $pendientesVistos[$aid] = ['nombre' => $nombreAsignado, 'count' => 0];
+                    }
+                    $pendientesVistos[$aid]['count']++;
                 }
 
                 $estado = null;
@@ -101,20 +125,17 @@ class BreezewaySyncTasksCommand extends Command
                 }
 
                 $descripcion = trim((string) ($task['description'] ?? ''));
-                if (!empty($sinMapear)) {
-                    $nota = '[Breezeway] Sin asignar en Opland: ' . implode(', ', $sinMapear);
-                    $descripcion = $descripcion !== '' ? ($descripcion . "\n\n" . $nota) : $nota;
-                }
 
                 $data = [
-                    'nombre'             => $task['name'] ?? ('Tarea Breezeway #' . $task['id']),
-                    'descripcion'        => $descripcion !== '' ? $descripcion : null,
-                    'id_propiedades'     => $prop->id,
-                    'fecha_planificada'  => $task['scheduled_date'] ?? null,
-                    'fecha_finalizacion' => isset($task['finished_at']) ? substr($task['finished_at'], 0, 10) : null,
-                    'control_user'       => json_encode($controlUserIds),
-                    'breezeway_task_id'  => $task['id'],
-                    'updatedat'          => now(),
+                    'nombre'                     => '[B] ' . ($task['name'] ?? ('Tarea Breezeway #' . $task['id'])),
+                    'descripcion'                => $descripcion !== '' ? $descripcion : null,
+                    'usuario_breezeway_ausente'  => !empty($sinMapear) ? implode(', ', $sinMapear) : null,
+                    'id_propiedades'             => $prop->id,
+                    'fecha_planificada'          => $task['scheduled_date'] ?? null,
+                    'fecha_finalizacion'         => isset($task['finished_at']) ? substr($task['finished_at'], 0, 10) : null,
+                    'control_user'               => json_encode($controlUserIds),
+                    'breezeway_task_id'          => $task['id'],
+                    'updatedat'                  => now(),
                 ];
                 if ($estado !== null) {
                     $data['estado'] = $estado;
@@ -177,7 +198,7 @@ class BreezewaySyncTasksCommand extends Command
 
         // Segunda pasada: tareas que quedaron sin control_user por asignados sin mapear en su momento —
         // si ya se han dado de alta en Opland, se resuelven ahora sin esperar a que Breezeway "toque" la tarea de nuevo.
-        [$huerfanasResueltas, $impHuerfanas] = $this->resolverTareasHuerfanas($token, $usuariosPorBreezeway->all(), $pendientesVistos);
+        [$huerfanasResueltas, $impHuerfanas] = $this->resolverTareasHuerfanas($token, $usuariosPorBreezeway, $emailPorBreezewayId, $vmUsuariosPorEmail, $pendientesVistos);
         $imputacionesCreadas += $impHuerfanas;
 
         // Mantener vm_breezeway_pendientes: upsert de lo visto, borrar lo ya mapeado
@@ -206,7 +227,7 @@ class BreezewaySyncTasksCommand extends Command
         }
         // Los que ya no aparecen sin mapear (porque su breezeway id ya está en vm_usuarios.breezeway) se limpian
         DB::table('vm_breezeway_pendientes')
-            ->whereIn('breezeway_id', $usuariosPorBreezeway->keys())
+            ->whereIn('breezeway_id', array_keys($usuariosPorBreezeway))
             ->delete();
 
         Cache::forever('breezeway_sync_result', [
@@ -220,9 +241,9 @@ class BreezewaySyncTasksCommand extends Command
         Log::info("BreezewaySyncTasks: {$creadas} creadas, {$actualizadas} actualizadas, {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones, {$errores} errores.");
     }
 
-    // Tareas que quedaron con control_user vacío por asignados sin mapear en su momento (marcadas con la
-    // nota en descripcion). Se re-consultan una a una a Breezeway por si ya se puede resolver el mapeo.
-    private function resolverTareasHuerfanas(string $token, array $usuariosPorBreezeway, array &$pendientesAcumulados): array
+    // Tareas que quedaron con control_user vacío por asignados sin mapear en su momento (marcadas en
+    // usuario_breezeway_ausente). Se re-consultan una a una a Breezeway por si ya se puede resolver el mapeo.
+    private function resolverTareasHuerfanas(string $token, array &$usuariosPorBreezeway, array $emailPorBreezewayId, array &$vmUsuariosPorEmail, array &$pendientesAcumulados): array
     {
         $actualizadas = 0;
         $impCreadas = 0;
@@ -231,10 +252,10 @@ class BreezewaySyncTasksCommand extends Command
         foreach ($tablas as $tableName => $tipoImputacion) {
             $huerfanas = DB::table($tableName)
                 ->whereNotNull('breezeway_task_id')
-                ->whereNotNull('descripcion')
-                ->where('descripcion', '!=', '')
+                ->whereNotNull('usuario_breezeway_ausente')
+                ->where('usuario_breezeway_ausente', '!=', '')
                 ->whereRaw("control_user::text = '[]'")
-                ->get(['id', 'breezeway_task_id', 'descripcion']);
+                ->get(['id', 'breezeway_task_id']);
 
             foreach ($huerfanas as $t) {
                 $task = null;
@@ -258,29 +279,27 @@ class BreezewaySyncTasksCommand extends Command
                     if (!$aid) continue;
                     if (isset($usuariosPorBreezeway[$aid])) {
                         $controlUserIds[] = (int) $usuariosPorBreezeway[$aid];
-                    } else {
-                        $nombreAsignado = trim($a['name'] ?? "Breezeway #{$aid}");
-                        $sinMapear[] = $nombreAsignado;
-                        if (!isset($pendientesAcumulados[$aid])) {
-                            $pendientesAcumulados[$aid] = ['nombre' => $nombreAsignado, 'count' => 0];
-                        }
-                        $pendientesAcumulados[$aid]['count']++;
+                        continue;
                     }
+                    $autoId = $this->resolverPorEmail($aid, $emailPorBreezewayId, $vmUsuariosPorEmail, $usuariosPorBreezeway);
+                    if ($autoId) {
+                        $controlUserIds[] = $autoId;
+                        continue;
+                    }
+                    $nombreAsignado = trim($a['name'] ?? "Breezeway #{$aid}");
+                    $sinMapear[] = $nombreAsignado;
+                    if (!isset($pendientesAcumulados[$aid])) {
+                        $pendientesAcumulados[$aid] = ['nombre' => $nombreAsignado, 'count' => 0];
+                    }
+                    $pendientesAcumulados[$aid]['count']++;
                 }
 
                 if (empty($controlUserIds)) continue; // sigue sin poder resolverse, se deja como está
 
-                $original = $this->stripPendienteNote($t->descripcion);
-                $descripcion = $original;
-                if (!empty($sinMapear)) {
-                    $nota = '[Breezeway] Sin asignar en Opland: ' . implode(', ', $sinMapear);
-                    $descripcion = $descripcion !== '' ? ($descripcion . "\n\n" . $nota) : $nota;
-                }
-
                 DB::table($tableName)->where('id', $t->id)->update([
-                    'control_user' => json_encode($controlUserIds),
-                    'descripcion'  => $descripcion !== '' ? $descripcion : null,
-                    'updatedat'    => now(),
+                    'control_user'              => json_encode($controlUserIds),
+                    'usuario_breezeway_ausente' => !empty($sinMapear) ? implode(', ', $sinMapear) : null,
+                    'updatedat'                 => now(),
                 ]);
                 $actualizadas++;
 
@@ -315,16 +334,6 @@ class BreezewaySyncTasksCommand extends Command
         return [$actualizadas, $impCreadas];
     }
 
-    private function stripPendienteNote(?string $descripcion): string
-    {
-        if (!$descripcion) return '';
-        $marker = "\n\n[Breezeway] Sin asignar en Opland: ";
-        $pos = strpos($descripcion, $marker);
-        if ($pos !== false) return substr($descripcion, 0, $pos);
-        if (str_starts_with($descripcion, '[Breezeway] Sin asignar en Opland: ')) return '';
-        return $descripcion;
-    }
-
     // Breezeway devuelve total_time como string "H:MM:SS" (ej. "9:06:58"), no como numero de minutos
     private static function parseTotalTimeMinutes($raw): int
     {
@@ -335,6 +344,35 @@ class BreezewaySyncTasksCommand extends Command
             return (int) round(((int) $h * 3600 + (int) $i * 60 + (int) $s) / 60);
         }
         return 0;
+    }
+
+    // Intenta resolver un assignee_id sin mapear cruzando su email real de Breezeway contra
+    // vm_usuarios.mail. Si encuentra un usuario sin breezeway asignado con ese mismo email, lo
+    // mapea ahí mismo (persistido en BD) y lo añade a los mapas en memoria para el resto de la
+    // ejecución — así una misma persona no se vuelve a re-consultar en tareas siguientes.
+    private function resolverPorEmail(int $aid, array $emailPorBreezewayId, array &$vmUsuariosPorEmail, array &$usuariosPorBreezeway): ?int
+    {
+        $email = $emailPorBreezewayId[$aid] ?? null;
+        if (!$email || !isset($vmUsuariosPorEmail[$email])) return null;
+
+        $vmId = $vmUsuariosPorEmail[$email];
+        DB::table('vm_usuarios')->where('id', $vmId)->update([
+            'breezeway' => $aid,
+            'updatedat' => now(),
+        ]);
+        $usuariosPorBreezeway[$aid] = $vmId;
+        unset($vmUsuariosPorEmail[$email]); // no reutilizar el mismo email para otro assignee_id en esta misma ejecución
+        Log::info("BreezewaySyncTasks: auto-mapeado por email — breezeway_id={$aid} ({$email}) -> vm_usuarios#{$vmId}");
+        return $vmId;
+    }
+
+    // GET /people solo documenta el parámetro "status" — no pagina como /task (page/total_pages),
+    // así que se pide con un limit generoso en una sola llamada (la plantilla de personal es pequeña).
+    private function fetchAllPeople(string $token): array
+    {
+        $url  = 'https://api.breezeway.io/public/inventory/v1/people?' . http_build_query(['limit' => 500, 'offset' => 0]);
+        $resp = $this->curlJson($url, 'GET', ['Authorization: JWT ' . $token]);
+        return is_array($resp) && isset($resp[0]) ? $resp : ($resp['results'] ?? []);
     }
 
     private function fetchAllTasks(string $token, int $homeId, ?string $rangoFecha): array
