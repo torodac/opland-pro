@@ -18,6 +18,7 @@ use App\Http\Controllers\Vm\PygController;
 use App\Http\Controllers\Vm\LiquidacionController;
 use App\Http\Controllers\Vm\KmController;
 use App\Http\Controllers\Vm\NovacionesController;
+use App\Http\Controllers\Vm\InformeFinancieroController;
 
 // Autenticación
 Route::get('login', [LoginController::class, 'showLogin'])->name('login');
@@ -127,6 +128,8 @@ Route::middleware('auth')->group(function () {
         Route::middleware('vm.only')->group(function () {
 
         Route::get('calendario-reservas', [CalendarioReservasController::class, 'index'])->name('calendario-reservas');
+
+        Route::get('informe-financiero', [InformeFinancieroController::class, 'index'])->name('informe-financiero');
 
         Route::get('informe-imputaciones', [InformeImputacionesController::class, 'index'])->name('informe-imputaciones');
         Route::get('informe-imputaciones/pdf', [InformeImputacionesController::class, 'pdf'])->name('informe-imputaciones.pdf');
