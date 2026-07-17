@@ -77,11 +77,11 @@
       <p class="db-count" style="color:#0F6E56;">{{ $checkoutHoy->count() }}</p>
     </div>
     <div class="db-card">
-      <p class="db-title"><i class="ti ti-wash"></i> Tareas limpieza vencidas <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Tareas de limpieza con fecha planificada anterior a hoy que no tienen tiempo imputado.</span></span></p>
+      <p class="db-title"><i class="ti ti-wash"></i> Limpieza completada sin imputar <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Tareas de limpieza marcadas como Completada que no tienen ninguna imputación de tiempo registrada.</span></span></p>
       <p class="db-count" style="color:#854F0B;">{{ $tareasLimpieza->count() }}</p>
     </div>
     <div class="db-card">
-      <p class="db-title"><i class="ti ti-tool"></i> Tareas mant.+pisc. vencidas <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Tareas de mantenimiento y piscinas con fecha planificada anterior a hoy que no tienen tiempo imputado.</span></span></p>
+      <p class="db-title"><i class="ti ti-tool"></i> Mantenimiento completado sin imputar <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Tareas de mantenimiento marcadas como Completada que no tienen ninguna imputación de tiempo registrada.</span></span></p>
       <p class="db-count" style="color:#854F0B;">{{ $tareasMantPisc->count() }}</p>
     </div>
   </div>
@@ -423,20 +423,27 @@
     </div>
 
     @if($verLimpSinImp)
-    {{-- Tareas limpieza vencidas --}}
+    {{-- Tareas limpieza completadas sin imputar --}}
     <div class="db-card">
-      <p class="db-title"><i class="ti ti-wash"></i> Tareas limpieza vencidas sin imputar <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Tareas de limpieza con fecha planificada pasada que no tienen ninguna imputación registrada.</span></span></p>
+      <p class="db-title"><i class="ti ti-wash"></i> Limpieza completada sin imputar <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Tareas de limpieza marcadas como Completada que no tienen ninguna imputación registrada.</span></span></p>
       @if($tareasLimpieza->isEmpty())
-        <p class="empty">Sin tareas vencidas</p>
+        <p class="empty">Sin pendientes</p>
       @else
       <table class="db-table">
-        <thead><tr><th>Responsable</th><th>Propiedad</th><th>Planificada</th></tr></thead>
+        <thead><tr><th>Tarea</th><th>Responsables</th><th>Propiedad</th><th>Planificada</th></tr></thead>
         <tbody>
           @foreach($tareasLimpieza as $t)
           <tr>
-            <td>{{ $t->control_user_nombre }}</td>
+            <td><a href="{{ route('vm.tarea', [$project->slug, 'limpieza', $t->id]) }}" style="color:#111827;font-weight:600;text-decoration:none;">{{ $t->nombre }}</a></td>
+            <td>
+              @forelse($t->responsables as $r)
+                <span style="display:inline-block;background:#f3f4f6;color:#374151;font-size:11px;font-weight:500;padding:2px 8px;border-radius:999px;margin:1px 2px 1px 0;white-space:nowrap;">{{ $r }}</span>
+              @empty
+                <span style="color:#c1c5cb;">—</span>
+              @endforelse
+            </td>
             <td style="color:#888;">{{ $t->propiedad }}</td>
-            <td style="color:#dc3545;">{{ \Carbon\Carbon::parse($t->fecha_planificada)->translatedFormat('d M') }}</td>
+            <td style="color:#888;">{{ \Carbon\Carbon::parse($t->fecha_planificada)->translatedFormat('d M') }}</td>
           </tr>
           @endforeach
         </tbody>
@@ -449,20 +456,27 @@
   @endif
 
   @if($verMantSinImp)
-  {{-- Tareas mantenimiento + piscinas --}}
+  {{-- Tareas mantenimiento completadas sin imputar --}}
   <div class="db-card" style="margin-bottom:12px;">
-    <p class="db-title"><i class="ti ti-tool"></i> Tareas mantenimiento y piscinas vencidas sin imputar <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Tareas de mantenimiento y piscinas con fecha planificada pasada que no tienen ninguna imputación registrada.</span></span></p>
+    <p class="db-title"><i class="ti ti-tool"></i> Mantenimiento completado sin imputar <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Tareas de mantenimiento marcadas como Completada que no tienen ninguna imputación registrada.</span></span></p>
     @if($tareasMantPisc->isEmpty())
-      <p class="empty">Sin tareas vencidas</p>
+      <p class="empty">Sin pendientes</p>
     @else
     <table class="db-table">
-      <thead><tr><th>Tarea</th><th>Propiedad</th><th>Planificada</th></tr></thead>
+      <thead><tr><th>Tarea</th><th>Responsables</th><th>Propiedad</th><th>Planificada</th></tr></thead>
       <tbody>
         @foreach($tareasMantPisc as $t)
         <tr>
-          <td>{{ $t->nombre }}</td>
+          <td><a href="{{ route('vm.tarea', [$project->slug, 'mantenimiento', $t->id]) }}" style="color:#111827;font-weight:600;text-decoration:none;">{{ $t->nombre }}</a></td>
+          <td>
+            @forelse($t->responsables as $r)
+              <span style="display:inline-block;background:#f3f4f6;color:#374151;font-size:11px;font-weight:500;padding:2px 8px;border-radius:999px;margin:1px 2px 1px 0;white-space:nowrap;">{{ $r }}</span>
+            @empty
+              <span style="color:#c1c5cb;">—</span>
+            @endforelse
+          </td>
           <td style="color:#888;">{{ $t->propiedad }}</td>
-          <td style="color:#dc3545;">{{ \Carbon\Carbon::parse($t->fecha_planificada)->translatedFormat('d M') }}</td>
+          <td style="color:#888;">{{ \Carbon\Carbon::parse($t->fecha_planificada)->translatedFormat('d M') }}</td>
         </tr>
         @endforeach
       </tbody>

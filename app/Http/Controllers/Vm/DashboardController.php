@@ -153,44 +153,40 @@ class DashboardController extends Controller
             ->limit(50)
             ->get(['u.id as id_usuario', 'u.nombre as usuario', 'h.fecha', 'h.tipo']);
 
-        // ── Tareas limpieza vencidas sin imputación ──────────────────────────
-        $allUsuarios    = DB::table('vm_usuarios')->where('deleted', 0)->pluck('nombre', 'id');
+        // ── Tareas limpieza completadas sin imputación ───────────────────────
+        // Sustituye al antiguo criterio "vencida" (fecha pasada + tiempo vacio): ahora es
+        // estado=Completada (asignado por Breezeway o a mano) sin ninguna imputacion registrada.
+        $allUsuarios = DB::table('vm_usuarios')->where('deleted', 0)->pluck('nombre', 'id');
+        $sinImputacion = fn($tipo) => fn($q) => $q->from('vm_imputaciones as i')
+            ->where('i.tipo', $tipo)
+            ->whereColumn('i.id_tarea', 't.id');
+
+        $resolverResponsables = function ($t) use ($allUsuarios) {
+            $ids = json_decode($t->control_user ?? '[]', true) ?? [];
+            $t->responsables = collect($ids)->map(fn($id) => $allUsuarios[$id] ?? "#{$id}")->values();
+            return $t;
+        };
+
         $tareasLimpieza = DB::table('vm_tareas_limpieza as t')
             ->leftJoin('vm_propiedades as p', 'p.id', '=', 't.id_propiedades')
             ->where('t.deleted', 0)
-            ->where('t.fecha_planificada', '<', $hoy)
-            ->where(fn($q) => $q->whereNull('t.tiempo')->orWhere('t.tiempo', '00:00:00'))
+            ->where('t.estado', 'Completada')
+            ->whereNotExists($sinImputacion('limpieza'))
             ->orderBy('t.fecha_planificada')
             ->limit(50)
-            ->get(['t.id', 't.control_user', 't.fecha_planificada', 'p.nombre as propiedad'])
-            ->map(function ($t) use ($allUsuarios) {
-                $ids = json_decode($t->control_user ?? '[]', true) ?? [];
-                $t->control_user_nombre = collect($ids)
-                    ->map(fn($id) => $allUsuarios[$id] ?? "#{$id}")
-                    ->implode(', ') ?: '—';
-                return $t;
-            });
+            ->get(['t.id', 't.nombre', 't.control_user', 't.fecha_planificada', 'p.nombre as propiedad'])
+            ->map($resolverResponsables);
 
-        // ── Tareas mantenimiento + piscinas vencidas ─────────────────────────
-        $tareasMantenimiento = DB::table('vm_tareas_mantenimiento as t')
+        // ── Tareas mantenimiento completadas sin imputación (piscinas ya no aplica aqui) ──
+        $tareasMantPisc = DB::table('vm_tareas_mantenimiento as t')
             ->leftJoin('vm_propiedades as p', 'p.id', '=', 't.id_propiedades')
             ->where('t.deleted', 0)
-            ->where('t.fecha_planificada', '<', $hoy)
-            ->whereNull('t.master_duraciones')
+            ->where('t.estado', 'Completada')
+            ->whereNotExists($sinImputacion('mantenimiento'))
             ->orderBy('t.fecha_planificada')
-            ->limit(25)
-            ->get(['t.id', 't.nombre', 't.fecha_planificada', 'p.nombre as propiedad']);
-
-        $tareasPiscinas = DB::table('vm_tareas_piscinas as t')
-            ->leftJoin('vm_propiedades as p', 'p.id', '=', 't.id_propiedades')
-            ->where('t.deleted', 0)
-            ->where('t.fecha_planificada', '<', $hoy)
-            ->whereNull('t.master_duraciones')
-            ->orderBy('t.fecha_planificada')
-            ->limit(25)
-            ->get(['t.id', 't.nombre', 't.fecha_planificada', 'p.nombre as propiedad']);
-
-        $tareasMantPisc = $tareasMantenimiento->concat($tareasPiscinas)->sortBy('fecha_planificada')->values();
+            ->limit(50)
+            ->get(['t.id', 't.nombre', 't.control_user', 't.fecha_planificada', 'p.nombre as propiedad'])
+            ->map($resolverResponsables);
 
         // ── Personas de Breezeway sin usuario mapeado en Opland ──────────────
         $breezewayPendientes = DB::table('vm_breezeway_pendientes')

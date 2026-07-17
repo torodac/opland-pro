@@ -113,16 +113,15 @@ class BreezewaySyncTasksCommand extends Command
                     $pendientesVistos[$aid]['count']++;
                 }
 
-                $estado = null;
-                if ($tableName === 'vm_tareas_limpieza') {
-                    $code = $task['type_task_status']['code'] ?? null;
-                    $estado = match (true) {
-                        $code === 'finished'                       => 'Completada',
-                        in_array($code, ['cancelled', 'canceled'])  => 'Cancelada',
-                        !empty($controlUserIds)                     => 'Planificada',
-                        default                                     => 'Nueva',
-                    };
-                }
+                // estado: ambas tablas lo tienen ahora (vm_tareas_limpieza y vm_tareas_mantenimiento),
+                // mismo mapeo desde type_task_status.code de Breezeway.
+                $code = $task['type_task_status']['code'] ?? null;
+                $estado = match (true) {
+                    $code === 'finished'                       => 'Completada',
+                    in_array($code, ['cancelled', 'canceled'])  => 'Cancelada',
+                    !empty($controlUserIds)                     => 'Planificada',
+                    default                                     => 'Nueva',
+                };
 
                 $descripcion = trim((string) ($task['description'] ?? ''));
 
