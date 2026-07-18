@@ -106,7 +106,37 @@
         </div>
     </div>
 
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:16px;">
+        <div style="padding:14px 18px;border-bottom:1px solid #f3f4f6;">
+            <div style="font-size:13.5px;font-weight:700;color:#111827;">Puente de rentabilidad — {{ $anioActual }}</div>
+            <div style="font-size:11px;color:#9ca3af;margin-top:1px;">De Ingresos a Resultado del ejercicio, según la jerarquía de epígrafes de vm_pyg_cuentas</div>
+        </div>
+        <div class="card__pad">
+            @if(empty($waterfall))
+            <p style="font-size:12.5px;color:#9ca3af;margin:0;">Sin datos todavía.</p>
+            @else
+            <div style="height:320px;">
+                <canvas id="chart-waterfall"></canvas>
+            </div>
+            @endif
+        </div>
+    </div>
+
 </div>
+
+@if(!empty($waterfall))
+<script>
+    (function () {
+        var waterfall = @json($waterfall);
+        function pintar() { window.renderWaterfallPyg('chart-waterfall', waterfall); }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', pintar);
+        } else {
+            pintar();
+        }
+    })();
+</script>
+@endif
 
 <script>
 function setModoGrafico(modo){

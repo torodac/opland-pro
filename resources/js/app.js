@@ -57,7 +57,12 @@ function tooltipHtml(tooltip) {
         html += `<div style="font-weight:700;color:#111827;margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid #e5e7eb;">${t}</div>`;
     });
     tooltip.dataPoints.forEach((dp, i) => {
-        const color = dp.dataset.borderColor || dp.dataset.backgroundColor;
+        // dp.element.options.backgroundColor es el color YA RESUELTO para esta barra en concreto
+        // (necesario cuando el dataset define backgroundColor como array, un color por barra, como
+        // en el waterfall) — dp.dataset.* solo vale cuando el color es un unico string para todo el dataset.
+        const color = (dp.element && dp.element.options && dp.element.options.backgroundColor)
+            || dp.dataset.borderColor
+            || dp.dataset.backgroundColor;
         const linea = tooltip.body[i].lines[0];
         const sep = linea.indexOf(':');
         const nombre = sep === -1 ? linea : linea.slice(0, sep);
@@ -183,42 +188,162 @@ window.resizeInformeFinancieroChart = function (canvasId) {
     c.update('none');
 };
 
-// ───────────────────────── Informe operativo VM: propiedades por cluster ─────────────────────────
+// ───────────────────────── Informe operativo VM: propiedades por mes, apiladas por cluster ─────────────────────────
 
-window.renderInformeOperativoClusters = function (canvasId, data) {
+function hexToRgba(hex, alpha) {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.substring(0, 2), 16);
+    const g = parseInt(h.substring(2, 4), 16);
+    const b = parseInt(h.substring(4, 6), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+}
+
+window.renderInformeOperativoClusters = function (canvasId, categorias, series) {
     const canvas = document.getElementById(canvasId);
-    if (!canvas || !data || !data.length) return null;
+    if (!canvas || !series || !series.length) return null;
 
     if (opCharts[canvasId]) opCharts[canvasId].destroy();
+
+    // Un stack por año (anterior/actual) para que se vean como dos columnas apiladas lado a
+    // lado por mes; dentro de cada stack, un dataset por cluster con el mismo color en ambos
+    // años (el año anterior a menor opacidad, igual que en el informe financiero).
+    const datasets = series.map((s) => ({
+        label: `${s.cluster} ${s.anio}`,
+        data: s.valores,
+        backgroundColor: s.esActual ? s.color : hexToRgba(s.color, 0.35),
+        stack: s.esActual ? 'actual' : 'anterior',
+        maxBarThickness: 30,
+    }));
+
+    const chart = new Chart(canvas, {
+        type: 'bar',
+        data: { labels: categorias, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    enabled: false,
+                    external: tooltipExterno,
+                    filter: (ctx) => ctx.parsed.y !== null && ctx.parsed.y !== undefined && ctx.parsed.y !== 0,
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}`,
+                    },
+                },
+            },
+            scales: {
+                x: { stacked: true, grid: { display: false } },
+                y: { stacked: true, beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#f3f4f6' } },
+            },
+        },
+    });
+
+    opCharts[canvasId] = chart;
+    return chart;
+};
+
+// ───────────────────────── Puente de rentabilidad (waterfall): Ingresos → Resultado del ejercicio ─────────────────────────
+// Barras "flotantes" (data = [inicio, fin] en vez de un valor unico): los pasos "total"/"subtotal"/
+// "final" van de 0 al valor absoluto; los "delta" flotan entre el acumulado antes y despues de
+// sumarlos. Conectores punteados y etiquetas de valor se dibujan a mano via plugins de Chart.js,
+// porque no hay ningun tipo de grafico "waterfall" nativo.
+
+window.renderWaterfallPyg = function (canvasId, steps) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !steps || !steps.length) return null;
+
+    if (opCharts[canvasId]) opCharts[canvasId].destroy();
+
+    let running = 0;
+    const floatData = [];
+    const colors = [];
+
+    steps.forEach((s) => {
+        if (s.tipo === 'total' || s.tipo === 'subtotal' || s.tipo === 'final') {
+            running = s.valor;
+            floatData.push([0, running]);
+            colors.push(s.tipo === 'final' ? '#0f766e' : (s.tipo === 'subtotal' ? '#94a3b8' : '#2563eb'));
+        } else {
+            const inicio = running;
+            running += s.valor;
+            floatData.push([inicio, running]);
+            colors.push(s.valor >= 0 ? '#16a34a' : '#ef4444');
+        }
+    });
+
+    const conectores = {
+        id: 'waterfallConectores',
+        afterDatasetsDraw(chart) {
+            const meta = chart.getDatasetMeta(0);
+            const yScale = chart.scales.y;
+            const ctx = chart.ctx;
+            ctx.save();
+            ctx.strokeStyle = '#d1d5db';
+            ctx.setLineDash([3, 3]);
+            ctx.lineWidth = 1;
+            for (let i = 0; i < meta.data.length - 1; i++) {
+                const y = yScale.getPixelForValue(floatData[i][1]);
+                const barActual = meta.data[i];
+                const barSiguiente = meta.data[i + 1];
+                ctx.beginPath();
+                ctx.moveTo(barActual.x + barActual.width / 2, y);
+                ctx.lineTo(barSiguiente.x - barSiguiente.width / 2, y);
+                ctx.stroke();
+            }
+            ctx.restore();
+        },
+    };
+
+    const etiquetas = {
+        id: 'waterfallEtiquetas',
+        afterDatasetsDraw(chart) {
+            const meta = chart.getDatasetMeta(0);
+            const yScale = chart.scales.y;
+            const ctx = chart.ctx;
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.font = '700 11px sans-serif';
+            meta.data.forEach((bar, i) => {
+                const [a, b] = floatData[i];
+                const topPixel = yScale.getPixelForValue(Math.max(a, b));
+                ctx.fillStyle = colors[i];
+                ctx.fillText(formatearEuros(steps[i].valor), bar.x, topPixel - 8);
+            });
+            ctx.restore();
+        },
+    };
 
     const chart = new Chart(canvas, {
         type: 'bar',
         data: {
-            labels: data.map((d) => d.cluster),
+            labels: steps.map((s) => s.label),
             datasets: [{
-                label: 'Propiedades',
-                data: data.map((d) => d.n),
-                backgroundColor: '#f97316',
-                borderRadius: 4,
+                data: floatData,
+                backgroundColor: colors,
+                borderRadius: 3,
                 maxBarThickness: 60,
             }],
         },
+        plugins: [conectores, etiquetas],
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            layout: { padding: { top: 24 } },
             plugins: {
                 legend: { display: false },
                 tooltip: {
                     enabled: false,
                     external: tooltipExterno,
                     callbacks: {
-                        label: (ctx) => `Propiedades: ${ctx.parsed.y}`,
+                        label: (ctx) => `${steps[ctx.dataIndex].label}: ${formatearEuros(steps[ctx.dataIndex].valor)}`,
                     },
                 },
             },
             scales: {
                 x: { grid: { display: false } },
-                y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#f3f4f6' } },
+                y: { display: false, grid: { display: false } },
             },
         },
     });

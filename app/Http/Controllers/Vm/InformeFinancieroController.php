@@ -86,7 +86,58 @@ class InformeFinancieroController extends Controller
             'grupos'                => $grupos,
             'gruposInteranual'      => $gruposInteranual,
             'filtro'                => $filtro,
+            'waterfall'             => $this->waterfallPyg($anioActual, $idsFiltro),
         ]);
+    }
+
+    // ───────────────────────── Puente de rentabilidad (waterfall): Ingresos → Resultado del ejercicio ─────────────────────────
+    // Usa la jerarquía contable real de vm_pyg_cuentas (bloque/epígrafe del PGC), no categorías
+    // inventadas: epígrafe 1=ingresos, 4=aprovisionamientos, 6=personal, 7=otros gastos explotación,
+    // 8=amortización, 11+12=otros resultados (bloque A: Resultado de explotación); 13+15+17=resultado
+    // financiero (bloque B); 19=impuestos (bloque D: Resultado del ejercicio).
+    private function waterfallPyg(int $anio, ?array $idsPropiedades): array
+    {
+        $q = DB::table('vm_pyg_valores as v')
+            ->join('vm_pyg_cuentas as c', 'c.id', '=', 'v.id_cuenta')
+            ->whereRaw('EXTRACT(year FROM v.periodo) = ?', [$anio])
+            ->whereIn('v.periodo', function ($sub) {
+                $sub->select('periodo')->from('vm_pyg')->where('deleted', 0);
+            });
+
+        if ($idsPropiedades !== null) {
+            $q->whereIn('v.id_propiedades', $idsPropiedades);
+        }
+
+        $porEpigrafe = $q->selectRaw('c.epigrafe_codigo, SUM(v.importe) as importe')
+            ->groupBy('c.epigrafe_codigo')
+            ->pluck('importe', 'epigrafe_codigo');
+
+        $valor = fn(string ...$codigos) => array_sum(array_map(fn($cod) => (float) ($porEpigrafe[$cod] ?? 0), $codigos));
+
+        $ingresos     = $valor('1');
+        $aprovisiona  = $valor('4');
+        $personal     = $valor('6');
+        $otrosGastos  = $valor('7');
+        $amortizacion = $valor('8');
+        $otrosResult  = $valor('11', '12');
+        $resultExplot = $ingresos + $aprovisiona + $personal + $otrosGastos + $amortizacion + $otrosResult;
+
+        $financiero      = $valor('13', '15', '17');
+        $impuestos       = $valor('19');
+        $resultEjercicio = $resultExplot + $financiero + $impuestos;
+
+        return [
+            ['label' => 'Ingresos',                   'valor' => round($ingresos, 2),     'tipo' => 'total'],
+            ['label' => 'Aprovisionamientos',          'valor' => round($aprovisiona, 2),  'tipo' => 'delta'],
+            ['label' => 'Gastos de personal',          'valor' => round($personal, 2),     'tipo' => 'delta'],
+            ['label' => 'Otros gastos de explotación', 'valor' => round($otrosGastos, 2),  'tipo' => 'delta'],
+            ['label' => 'Amortización',                'valor' => round($amortizacion, 2), 'tipo' => 'delta'],
+            ['label' => 'Otros resultados',            'valor' => round($otrosResult, 2),  'tipo' => 'delta'],
+            ['label' => 'Resultado de explotación',    'valor' => round($resultExplot, 2), 'tipo' => 'subtotal'],
+            ['label' => 'Resultado financiero',        'valor' => round($financiero, 2),   'tipo' => 'delta'],
+            ['label' => 'Impuestos',                   'valor' => round($impuestos, 2),    'tipo' => 'delta'],
+            ['label' => 'Resultado del ejercicio',      'valor' => round($resultEjercicio, 2), 'tipo' => 'final'],
+        ];
     }
 
     // ───────────────────────── Filtro de propiedades: Todas / Constantes / Altas / Bajas ─────────────────────────
