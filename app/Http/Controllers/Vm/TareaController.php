@@ -84,6 +84,18 @@ class TareaController extends Controller
             $tipoOptions = array_values(array_filter(array_map('trim', explode(',', substr($tipoExtras, 4)))));
         }
 
+        // Opciones del campo Estado (select) desde admin_table_fields — guardado como lista
+        // separada por "|", sin prefijo "opt:" (formato heredado del campo estado de limpieza).
+        $estadoExtras = $ptId
+            ? DB::table('admin_table_fields')
+                ->where('project_table_id', $ptId)
+                ->where('name', 'estado')
+                ->value('extras')
+            : null;
+        $estadoOptions = $estadoExtras
+            ? array_values(array_filter(array_map('trim', explode('|', $estadoExtras))))
+            : [];
+
         // Filtro de usuarios disponibles para control_user
         $cuExtras = $ptId
             ? DB::table('admin_table_fields')
@@ -146,7 +158,7 @@ class TareaController extends Controller
             'usuarios', 'usuariosDisponibles', 'usuariosConImputaciones',
             'imputaciones', 'totalImputado',
             'badgeImp', 'tiempoPorUsuario', 'maxPorUsuario',
-            'tablaLabel', 'canEdit', 'tipoOptions'
+            'tablaLabel', 'canEdit', 'tipoOptions', 'estadoOptions'
         ));
     }
 
@@ -160,6 +172,7 @@ class TareaController extends Controller
             'nombre'           => 'required|string|max:255',
             'descripcion'      => 'nullable|string',
             'Tipo'             => 'nullable|string|max:100',
+            'estado'           => 'nullable|string|max:100',
             'fecha_planificada'=> 'nullable|date',
         ]);
 
@@ -401,7 +414,7 @@ class TareaController extends Controller
             ->leftJoinSub($impSub, 'imp', 'imp.id_tarea', '=', 't.id')
             ->leftJoinSub($fotoSub, 'f', 'f.tarea_id', '=', 't.id')
             ->select([
-                't.id', 't.nombre', 't.fecha_planificada', 't.control_user',
+                't.id', 't.nombre', 't.fecha_planificada', 't.control_user', 't.estado',
                 't.deleted', 't.hidden', 't.blocked',
                 'p.nombre as propiedad_nombre',
                 DB::raw('COALESCE(imp.total_min, 0) as total_min'),
@@ -443,28 +456,33 @@ class TareaController extends Controller
         }
 
         // Filtro por stat activo
+        $hoy  = now()->toDateString();
         $stat = $request->input('stat');
-        if ($stat === 'sin_imp') {
-            $query->whereRaw('COALESCE(imp.total_min, 0) = 0');
-        } elseif ($stat === 'pte_imp') {
-            $query->whereRaw('COALESCE(imp.imp_user_count, 0) < COALESCE(json_array_length(t.control_user::json), 0)')
-                  ->whereRaw('COALESCE(json_array_length(t.control_user::json), 0) > 0');
+        $noCerrada = fn($q) => $q->whereNull('t.estado')->orWhereNotIn('t.estado', ['Completada', 'Cancelada', 'Descartada']);
+        if ($stat === 'vigentes') {
+            $query->where($noCerrada);
+        } elseif ($stat === 'vencidas') {
+            $query->where('t.estado', 'Vencida');
+        } elseif ($stat === 'no_imputadas') {
+            $query->where('t.estado', 'Completada')->whereRaw('COALESCE(imp.total_min, 0) = 0');
+        } elseif ($stat === 'propias') {
+            $query->whereNull('t.breezeway_task_id');
         }
 
         $tareas = $query->orderByRaw('t.fecha_planificada ASC NULLS LAST, t.id DESC')->paginate(25)->withQueryString();
 
         // Stats (base limpia: sin borrados, sin ocultos, sin filtro de stat)
+        // "Vigentes"/"vencidas" ya excluyen Completada/Cancelada porque esas se ocultan solas
+        // en cuanto tienen imputacion (o siempre, si Cancelada) durante el sync de Breezeway.
         $statsBase = fn() => DB::table($tabla . ' as t')
             ->where('t.deleted', 0)
             ->where(fn($q) => $q->whereNull('t.hidden')->orWhere('t.hidden', 0))
             ->leftJoinSub(clone $impSub, 'imp', 'imp.id_tarea', '=', 't.id');
 
-        $totalTramite = $statsBase()->count();
-        $sinImp       = $statsBase()->whereRaw('COALESCE(imp.total_min, 0) = 0')->count();
-        $pteImp       = $statsBase()
-            ->whereRaw('COALESCE(imp.imp_user_count, 0) < COALESCE(json_array_length(t.control_user::json), 0)')
-            ->whereRaw('COALESCE(json_array_length(t.control_user::json), 0) > 0')
-            ->count();
+        $vigentes    = $statsBase()->where($noCerrada)->count();
+        $vencidas    = $statsBase()->where('t.estado', 'Vencida')->count();
+        $noImputadas = $statsBase()->where('t.estado', 'Completada')->whereRaw('COALESCE(imp.total_min, 0) = 0')->count();
+        $propias     = $statsBase()->whereNull('t.breezeway_task_id')->count();
 
         $colores = [
             'limpieza'      => ['bg' => '#E6F1FB', 'bd' => '#378ADD', 'tx' => '#0C447C'],
@@ -476,9 +494,9 @@ class TareaController extends Controller
         $tipoIcon  = ['limpieza' => 'ti-sparkles', 'mantenimiento' => 'ti-tool', 'piscina' => 'ti-droplet'][$tipo];
 
         return view('vm.tareas_list', compact(
-            'project', 'tipo', 'tableName', 'tareas',
+            'project', 'tipo', 'tableName', 'tareas', 'propias',
             'allUsuarios', 'usuariosMap', 'propiedades',
-            'totalTramite', 'sinImp', 'pteImp',
+            'vigentes', 'vencidas', 'noImputadas',
             'canEdit', 'c', 'tipoLabel', 'tipoIcon', 'stat'
         ));
     }

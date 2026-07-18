@@ -3,7 +3,6 @@
         if ($min <= 0) return '—';
         return intdiv($min, 60) . 'h ' . str_pad($min % 60, 2, '0', STR_PAD_LEFT) . 'm';
     }
-    $today = date('Y-m-d');
     $hasFilters = request()->hasAny(['q','f_propiedad','f_fecha_desde','f_fecha_hasta','f_responsable']);
     $filterKeys = ['q','f_propiedad','f_fecha_desde','f_fecha_hasta','f_responsable','stat','borrados','ocultos'];
     $listUrl = fn($extra=[]) => route('vm.tarea.list', array_filter(array_merge(['project'=>$project->slug,'tipo'=>$tipo], request()->only($filterKeys), $extra), fn($v) => $v !== null));
@@ -79,22 +78,29 @@
 {{-- ── STATS ── --}}
 <div class="flex gap-3 mb-4 flex-wrap">
 
-    <a href="{{ $listUrl(['stat' => $stat === 'sin_imp' ? null : 'sin_imp', 'page' => null]) }}"
-       class="tl-stat {{ $stat === 'sin_imp' ? 'active' : '' }}">
-        <span class="tl-stat-num">{{ $sinImp }}</span>
-        <span class="tl-stat-lbl">Sin imputar <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;opacity:0.6;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Tareas en trámite sin ninguna imputación de tiempo registrada.</span></span></span>
+    <a href="{{ $listUrl(['stat' => $stat === 'vigentes' ? null : 'vigentes', 'page' => null]) }}"
+       class="tl-stat {{ $stat === 'vigentes' ? 'active' : '' }}">
+        <span class="tl-stat-num">{{ $vigentes }}</span>
+        <span class="tl-stat-lbl">Vigentes <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;opacity:0.6;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Tareas en estado distinto de Completada o Cancelada.</span></span></span>
     </a>
 
-    <a href="{{ $listUrl(['stat' => $stat === 'pte_imp' ? null : 'pte_imp', 'page' => null]) }}"
-       class="tl-stat {{ $stat === 'pte_imp' ? 'active' : '' }}">
-        <span class="tl-stat-num">{{ $pteImp }}</span>
-        <span class="tl-stat-lbl">Pendientes de completar <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;opacity:0.6;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Tareas con al menos un responsable que aún no ha imputado tiempo.</span></span></span>
+    <a href="{{ $listUrl(['stat' => $stat === 'vencidas' ? null : 'vencidas', 'page' => null]) }}"
+       class="tl-stat {{ $stat === 'vencidas' ? 'active' : '' }}">
+        <span class="tl-stat-num">{{ $vencidas }}</span>
+        <span class="tl-stat-lbl">Vencidas <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;opacity:0.6;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Fecha de planificación anterior a hoy y estado distinto de Completada o Cancelada.</span></span></span>
     </a>
 
-    <div class="tl-stat" style="cursor:default">
-        <span class="tl-stat-num">{{ $totalTramite }}</span>
-        <span class="tl-stat-lbl">En trámite <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;opacity:0.6;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Total de tareas activas (no borradas, no ocultas).</span></span></span>
-    </div>
+    <a href="{{ $listUrl(['stat' => $stat === 'no_imputadas' ? null : 'no_imputadas', 'page' => null]) }}"
+       class="tl-stat {{ $stat === 'no_imputadas' ? 'active' : '' }}">
+        <span class="tl-stat-num">{{ $noImputadas }}</span>
+        <span class="tl-stat-lbl">No imputadas <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;opacity:0.6;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Tareas en estado Completada sin ninguna imputación de tiempo registrada.</span></span></span>
+    </a>
+
+    <a href="{{ $listUrl(['stat' => $stat === 'propias' ? null : 'propias', 'page' => null]) }}"
+       class="tl-stat {{ $stat === 'propias' ? 'active' : '' }}">
+        <span class="tl-stat-num">{{ $propias }}</span>
+        <span class="tl-stat-lbl">Tareas Opland <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;opacity:0.6;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Tareas creadas directamente en Opland, sin vínculo con Breezeway.</span></span></span>
+    </a>
 
 </div>
 
@@ -244,12 +250,16 @@
     @php
         $cuIds    = json_decode($tarea->control_user ?? '[]', true) ?? [];
         $impIds   = json_decode($tarea->imp_user_ids, true) ?? [];
-        $cuCount  = count($cuIds);
-        $impCount = count(array_filter($cuIds, fn($uid) => in_array($uid, $impIds)));
-        $vencida  = $tarea->fecha_planificada && $tarea->fecha_planificada < $today && $tarea->deleted == 0;
-        $estado   = 'pendiente';
-        if ($cuCount > 0 && $impCount === $cuCount) $estado = 'finalizado';
-        elseif ($impCount > 0) $estado = 'parcial';
+        $vencida  = $tarea->estado === 'Vencida';
+        $estadoBadgeColores = [
+            'Nueva'       => ['bg'=>'#f5f5f5','tx'=>'#999'],
+            'Planificada' => ['bg'=>'#E6F1FB','tx'=>'#0C447C'],
+            'Vencida'     => ['bg'=>'#FAEEDA','tx'=>'#92400e'],
+            'Completada'  => ['bg'=>'#EAF3DE','tx'=>'#27500A'],
+            'Cancelada'   => ['bg'=>'#fee2e2','tx'=>'#991b1b'],
+            'Descartada'  => ['bg'=>'#ede9fe','tx'=>'#5b21b6'],
+        ];
+        $estadoBadge = $estadoBadgeColores[$tarea->estado] ?? ['bg'=>'#f5f5f5','tx'=>'#999'];
         $fechaFmt = $tarea->fecha_planificada ? \Carbon\Carbon::parse($tarea->fecha_planificada)->locale('es')->isoFormat('D/MMM') : '—';
         $formUrl  = route('vm.tarea', ['project'=>$project->slug,'tipo'=>$tipo,'id'=>$tarea->id]);
         $rowBg    = $tarea->deleted ? 'opacity-50' : ($tarea->hidden ? 'bg-amber-50/40' : '');
@@ -259,13 +269,7 @@
         {{-- Fecha + Estado --}}
         <td class="px-4 py-2 whitespace-nowrap">
             <div class="text-xs font-semibold text-gray-700">{{ $fechaFmt }}</div>
-            @if($estado === 'finalizado')
-                <span class="tl-badge" style="background:#d1fae5;color:#065f46">Finalizado</span>
-            @elseif($estado === 'parcial')
-                <span class="tl-badge" style="background:#fef3c7;color:#92400e">Parcial</span>
-            @else
-                <span class="tl-badge {{ $vencida ? 'vencida' : '' }}">{{ $vencida ? 'Vencida' : 'Pendiente' }}</span>
-            @endif
+            <span class="tl-badge" style="background:{{ $estadoBadge['bg'] }};color:{{ $estadoBadge['tx'] }}">{{ $tarea->estado ?? '—' }}</span>
         </td>
 
         {{-- Propiedad --}}

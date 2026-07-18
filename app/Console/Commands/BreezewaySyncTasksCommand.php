@@ -113,15 +113,29 @@ class BreezewaySyncTasksCommand extends Command
                     $pendientesVistos[$aid]['count']++;
                 }
 
-                // estado: ambas tablas lo tienen ahora (vm_tareas_limpieza y vm_tareas_mantenimiento),
-                // mismo mapeo desde type_task_status.code de Breezeway.
-                $code = $task['type_task_status']['code'] ?? null;
+                // estado: ambas tablas lo tienen ahora (vm_tareas_limpieza y vm_tareas_mantenimiento).
+                // Usamos "stage" (no "code") para Completada porque Breezeway tiene varios
+                // codigos distintos con stage=finished (finished, approved, closed, y quizas
+                // otros que no hemos visto todavia) -- comprobado empiricamente que 'approved'
+                // y 'closed' se nos escapaban usando solo code === 'finished'.
+                $code  = $task['type_task_status']['code'] ?? null;
+                $stage = $task['type_task_status']['stage'] ?? null;
                 $estado = match (true) {
-                    $code === 'finished'                       => 'Completada',
+                    $stage === 'finished'                       => 'Completada',
                     in_array($code, ['cancelled', 'canceled'])  => 'Cancelada',
                     !empty($controlUserIds)                     => 'Planificada',
                     default                                     => 'Nueva',
                 };
+                // Espejo informativo del type_task_status crudo de Breezeway (code/stage), para
+                // depurar diferencias con nuestro estado calculado sin tener que llamar a la API.
+                $estadoBreezeway = ($code !== null) ? "{$code} ({$stage})" : null;
+                // Vencida: no cerrada (ni Completada ni Cancelada) y con fecha de
+                // planificacion ya pasada. Se recalcula en cada sync, igual que el resto.
+                if (!in_array($estado, ['Completada', 'Cancelada'], true)
+                    && !empty($task['scheduled_date'])
+                    && $task['scheduled_date'] < now()->toDateString()) {
+                    $estado = 'Vencida';
+                }
 
                 $descripcion = trim((string) ($task['description'] ?? ''));
 
@@ -134,6 +148,8 @@ class BreezewaySyncTasksCommand extends Command
                     'fecha_finalizacion'         => isset($task['finished_at']) ? substr($task['finished_at'], 0, 10) : null,
                     'control_user'               => json_encode($controlUserIds),
                     'breezeway_task_id'          => $task['id'],
+                    'estado_breezeway'           => $estadoBreezeway,
+                    'hidden'                     => 0,
                     'updatedat'                  => now(),
                 ];
                 if ($estado !== null) {
@@ -155,7 +171,6 @@ class BreezewaySyncTasksCommand extends Command
                     $actualizadas++;
                 } else {
                     $data['deleted']    = 0;
-                    $data['hidden']     = 0;
                     $data['blocked']    = 0;
                     $data['createuser'] = 1;
                     $data['createdat']  = now();
@@ -229,6 +244,44 @@ class BreezewaySyncTasksCommand extends Command
             ->whereIn('breezeway_id', array_keys($usuariosPorBreezeway))
             ->delete();
 
+        // Descartada: sin noticias de Breezeway desde hace 15 dias (ni actualizacion ni
+        // fecha planificada) y sin estado de cierre ya asignado. Solo tareas con vinculo
+        // real a Breezeway -- una tarea creada a mano en Opland no depende de el y no
+        // debe descartarse solo por no haberse tocado.
+        $limiteSilencio = now()->subDays(15);
+        $descartadas = 0;
+        foreach (['vm_tareas_limpieza', 'vm_tareas_mantenimiento'] as $tabla) {
+            $descartadas += DB::table($tabla)
+                ->where('deleted', 0)
+                ->whereNotNull('breezeway_task_id')
+                ->whereNotIn('estado', ['Completada', 'Cancelada', 'Descartada'])
+                ->where('updatedat', '<', $limiteSilencio)
+                ->where('fecha_planificada', '<', $limiteSilencio->toDateString())
+                ->update(['estado' => 'Descartada', 'updatedat' => now()]);
+        }
+
+        // Ocultar automaticamente: Cancelada y Descartada (siempre), o Completada con al
+        // menos una imputacion ya registrada (limpieza/mantenimiento) — deja visibles en
+        // el listado por defecto solo las que de verdad necesitan atencion humana.
+        $ocultadas = 0;
+        foreach (['vm_tareas_limpieza' => 'limpieza', 'vm_tareas_mantenimiento' => 'mantenimiento'] as $tabla => $tipoImp) {
+            $ocultadas += DB::table($tabla)
+                ->where('deleted', 0)
+                ->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))
+                ->where(function ($q) use ($tabla, $tipoImp) {
+                    $q->whereIn('estado', ['Cancelada', 'Descartada'])
+                      ->orWhere(function ($q2) use ($tabla, $tipoImp) {
+                          $q2->where('estado', 'Completada')
+                             ->whereExists(function ($sub) use ($tabla, $tipoImp) {
+                                 $sub->from('vm_imputaciones as i')
+                                     ->where('i.tipo', $tipoImp)
+                                     ->whereColumn('i.id_tarea', $tabla . '.id');
+                             });
+                      });
+                })
+                ->update(['hidden' => 1, 'updatedat' => now()]);
+        }
+
         Cache::forever('breezeway_sync_result', [
             'fecha'       => now()->format('d/m/Y H:i'),
             'creadas'     => $creadas,
@@ -236,8 +289,8 @@ class BreezewaySyncTasksCommand extends Command
             'errores'     => $errores,
         ]);
 
-        $this->info("Resultado: {$creadas} creadas, {$actualizadas} actualizadas, {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones, {$errores} errores de propiedad.");
-        Log::info("BreezewaySyncTasks: {$creadas} creadas, {$actualizadas} actualizadas, {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones, {$errores} errores.");
+        $this->info("Resultado: {$creadas} creadas, {$actualizadas} actualizadas, {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones, {$descartadas} descartadas, {$ocultadas} ocultadas, {$errores} errores de propiedad.");
+        Log::info("BreezewaySyncTasks: {$creadas} creadas, {$actualizadas} actualizadas, {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones, {$descartadas} descartadas, {$ocultadas} ocultadas, {$errores} errores.");
     }
 
     // Tareas que quedaron con control_user vacío por asignados sin mapear en su momento (marcadas en

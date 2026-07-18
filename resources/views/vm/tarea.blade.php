@@ -12,6 +12,16 @@ $c = $colores[$tipo];
 $tipoLabel = ['limpieza'=>'Limpieza','mantenimiento'=>'Mantenimiento','piscina'=>'Piscinas'][$tipo];
 $tipoIcon  = ['limpieza'=>'ti-sparkles','mantenimiento'=>'ti-tool','piscina'=>'ti-droplet'][$tipo];
 $tipoCurrent = $tarea->Tipo ?? null;
+$estadoCurrent = $tarea->estado ?? null;
+$estadoColores = [
+    'Nueva'       => ['bg'=>'#f5f5f5','bd'=>'#ddd','tx'=>'#999','icon'=>'ti-circle-dashed'],
+    'Planificada' => ['bg'=>'#E6F1FB','bd'=>'#378ADD','tx'=>'#0C447C','icon'=>'ti-calendar-event'],
+    'Vencida'     => ['bg'=>'#FAEEDA','bd'=>'#EF9F27','tx'=>'#633806','icon'=>'ti-alert-triangle'],
+    'Completada'  => ['bg'=>'#EAF3DE','bd'=>'#7BBF50','tx'=>'#27500A','icon'=>'ti-circle-check'],
+    'Cancelada'   => ['bg'=>'#fee2e2','bd'=>'#fca5a5','tx'=>'#991b1b','icon'=>'ti-circle-x'],
+    'Descartada'  => ['bg'=>'#ede9fe','bd'=>'#c4b5fd','tx'=>'#5b21b6','icon'=>'ti-archive'],
+];
+$estadoStyle = $estadoColores[$estadoCurrent] ?? ['bg'=>'#f5f5f5','bd'=>'#ddd','tx'=>'#999','icon'=>'ti-help-circle'];
 $listadoTable = $tablaLabel[$tipo];
 $urlUpdate    = route('vm.tarea.update',          [$project->slug, $tipo, $tarea->id]);
 $urlAsignados = route('vm.tarea.asignados',        [$project->slug, $tipo, $tarea->id]);
@@ -164,9 +174,16 @@ $csrf         = csrf_token();
           @endif
         </div>
         <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;justify-content:flex-end;flex-shrink:0">
+          @if ($tipoCurrent)
           <span class="fbadge" style="background:{{ $c['bg'] }};border:0.5px solid {{ $c['bd'] }};color:{{ $c['tx'] }}">
-            <i class="ti {{ $tipoIcon }}" style="font-size:10px"></i>{{ $tipoCurrent ?? $tipoLabel }}
+            <i class="ti {{ $tipoIcon }}" style="font-size:10px"></i>{{ $tipoCurrent }}
           </span>
+          @endif
+          @if ($estadoCurrent)
+          <span class="fbadge" style="background:{{ $estadoStyle['bg'] }};border:0.5px solid {{ $estadoStyle['bd'] }};color:{{ $estadoStyle['tx'] }}">
+            <i class="ti {{ $estadoStyle['icon'] }}" style="font-size:10px"></i>{{ $estadoCurrent }}
+          </span>
+          @endif
           @if ($badgeImp === 'sin_imputar')
             <span class="fbadge" style="background:#f5f5f5;border:0.5px solid #ddd;color:#999"><i class="ti ti-clock-pause" style="font-size:10px"></i>Sin imputar</span>
           @elseif ($badgeImp === 'parcial')
@@ -200,6 +217,16 @@ $csrf         = csrf_token();
               @endforeach
             </select>
           </div>
+          @if (count($estadoOptions))
+          <div>
+            <div style="font-size:11px;color:#999;margin-bottom:4px">Estado</div>
+            <select id="e-estado" class="f-input" style="width:150px">
+              @foreach ($estadoOptions as $opt)
+                <option value="{{ $opt }}" {{ $estadoCurrent === $opt ? 'selected' : '' }}>{{ $opt }}</option>
+              @endforeach
+            </select>
+          </div>
+          @endif
         </div>
       </div>
     </div>
@@ -839,6 +866,7 @@ async function guardar() {
       body: JSON.stringify({
         nombre:            document.getElementById('e-nombre')?.value ?? '',
         Tipo:              document.getElementById('e-tipo')?.value || null,
+        estado:            document.getElementById('e-estado')?.value || null,
         fecha_planificada: document.getElementById('e-fecha')?.value || null,
         descripcion:       document.getElementById('e-descripcion')?.value || null,
       })
