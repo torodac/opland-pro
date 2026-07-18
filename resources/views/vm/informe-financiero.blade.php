@@ -135,9 +135,11 @@ function setModoGrafico(modo){
     if (esInter) {
         title.textContent = 'Ingresos y gastos — últimos 12 meses (interanual)';
         hint.textContent  = 'vm_pyg.importe_ingresos / importe_gastos · ventana móvil: el último mes del eje es siempre el mes más reciente con datos · línea = beneficio acumulado de la ventana';
+        if (window.resizeInformeFinancieroChart) window.resizeInformeFinancieroChart('chart-interanual');
     } else {
         title.textContent = 'Ingresos y gastos por mes — {{ $anioActual }} vs {{ $anioActual - 1 }}';
         hint.textContent  = 'vm_pyg.importe_ingresos / importe_gastos, agrupado por mes natural · eje = mes, no fecha continua · líneas = beneficio acumulado por ejercicio';
+        if (window.resizeInformeFinancieroChart) window.resizeInformeFinancieroChart('chart-ejercicio');
     }
 
     // Los contadores de Constantes/Altas/Bajas cambian: se recalculan sobre el Ejercicio

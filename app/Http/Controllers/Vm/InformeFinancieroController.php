@@ -292,10 +292,14 @@ class InformeFinancieroController extends Controller
         return $this->renderizarGrafico(
             categorias: self::MESES,
             grupos: $grupos,
-            lineas: array_filter([
+            // array_values(): array_filter() no reindexa las claves — si no hay datos del año
+            // anterior (p.ej. 2024 vacío), el elemento superviviente se queda con la clave 1 y
+            // json_encode() lo serializa como objeto {"1":...} en vez de array, rompiendo el
+            // g.lineas.forEach() del lado JS.
+            lineas: array_values(array_filter([
                 !empty($lineaAnterior) ? ['valores' => $lineaAnterior, 'color' => '#9ca3af', 'dashed' => true,  'label' => "Acum. {$anioAnterior}"] : null,
                 !empty($lineaActual)   ? ['valores' => $lineaActual,   'color' => '#1d4ed8', 'dashed' => false, 'label' => "Acum. {$anioActual}", 'destacarUltimo' => true, 'etiquetaUltimo' => "{$anioActual} →"] : null,
-            ]),
+            ])),
         );
     }
 
@@ -380,7 +384,7 @@ class InformeFinancieroController extends Controller
         );
     }
 
-    // ───────────────────────── Renderizador SVG genérico (escala dinámica, sin valores hardcodeados) ─────────────────────────
+    // ───────────────────────── Datos para Chart.js (barras agrupadas + línea(s) de acumulado) ─────────────────────────
 
     private function renderizarGrafico(array $categorias, array $grupos, array $lineas, ?int $mesActualIndex = null): array
     {
@@ -388,15 +392,20 @@ class InformeFinancieroController extends Controller
             return ['vacio' => true];
         }
 
-        $n = count($categorias);
+        $serie = fn(string $clave, string $concepto) => array_map(
+            fn($g) => $g[$clave] ? round(abs($g[$clave][$concepto]), 2) : null,
+            $grupos
+        );
 
-        // Dos escalas independientes, mismo origen (y=0 compartido): izquierda para las barras
-        // mensuales, derecha para la(s) línea(s) de acumulado — magnitudes muy distintas con el tiempo.
+        // Dos escalas independientes (barras a la izquierda, líneas a la derecha) pero con el
+        // mismo cero: las barras nunca son negativas, pero si la línea de acumulado baja de
+        // cero necesita hueco visual por debajo — se lo damos también al eje de barras (aunque
+        // ahí nunca haya dato) para que ambos ceros caigan en el mismo píxel del eje horizontal.
         $maxBarras = 0.0;
-        foreach ($grupos as $g) {
+        foreach ($grupos as $grupo) {
             foreach (['anterior', 'actual'] as $k) {
-                if ($g[$k]) {
-                    $maxBarras = max($maxBarras, abs($g[$k]['ingresos']), abs($g[$k]['gastos']));
+                if ($grupo[$k]) {
+                    $maxBarras = max($maxBarras, abs($grupo[$k]['ingresos']), abs($grupo[$k]['gastos']));
                 }
             }
         }
@@ -412,96 +421,60 @@ class InformeFinancieroController extends Controller
         }
         if ($maxLinea <= 0) $maxLinea = 1.0;
 
-        $plotLeft  = 55;
-        $plotRight = 855;
-        $plotWidth = $plotRight - $plotLeft;
-        $catWidth  = $plotWidth / $n;
+        // Redondeamos a "pasos bonitos" (200k, 500k, 1M...) en vez de cortar justo en el dato
+        // real: si no, la última línea de referencia del eje sale con un número feo (el máximo
+        // exacto de los datos) en lugar de la siguiente marca redonda por encima.
+        $pasoLinea    = $this->pasoBonito($maxLinea - $minLinea);
+        $maxLineaNice = ceil($maxLinea / $pasoLinea) * $pasoLinea;
+        $minLineaNice = $minLinea < 0 ? floor($minLinea / $pasoLinea) * $pasoLinea : 0.0;
 
-        $yTop            = 20;
-        $alturaPositiva  = 180;
-        $pxPorUnidad     = $alturaPositiva / $maxBarras;  // escala izquierda (barras)
-        $pxPorUnidadLinea = $alturaPositiva / $maxLinea;  // escala derecha (líneas)
-        $yZero           = $yTop + $alturaPositiva;
-        $alturaNegativa  = $minLinea < 0 ? (abs($minLinea) * $pxPorUnidadLinea) + 8 : 0;
-        $yEjes           = $yZero + $alturaNegativa + 22;
-        $viewBoxAlto     = (int) ceil($yEjes + 12);
+        // Misma proporción de hueco negativo que en el eje de líneas (ya redondeado), aplicada
+        // al eje de barras — así ambos ceros siguen cayendo en el mismo píxel del eje horizontal.
+        $ratio = ($maxLineaNice - $minLineaNice) > 0 ? (-$minLineaNice) / ($maxLineaNice - $minLineaNice) : 0.0;
 
-        $slotW = min(12, $catWidth * 0.16);
-        $gap   = $slotW * 0.15;
-        $anchoGrupo = $slotW * 4 + $gap * 3;
-
-        $barras = [];
-        $centrosX = [];
-        foreach ($grupos as $i => $g) {
-            $centroX = $plotLeft + $catWidth * $i + $catWidth / 2;
-            $centrosX[$i] = $centroX;
-            $inicioX = $centroX - $anchoGrupo / 2;
-
-            $slots = [
-                ['serie' => 'anterior', 'concepto' => 'ingresos', 'color' => '#f97316'],
-                ['serie' => 'anterior', 'concepto' => 'gastos',   'color' => '#374151'],
-                ['serie' => 'actual',   'concepto' => 'ingresos', 'color' => '#f97316'],
-                ['serie' => 'actual',   'concepto' => 'gastos',   'color' => '#374151'],
-            ];
-            foreach ($slots as $s => $slot) {
-                $datos = $g[$slot['serie']];
-                if (!$datos) continue;
-                $valor = abs($datos[$slot['concepto']]);
-                if ($valor <= 0) continue;
-                $alto = $valor * $pxPorUnidad;
-                $barras[] = [
-                    'x'       => round($inicioX + $s * ($slotW + $gap), 1),
-                    'y'       => round($yZero - $alto, 1),
-                    'w'       => round($slotW, 1),
-                    'h'       => round($alto, 1),
-                    'color'   => $slot['color'],
-                    'opacity' => $slot['serie'] === 'anterior' ? 0.35 : 1,
-                ];
-            }
-        }
-
-        $lineasRender = [];
-        foreach ($lineas as $l) {
-            if (empty($l['valores'])) continue;
-            $puntos = [];
-            foreach ($l['valores'] as $idx => $valor) {
-                $puntos[] = ['x' => round($centrosX[$idx], 1), 'y' => round($yZero - $valor * $pxPorUnidadLinea, 1)];
-            }
-            $lineasRender[] = [
-                'points'         => implode(' ', array_map(fn($p) => "{$p['x']},{$p['y']}", $puntos)),
-                'color'          => $l['color'],
-                'dashed'         => $l['dashed'],
-                'label'          => $l['label'],
-                'puntos'         => $puntos,
-                'destacarUltimo' => $l['destacarUltimo'] ?? false,
-                'etiquetaUltimo' => $l['etiquetaUltimo'] ?? null,
-            ];
-        }
+        $pasoBarras    = $this->pasoBonito($maxBarras);
+        $maxBarrasNice = ceil($maxBarras / $pasoBarras) * $pasoBarras;
+        $minBarrasNice = $ratio > 0 ? -($ratio / (1 - $ratio)) * $maxBarrasNice : 0.0;
 
         return [
-            'vacio'             => false,
-            'viewBoxAlto'       => $viewBoxAlto,
-            'yZero'             => $yZero,
-            'yTop'              => $yTop,
-            'yEjes'             => $yEjes,
-            'plotLeft'          => $plotLeft,
-            'plotRight'         => $plotRight,
-            'etiquetaEjeIzq'    => $this->formatearEuros($maxBarras),
-            'etiquetaEjeDer'    => !empty($lineasRender) ? $this->formatearEuros($maxLinea) : null,
-            'barras'            => $barras,
-            'lineas'            => $lineasRender,
-            'categorias'        => $categorias,
-            'centrosX'          => $centrosX,
-            'mesActualIndex'    => $mesActualIndex,
-            'pxPorUnidad'       => $pxPorUnidad,
-            'pxPorUnidadLinea'  => $pxPorUnidadLinea,
+            'vacio'          => false,
+            'categorias'     => $categorias,
+            'mesActualIndex' => $mesActualIndex,
+            'escalaBarras'   => ['min' => round($minBarrasNice, 2), 'max' => round($maxBarrasNice, 2), 'paso' => $pasoBarras],
+            'escalaLineas'   => ['min' => round($minLineaNice, 2), 'max' => round($maxLineaNice, 2), 'paso' => $pasoLinea],
+            'barras' => [
+                'actualIngresos'   => $serie('actual', 'ingresos'),
+                'actualGastos'     => $serie('actual', 'gastos'),
+                'anteriorIngresos' => $serie('anterior', 'ingresos'),
+                'anteriorGastos'   => $serie('anterior', 'gastos'),
+            ],
+            // array_values() defensivo: si $lineas llega con huecos en sus claves (p.ej. tras un
+            // array_filter en el llamador), json_encode() lo serializaría como objeto en vez de
+            // array y rompería el .forEach() del lado JS.
+            'lineas' => array_values(array_map(fn($l) => [
+                'label'          => $l['label'],
+                'color'          => $l['color'],
+                'dashed'         => $l['dashed'],
+                'valores'        => array_map(fn($v) => round($v, 2), array_values($l['valores'])),
+                'destacarUltimo' => $l['destacarUltimo'] ?? false,
+                'etiquetaUltimo' => $l['etiquetaUltimo'] ?? null,
+            ], $lineas)),
         ];
     }
 
-    private function formatearEuros(float $v): string
+    // Paso de eje "bonito" (1/2/5 × potencia de 10) para un rango dado, apuntando a ~6 marcas.
+    private function pasoBonito(float $rango): float
     {
-        if ($v >= 1000000) return number_format($v / 1000000, 2, ',', '.') . 'M€';
-        if ($v >= 1000)    return number_format($v / 1000, 0, ',', '.') . 'k€';
-        return number_format($v, 0, ',', '.') . '€';
+        if ($rango <= 0) return 1.0;
+        $pasoBruto = $rango / 6;
+        $magnitud  = 10 ** floor(log10($pasoBruto));
+        $residuo   = $pasoBruto / $magnitud;
+        $residuoBonito = match (true) {
+            $residuo <= 1   => 1,
+            $residuo <= 2   => 2,
+            $residuo <= 5   => 5,
+            default         => 10,
+        };
+        return $residuoBonito * $magnitud;
     }
 }

@@ -19,6 +19,7 @@ use App\Http\Controllers\Vm\LiquidacionController;
 use App\Http\Controllers\Vm\KmController;
 use App\Http\Controllers\Vm\NovacionesController;
 use App\Http\Controllers\Vm\InformeFinancieroController;
+use App\Http\Controllers\Vm\InformeOperativoController;
 
 // Autenticación
 Route::get('login', [LoginController::class, 'showLogin'])->name('login');
@@ -130,6 +131,7 @@ Route::middleware('auth')->group(function () {
         Route::get('calendario-reservas', [CalendarioReservasController::class, 'index'])->name('calendario-reservas');
 
         Route::get('informe-financiero', [InformeFinancieroController::class, 'index'])->name('informe-financiero');
+        Route::get('informe-operativo', [InformeOperativoController::class, 'index'])->name('informe-operativo');
 
         Route::get('informe-imputaciones', [InformeImputacionesController::class, 'index'])->name('informe-imputaciones');
         Route::get('informe-imputaciones/pdf', [InformeImputacionesController::class, 'pdf'])->name('informe-imputaciones.pdf');
