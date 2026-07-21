@@ -84,17 +84,18 @@ class TareaController extends Controller
             $tipoOptions = array_values(array_filter(array_map('trim', explode(',', substr($tipoExtras, 4)))));
         }
 
-        // Opciones del campo Estado (select) desde admin_table_fields — guardado como lista
-        // separada por "|", sin prefijo "opt:" (formato heredado del campo estado de limpieza).
+        // Opciones del campo Estado (select) desde admin_table_fields — mismo formato
+        // "opt:A,B,C" que el resto de selects (Tipo incluido), separado por comas.
         $estadoExtras = $ptId
             ? DB::table('admin_table_fields')
                 ->where('project_table_id', $ptId)
                 ->where('name', 'estado')
                 ->value('extras')
             : null;
-        $estadoOptions = $estadoExtras
-            ? array_values(array_filter(array_map('trim', explode('|', $estadoExtras))))
-            : [];
+        $estadoOptions = [];
+        if ($estadoExtras && str_starts_with((string) $estadoExtras, 'opt:')) {
+            $estadoOptions = array_values(array_filter(array_map('trim', explode(',', substr($estadoExtras, 4)))));
+        }
 
         // Filtro de usuarios disponibles para control_user
         $cuExtras = $ptId

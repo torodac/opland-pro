@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
     public function up(): void {
-        Schema::create('vm_tareas', function (Blueprint $table) {
+        Schema::create('vm_tareas_sscc', function (Blueprint $table) {
             $table->id();
             $table->string('nombre')->nullable();
             $table->smallInteger('hidden')->default(0);
@@ -32,6 +32,6 @@ return new class extends Migration {
         });
     }
     public function down(): void {
-        Schema::dropIfExists('vm_tareas');
+        Schema::dropIfExists('vm_tareas_sscc');
     }
 };

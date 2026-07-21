@@ -438,7 +438,7 @@ class NovacionesController extends Controller
 
         $fechaFin = Carbon::create($year, $month)->endOfMonth()->toDateString();
 
-        $yaExiste = DB::table('vm_tareas')
+        $yaExiste = DB::table('vm_tareas_sscc')
             ->where('id_propiedades', $propId)
             ->where('Tipo', 'Revisión Novación')
             ->where('fecha_planificada', $fechaFin)
@@ -456,7 +456,7 @@ class NovacionesController extends Controller
                      'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
         $mesLabel = $meses_es[$month] . '-' . $year;
 
-        $idTarea = DB::table('vm_tareas')->insertGetId([
+        $idTarea = DB::table('vm_tareas_sscc')->insertGetId([
             'nombre'            => "Revisar novación {$mesLabel} de {$propiedad}",
             'descripcion'       => "Los importes ya documentados de la novación de {$mesLabel} para {$propiedad} han cambiado tras sincronizar con Icnea. Revisar antes de dar por buena la novación anterior.",
             'Tipo'              => 'Revisión Novación',
@@ -479,7 +479,7 @@ class NovacionesController extends Controller
     {
         $fechaFin = Carbon::create($year, $month)->endOfMonth()->toDateString();
 
-        $tarea = DB::table('vm_tareas')
+        $tarea = DB::table('vm_tareas_sscc')
             ->where('id_propiedades', $propId)
             ->where('Tipo', 'Revisión Novación')
             ->where('fecha_planificada', $fechaFin)
