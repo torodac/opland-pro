@@ -22,7 +22,11 @@ class VmUsuarioController extends Controller
     public function show(Request $request, Project $project, int $id)
     {
         $this->authorize($project);
-        $usuario = DB::table('vm_usuarios')->where('id', $id)->firstOrFail();
+        $usuario = DB::table('vm_usuarios as u')
+            ->leftJoin('vm_departamentos as d', 'd.id', '=', 'u.id_departamento')
+            ->where('u.id', $id)
+            ->select('u.*', 'd.nombre as departamento')
+            ->firstOrFail();
 
         $contratos = DB::table('vm_contratos')
             ->where('id_usuarios', $id)
@@ -88,7 +92,7 @@ class VmUsuarioController extends Controller
             ->whereNotNull('hora_fin')
             ->get(['fecha_fichaje', 'hora_inicio', 'hora_fin', 'pausa_inicio', 'pausa_fin', 'fuera_de_turno', 'festivo']);
 
-        $departamentos = ['Limpieza','Mantenimiento','Recepción','Operaciones','Adm/Finanzas','RRHH','Expansión','Reservas'];
+        $departamentos = DB::table('vm_departamentos')->where('deleted', 0)->orderBy('nombre')->get(['id', 'nombre']);
         $cargos = ['Responsable propietarios','Jefe de mantenimiento','Ayte. Diseño','Sub Gobernanta','Mozo/Mantenimiento','Captador Clientes','Jf. Diseño Arquitecto','Gobernanta','Limpiadora','Ayte. Mantenimiento','Oficial Mantenimiento','Contable','Jf. Recepción','RRHH','Jefe Operaciones','Reviu Manager','Jefe Finanzas','Recepcionista'];
 
         $tiposAusencia = $this->getTiposAusencia();
@@ -180,9 +184,9 @@ class VmUsuarioController extends Controller
             'nombre'       => $request->nombre,
             'dni'          => $request->dni,
             'mail'         => $request->mail,
-            'telefono'     => $request->telefono,
-            'departamento' => $request->departamento,
-            'cargo'        => $request->cargo,
+            'telefono'       => $request->telefono,
+            'id_departamento'=> $request->id_departamento ?: null,
+            'cargo'          => $request->cargo,
             'id_rol'       => $request->id_rol ?: null,
             'acceso'       => $request->acceso,
             'updatedat'    => now(),

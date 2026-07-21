@@ -96,6 +96,14 @@ $year_max = now()->year + 1;
                  transition:background .15s; white-space:nowrap; }
 .btn-documento:hover { background:#154e8c; }
 
+.btn-sincronizar { background:#fff; color:#185FA5; border:1px solid #185FA5; border-radius:6px;
+                   padding:6px 16px; font-size:.82rem; font-weight:600; cursor:pointer;
+                   transition:all .15s; white-space:nowrap; }
+.btn-sincronizar:hover    { background:#eef4fb; }
+.btn-sincronizar:disabled{ opacity:.6; cursor:default; }
+.btn-sincronizar.syncing { animation: spin-icon 1s linear infinite; }
+@keyframes spin-icon { 0%{opacity:.5;} 50%{opacity:1;} 100%{opacity:.5;} }
+
 .sep-row { border-top:1px dashed #e5e7eb; margin:6px 0; }
 
 /* Tarjeta Gastos */
@@ -165,12 +173,32 @@ input[type="date"].date-empty:not(:focus)::-webkit-datetime-edit { color: transp
         @endforeach
       </select>
     </div>
-    <button type="button" class="btn-documento" onclick="generarDocumento()">
-      Generar documento
-    </button>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button type="button" class="btn-sincronizar" id="btn-sincronizar" onclick="sincronizar()">
+        ⟳ Sincronizar
+      </button>
+      <button type="button" class="btn-documento" onclick="generarDocumento()">
+        Generar documento
+      </button>
+    </div>
   </div>
-  <div class="nov-notice">ℹ️ Solo se muestran propiedades con tipo de renta <strong>Cesión uso</strong></div>
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <div class="nov-notice">ℹ️ Solo se muestran propiedades con tipo de renta <strong>Cesión uso</strong></div>
+    <div class="nov-notice" id="txt-ultima-sincronizacion">
+      @if($ultima_sincronizacion)
+        Última sincronización: {{ \Carbon\Carbon::parse($ultima_sincronizacion)->format('d/m/Y H:i') }}
+      @else
+        Todavía no se ha sincronizado con Icnea
+      @endif
+    </div>
+  </div>
 </form>
+
+<div id="badge-revision" style="{{ $tarea_revision ? '' : 'display:none;' }} margin-bottom:14px;">
+  <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 14px;font-size:.83rem;color:#9a3412;display:flex;align-items:center;gap:8px;">
+    ⚠️ <span>Los importes de <strong>{{ $mes_anterior_label }}</strong> han cambiado desde que se documentó la novación — hay una tarea de revisión abierta para Contabilidad.</span>
+  </div>
+</div>
 
 <div class="nov-wrap">
 
@@ -230,6 +258,43 @@ input[type="date"].date-empty:not(:focus)::-webkit-datetime-edit { color: transp
 
 </div>
 
+{{-- Histórico de documentos generados --}}
+<div class="nov-card" style="margin-top:16px;">
+  <div class="bloque-title"><span>Histórico de documentos — {{ $meses_es[$month] }} {{ $year }}</span></div>
+  @if($historial->isEmpty())
+    <div style="color:#aaa;font-size:.83rem;text-align:center;padding:16px 0;">
+      Todavía no se ha generado ningún documento para este mes.
+    </div>
+  @else
+    <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
+      <thead>
+        <tr style="text-align:left;color:#888;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">
+          <th style="padding:6px 8px;">Generado por</th>
+          <th style="padding:6px 8px;">Fecha</th>
+          <th style="padding:6px 8px;text-align:right;">Importe propietario</th>
+          <th style="padding:6px 8px;text-align:right;">Importe VM</th>
+          <th style="padding:6px 8px;text-align:right;">Total gastos</th>
+          <th style="padding:6px 8px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        @foreach($historial as $h)
+          <tr style="border-top:1px solid #f0f0f0;">
+            <td style="padding:6px 8px;">{{ $h->createuser_nombre ?? '—' }}</td>
+            <td style="padding:6px 8px;color:#888;">{{ \Carbon\Carbon::parse($h->createdat)->format('d/m/Y H:i') }}</td>
+            <td style="padding:6px 8px;text-align:right;font-weight:600;">{{ number_format($h->importe_propietario, 2, ',', '.') }} €</td>
+            <td style="padding:6px 8px;text-align:right;font-weight:600;color:#4f46e5;">{{ number_format($h->importe_vm, 2, ',', '.') }} €</td>
+            <td style="padding:6px 8px;text-align:right;">{{ number_format($h->total_gastos, 2, ',', '.') }} €</td>
+            <td style="padding:6px 8px;text-align:right;">
+              <a href="{{ route('novaciones.ver-documento', [$project->slug, $h->id]) }}" target="_blank" style="color:#185FA5;font-weight:600;text-decoration:none;">Abrir ↗</a>
+            </td>
+          </tr>
+        @endforeach
+      </tbody>
+    </table>
+  @endif
+</div>
+
 {{-- Modal crear tarea --}}
 <div id="modal-crear-tarea" class="nov-modal-bg" style="display:none;" onclick="if(event.target===this)cerrarModal()">
   <div class="nov-modal">
@@ -251,6 +316,7 @@ const ROUTE_TOGGLE      = "{{ route('novaciones.toggle',         $project->slug)
 const ROUTE_UPDATE      = "{{ route('novaciones.update-importe', $project->slug) }}";
 const ROUTE_COMISION    = "{{ route('novaciones.comision-bancos',$project->slug) }}";
 const ROUTE_GUARDAR     = "{{ route('novaciones.guardar',        $project->slug) }}";
+const ROUTE_SINCRONIZAR = "{{ route('novaciones.sincronizar',    $project->slug) }}";
 const ROUTE_GASTOS      = "{{ route('novaciones.gastos',         $project->slug) }}";
 const ROUTE_GASTOS_SAVE = "{{ route('novaciones.gastos.save',    $project->slug) }}";
 const ROUTE_UPD_TAREA   = "{{ route('novaciones.update-tarea',   $project->slug) }}";
@@ -418,6 +484,14 @@ function renderPanel(reserva) {
 
 function importeRow(imp, label) {
   const neg = parseFloat(imp.importe) < 0 ? ' neg' : '';
+  if (imp.deleted) {
+    return `
+      <div class="imp-row" style="opacity:.5;" title="Icnea ya no devuelve esta línea — no cuenta en los totales">
+        <span class="toggle-wrap"></span>
+        <span class="imp-texto" style="text-decoration:line-through;color:#999;">${label}</span>
+        <span class="imp-importe${neg}" style="color:#999;">${fmt(imp.importe)}</span>
+      </div>`;
+  }
   return `
     <div class="imp-row">
       <label class="toggle-wrap">
@@ -520,7 +594,7 @@ function recalcular() {
 
   // Bruto = importes (sin comisiones) con propietario=1
   const bruto = importesData
-    .filter(i => !TEXTOS_COMISION.includes(i.texto) && i.propietario)
+    .filter(i => !TEXTOS_COMISION.includes(i.texto) && i.propietario && !i.deleted)
     .reduce((s, i) => s + parseFloat(i.importe), 0);
 
   const ivaAmt  = bruto - bruto / (1 + ivaPct);
@@ -574,12 +648,17 @@ function recalcular() {
   setText('pct-propietario', propPct.toFixed(1) + '%');
 }
 
+const HISTORIAL_COUNT = {{ $historial->count() }};
+
 function generarDocumento() {
   const items = document.querySelectorAll('.nov-reserva-item');
   const sinNovar = [...items].filter(el => !el.querySelector('.badge-novada'));
   if (sinNovar.length > 0) {
     alert(`Hay ${sinNovar.length} reserva(s) sin novar. Completa todas las novaciones antes de generar el documento.`);
     return;
+  }
+  if (HISTORIAL_COUNT > 0) {
+    alert(`Ya existe${HISTORIAL_COUNT > 1 ? 'n' : ''} ${HISTORIAL_COUNT} documento(s) generado(s) para este mes. Se generará uno nuevo adicional.`);
   }
   const url = "{{ route('novaciones.pdf', $project->slug) }}"
     + `?prop_id=${PROP_ID}&year=${YEAR_SEL}&month=${MONTH_SEL}`;
@@ -589,6 +668,41 @@ function generarDocumento() {
 function setText(id, val) {
   const el = document.getElementById(id);
   if (el) el.textContent = val;
+}
+
+async function sincronizar() {
+  const btn = document.getElementById('btn-sincronizar');
+  const txt = document.getElementById('txt-ultima-sincronizacion');
+  btn.disabled = true;
+  btn.classList.add('syncing');
+  btn.textContent = '⟳ Sincronizando…';
+
+  try {
+    const res = await fetch(ROUTE_SINCRONIZAR, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-CSRF-TOKEN':CSRF},
+      body: JSON.stringify({ prop_id: PROP_ID, year: YEAR_SEL, month: MONTH_SEL }),
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      txt.textContent = `Última sincronización: ${data.ultima_sincronizacion}`
+        + (data.errores > 0 ? ` (${data.errores} reserva(s) con error)` : '');
+      // recarga la reserva abierta, si hay alguna, para reflejar los importes ya sincronizados
+      if (currentBookingId) loadImportes(currentBookingId);
+      if (data.tarea_revision && data.tarea_revision.creada) {
+        document.getElementById('badge-revision').style.display = '';
+      }
+    } else {
+      alert('No se ha podido sincronizar. Revisa el log del servidor.');
+    }
+  } catch (e) {
+    alert('Error de conexión al sincronizar con Icnea.');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('syncing');
+    btn.textContent = '⟳ Sincronizar';
+  }
 }
 
 // ── GASTOS ─────────────────────────────────────────────────────────────────

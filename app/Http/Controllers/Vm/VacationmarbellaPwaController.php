@@ -1004,13 +1004,18 @@ class VacationmarbellaPwaController extends Controller
         $desde = $lunes->format('Y-m-d');
         $hasta = $domingo->format('Y-m-d');
 
-        $deptosFiltro = ['Operaciones', 'Recepción', 'Mantenimiento', 'Limpieza'];
-
-        $usuarios = DB::table('vm_usuarios')
+        $deptosVisibles = DB::table('vm_departamentos')
             ->where('deleted', 0)
-            ->whereIn('departamento', $deptosFiltro)
+            ->where('visible_horarios', true)
             ->orderBy('nombre')
-            ->get(['id', 'nombre', 'departamento']);
+            ->get(['id', 'nombre']);
+
+        $usuarios = DB::table('vm_usuarios as u')
+            ->leftJoin('vm_departamentos as d', 'd.id', '=', 'u.id_departamento')
+            ->where('u.deleted', 0)
+            ->whereIn('u.id_departamento', $deptosVisibles->pluck('id'))
+            ->orderBy('u.nombre')
+            ->get(['u.id', 'u.nombre', 'u.id_departamento', 'd.nombre as departamento_nombre']);
 
         $horarioRows = DB::table('vm_horarios')
             ->whereIn('id_usuario', $usuarios->pluck('id'))
@@ -1023,17 +1028,17 @@ class VacationmarbellaPwaController extends Controller
         }
 
         $grupos = [];
-        foreach ($deptosFiltro as $depto) {
-            $miembros = $usuarios->where('departamento', $depto)->values();
+        foreach ($deptosVisibles as $dept) {
+            $miembros = $usuarios->where('id_departamento', $dept->id)->values();
             if ($miembros->isEmpty()) continue;
-            $grupos[$depto] = [];
+            $grupos[$dept->nombre] = [];
             foreach ($miembros as $u) {
                 $dias = [];
                 for ($i = 0; $i < 7; $i++) {
                     $fecha = (clone $lunes)->modify("+{$i} days")->format('Y-m-d');
                     $dias[$fecha] = $horarioMap[$u->id][$fecha] ?? null;
                 }
-                $grupos[$depto][] = [
+                $grupos[$dept->nombre][] = [
                     'id'     => $u->id,
                     'nombre' => $u->nombre,
                     'dias'   => $dias,

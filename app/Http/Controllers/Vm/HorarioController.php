@@ -34,21 +34,29 @@ class HorarioController extends Controller
             $dates->push($weekStart->copy()->addDays($i));
         }
 
-        $allUsuarios = DB::table('vm_usuarios')
+        $deptosVisiblesHorarios = DB::table('vm_departamentos')
             ->where('deleted', 0)
-            ->orderBy('departamento')->orderBy('nombre')
+            ->where('visible_horarios', true)
+            ->orderBy('nombre')
+            ->get(['id', 'nombre']);
+
+        $allUsuarios = DB::table('vm_usuarios as u')
+            ->leftJoin('vm_departamentos as d', 'd.id', '=', 'u.id_departamento')
+            ->where('u.deleted', 0)
+            ->orderBy('d.nombre')->orderBy('u.nombre')
+            ->select('u.*', 'd.nombre as departamento_nombre')
             ->get();
 
-        $deptPermitidos = ['Limpieza', 'Mantenimiento', 'Recepción', 'Operaciones'];
+        $deptIdsPermitidos = $deptosVisiblesHorarios->pluck('id')->all();
 
         $usuariosFiltrados = $allUsuarios->filter(
-            fn($u) => in_array($u->departamento, $deptPermitidos)
+            fn($u) => in_array($u->id_departamento, $deptIdsPermitidos)
         );
 
-        $usuariosByDept = $usuariosFiltrados->groupBy('departamento');
+        $usuariosByDept = $usuariosFiltrados->groupBy('id_departamento');
 
-        $departamentos = collect($deptPermitidos)->filter(
-            fn($d) => $usuariosByDept->has($d)
+        $departamentos = $deptosVisiblesHorarios->filter(
+            fn($d) => $usuariosByDept->has($d->id)
         )->values();
 
         $horariosRaw = DB::table('vm_horarios')
@@ -92,8 +100,8 @@ class HorarioController extends Controller
             'weekStart'      => $weekStart,
             'weekEnd'        => $weekEnd,
             'dates'          => $dates,
-            'departamentos'  => $departamentos,   // Collection of strings
-            'usuariosByDept' => $usuariosByDept,  // Keyed by departamento string
+            'departamentos'  => $departamentos,   // Collection de {id, nombre}
+            'usuariosByDept' => $usuariosByDept,  // Keyed by id_departamento
             'horariosMap'    => $horariosMap,
             'ausenciasMap'   => $ausenciasMap,
             'festivosMap'    => $festivosMap,

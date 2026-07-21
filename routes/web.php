@@ -149,7 +149,9 @@ Route::middleware('auth')->group(function () {
         Route::post('novaciones/update-importe',  [NovacionesController::class, 'updateImporte'])->name('novaciones.update-importe');
         Route::post('novaciones/comision-bancos', [NovacionesController::class, 'saveComisionBancos'])->name('novaciones.comision-bancos');
         Route::post('novaciones/guardar',         [NovacionesController::class, 'guardar'])->name('novaciones.guardar');
+        Route::post('novaciones/sincronizar',     [NovacionesController::class, 'sincronizar'])->name('novaciones.sincronizar');
         Route::get('novaciones/pdf',              [NovacionesController::class, 'pdf'])->name('novaciones.pdf');
+        Route::get('novaciones/documento/{id}',   [NovacionesController::class, 'verDocumento'])->name('novaciones.ver-documento');
         Route::get('novaciones/gastos',           [NovacionesController::class, 'gastos'])->name('novaciones.gastos');
         Route::post('novaciones/gastos',          [NovacionesController::class, 'saveGastos'])->name('novaciones.gastos.save');
         Route::post('novaciones/update-tarea',    [NovacionesController::class, 'updateTarea'])->name('novaciones.update-tarea');

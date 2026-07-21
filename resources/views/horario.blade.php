@@ -146,11 +146,11 @@ $pastBlocked = $isPastWeek && !($canEditPast ?? false);
     <a href="?" class="hor-btn">Esta semana</a>
 </div>
 
-@foreach($departamentos as $deptNombre)
+@foreach($departamentos as $dept)
 @php
-$usuarios = $usuariosByDept->get($deptNombre ?? '', collect());
+$usuarios = $usuariosByDept->get($dept->id, collect());
 if ($usuarios->isEmpty()) continue;
-$deptLabel = $deptNombre ?: 'Sin departamento';
+$deptLabel = $dept->nombre ?: 'Sin departamento';
 @endphp
 
 <div class="dept-block">

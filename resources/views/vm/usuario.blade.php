@@ -183,7 +183,8 @@ td{padding:8px;font-size:13px;}
       <div class="form-row"><label class="form-label">Teléfono</label><input type="text" id="u-tel" value="{{ $usuario->telefono }}"></div>
       <div class="form-row"><label class="form-label">Departamento</label>
         <select id="u-dept">
-          @foreach($departamentos as $d)<option {{ $usuario->departamento===$d?'selected':'' }}>{{ $d }}</option>@endforeach
+          <option value=""></option>
+          @foreach($departamentos as $d)<option value="{{ $d->id }}" {{ $usuario->id_departamento==$d->id?'selected':'' }}>{{ $d->nombre }}</option>@endforeach
         </select>
       </div>
       <div class="form-row"><label class="form-label">Cargo</label>
@@ -597,9 +598,9 @@ function guardarUsuario() {
         nombre:       document.getElementById('u-nombre').value,
         dni:          document.getElementById('u-dni').value,
         mail:         document.getElementById('u-mail').value,
-        telefono:     document.getElementById('u-tel').value,
-        departamento: document.getElementById('u-dept').value,
-        cargo:        document.getElementById('u-cargo').value,
+        telefono:        document.getElementById('u-tel').value,
+        id_departamento: document.getElementById('u-dept').value || null,
+        cargo:           document.getElementById('u-cargo').value,
         id_rol:       document.getElementById('u-rol').value || null,
         acceso:       document.getElementById('u-acceso').value,
     }).then(() => location.reload());
