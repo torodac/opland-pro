@@ -20,6 +20,7 @@ use App\Http\Controllers\Vm\KmController;
 use App\Http\Controllers\Vm\NovacionesController;
 use App\Http\Controllers\Vm\InformeFinancieroController;
 use App\Http\Controllers\Vm\InformeOperativoController;
+use App\Http\Controllers\Vmf\FacturasUploadController;
 
 // Autenticación
 Route::get('login', [LoginController::class, 'showLogin'])->name('login');
@@ -230,6 +231,10 @@ Route::middleware('auth')->group(function () {
         Route::post('liquidacion/{reserva}/toggle', [LiquidacionController::class, 'toggleLiquidado'])->name('vm.liquidacion.toggle');
 
         }); // fin vm.only
+
+        Route::middleware('vmf.only')->group(function () {
+            Route::get('facturas_form', [FacturasUploadController::class, 'index'])->name('vmf.facturas_form');
+        }); // fin vmf.only
 
         Route::get('{table}', [ListadoController::class, 'index'])->name('listado');
         Route::post('{table}/upload-doc', [FichaController::class, 'uploadDoc'])->name('listado.upload-doc');
