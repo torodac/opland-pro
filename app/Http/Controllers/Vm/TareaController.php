@@ -380,6 +380,14 @@ class TareaController extends Controller
         $cuExtras = $ptId ? DB::table('admin_table_fields')
             ->where('project_table_id', $ptId)->where('name', 'control_user')->value('extras') : null;
 
+        // Opciones del campo Estado, para el filtro del listado (mismo formato "opt:A,B,C")
+        $estadoExtras = $ptId ? DB::table('admin_table_fields')
+            ->where('project_table_id', $ptId)->where('name', 'estado')->value('extras') : null;
+        $estadoOptions = [];
+        if ($estadoExtras && str_starts_with((string) $estadoExtras, 'opt:')) {
+            $estadoOptions = array_values(array_filter(array_map('trim', explode(',', substr($estadoExtras, 4)))));
+        }
+
         $usuariosTable = $project->slug . '_usuarios';
         $allUsuarios = DB::table($usuariosTable)
             ->where(fn($q) => $q->whereNull('deleted')->orWhere('deleted', 0))
@@ -456,6 +464,15 @@ class TareaController extends Controller
         if ($resp = $request->input('f_responsable')) {
             $query->whereRaw('t.control_user::jsonb @> ?::jsonb', [json_encode([(int)$resp])]);
         }
+        if ($estadoFiltro = $request->input('f_estado')) {
+            $query->where('t.estado', $estadoFiltro);
+        }
+        if ($ffd = $request->input('f_fecha_fin_desde')) {
+            $query->where('t.fecha_finalizacion', '>=', $ffd);
+        }
+        if ($ffh = $request->input('f_fecha_fin_hasta')) {
+            $query->where('t.fecha_finalizacion', '<=', $ffh);
+        }
 
         // Filtro por stat activo
         $hoy  = now()->toDateString();
@@ -518,7 +535,7 @@ class TareaController extends Controller
 
         return view('vm.tareas_list', compact(
             'project', 'tipo', 'tableName', 'tareas', 'propias',
-            'allUsuarios', 'usuariosMap', 'propiedades',
+            'allUsuarios', 'usuariosMap', 'propiedades', 'estadoOptions',
             'vigentes', 'vencidas', 'noImputadas',
             'canEdit', 'c', 'tipoLabel', 'tipoIcon', 'stat',
             'sortField', 'sortDir'

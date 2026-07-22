@@ -3,8 +3,9 @@
         if ($min <= 0) return '—';
         return intdiv($min, 60) . 'h ' . str_pad($min % 60, 2, '0', STR_PAD_LEFT) . 'm';
     }
-    $hasFilters = request()->hasAny(['q','f_propiedad','f_fecha_desde','f_fecha_hasta','f_responsable']);
-    $filterKeys = ['q','f_propiedad','f_fecha_desde','f_fecha_hasta','f_responsable','stat','borrados','ocultos','sort','dir'];
+    $filtroKeys = ['f_propiedad','f_fecha_desde','f_fecha_hasta','f_fecha_fin_desde','f_fecha_fin_hasta','f_responsable','f_estado'];
+    $hasFilters = request()->hasAny($filtroKeys);
+    $filterKeys = array_merge(['q'], $filtroKeys, ['stat','borrados','ocultos','sort','dir']);
     $listUrl = fn($extra=[]) => route('vm.tarea.list', array_filter(array_merge(['project'=>$project->slug,'tipo'=>$tipo], request()->only($filterKeys), $extra), fn($v) => $v !== null));
 @endphp
 
@@ -124,14 +125,14 @@
     <button type="button" @click="modalFiltros = true"
             title="Filtros"
             class="p-1.5 rounded-lg border transition-colors
-                {{ request()->hasAny(['f_propiedad','f_fecha_desde','f_fecha_hasta','f_responsable']) ? 'border-orange-400 text-orange-500 bg-orange-50' : 'border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300' }}">
+                {{ $hasFilters ? 'border-orange-400 text-orange-500 bg-orange-50' : 'border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300' }}">
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
             <path stroke-linecap="round" stroke-linejoin="round" d="M3 4h18M7 8h10M11 12h2M11 16h2"/>
         </svg>
     </button>
 
-    @if(request('q') || request()->hasAny(['f_propiedad','f_fecha_desde','f_fecha_hasta','f_responsable']) || request('stat'))
-    <a href="{{ $listUrl() }}"
+    @if(request('q') || $hasFilters || request('stat'))
+    <a href="{{ route('vm.tarea.list', ['project'=>$project->slug,'tipo'=>$tipo]) }}"
        title="Limpiar filtros"
        class="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
@@ -155,7 +156,7 @@
     </a>
 
     {{-- Campos ocultos para preservar filtros al buscar --}}
-    @foreach(['f_propiedad','f_fecha_desde','f_fecha_hasta','f_responsable'] as $fp)
+    @foreach($filtroKeys as $fp)
         @if(request($fp))
             <input type="hidden" name="{{ $fp }}" value="{{ request($fp) }}">
         @endif
@@ -203,14 +204,29 @@
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs font-medium text-gray-500 mb-1">Fecha desde</label>
-                    <input type="date" name="f_fecha_desde" value="{{ request('f_fecha_desde') }}"
-                           class="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Estado</label>
+                    <select name="f_estado" class="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
+                        <option value="">Todos</option>
+                        @foreach($estadoOptions as $opt)
+                            <option value="{{ $opt }}" {{ request('f_estado') === $opt ? 'selected' : '' }}>{{ $opt }}</option>
+                        @endforeach
+                    </select>
                 </div>
-                <div>
-                    <label class="block text-xs font-medium text-gray-500 mb-1">Fecha hasta</label>
-                    <input type="date" name="f_fecha_hasta" value="{{ request('f_fecha_hasta') }}"
-                           class="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300">
+                <div class="col-span-2">
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Fecha planificada</label>
+                    <input type="text" id="rango-planificada"
+                           placeholder="Selecciona un rango de fechas..." autocomplete="off"
+                           class="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 cursor-pointer">
+                    <input type="hidden" name="f_fecha_desde" id="f_fecha_desde" value="{{ request('f_fecha_desde') }}">
+                    <input type="hidden" name="f_fecha_hasta" id="f_fecha_hasta" value="{{ request('f_fecha_hasta') }}">
+                </div>
+                <div class="col-span-2">
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Fecha finalizada</label>
+                    <input type="text" id="rango-finalizacion"
+                           placeholder="Selecciona un rango de fechas..." autocomplete="off"
+                           class="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 cursor-pointer">
+                    <input type="hidden" name="f_fecha_fin_desde" id="f_fecha_fin_desde" value="{{ request('f_fecha_fin_desde') }}">
+                    <input type="hidden" name="f_fecha_fin_hasta" id="f_fecha_fin_hasta" value="{{ request('f_fecha_fin_hasta') }}">
                 </div>
             </div>
             <div class="flex justify-end gap-2 px-6 py-4 border-t border-gray-100">
@@ -222,6 +238,31 @@
         </div>
     </div>
 </form>
+
+{{-- Flatpickr para los rangos de fecha del modal de filtros --}}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    function initRango(inputId, desdeId, hastaId) {
+        var desde = document.getElementById(desdeId).value;
+        var hasta = document.getElementById(hastaId).value;
+        flatpickr('#' + inputId, {
+            mode: 'range',
+            dateFormat: 'Y-m-d',
+            locale: 'es',
+            defaultDate: desde ? (hasta ? [desde, hasta] : [desde]) : null,
+            onChange: function (dates) {
+                document.getElementById(desdeId).value = dates[0] ? flatpickr.formatDate(dates[0], 'Y-m-d') : '';
+                document.getElementById(hastaId).value = dates[1] ? flatpickr.formatDate(dates[1], 'Y-m-d') : '';
+            }
+        });
+    }
+    initRango('rango-planificada', 'f_fecha_desde', 'f_fecha_hasta');
+    initRango('rango-finalizacion', 'f_fecha_fin_desde', 'f_fecha_fin_hasta');
+});
+</script>
 
 {{-- ── TABLA / LISTADO ── --}}
 
