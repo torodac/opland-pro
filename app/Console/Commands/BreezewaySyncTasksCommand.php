@@ -244,21 +244,11 @@ class BreezewaySyncTasksCommand extends Command
             ->whereIn('breezeway_id', array_keys($usuariosPorBreezeway))
             ->delete();
 
-        // Descartada: sin noticias de Breezeway desde hace 15 dias (ni actualizacion ni
-        // fecha planificada) y sin estado de cierre ya asignado. Solo tareas con vinculo
-        // real a Breezeway -- una tarea creada a mano en Opland no depende de el y no
-        // debe descartarse solo por no haberse tocado.
-        $limiteSilencio = now()->subDays(15);
-        $descartadas = 0;
-        foreach (['vm_tareas_limpieza', 'vm_tareas_mantenimiento'] as $tabla) {
-            $descartadas += DB::table($tabla)
-                ->where('deleted', 0)
-                ->whereNotNull('breezeway_task_id')
-                ->whereNotIn('estado', ['Completada', 'Cancelada', 'Descartada'])
-                ->where('updatedat', '<', $limiteSilencio)
-                ->where('fecha_planificada', '<', $limiteSilencio->toDateString())
-                ->update(['estado' => 'Descartada', 'updatedat' => now()]);
-        }
+        // Descartada: candidatas por silencio de 15 dias (ni actualizacion ni fecha planificada
+        // reciente, sin estado de cierre ya asignado), pero antes de descartarlas de verdad se
+        // confirma contra Breezeway con el endpoint de tarea concreta — si sigue viva, se
+        // autocorrige con su estado real en vez de descartarla por error.
+        $descartadas = $this->confirmarDescartes($token, $usuariosPorBreezeway, $emailPorBreezewayId, $vmUsuariosPorEmail, $pendientesVistos);
 
         // Ocultar automaticamente: Cancelada y Descartada (siempre), o Completada con al
         // menos una imputacion ya registrada (limpieza/mantenimiento) — deja visibles en
@@ -384,6 +374,106 @@ class BreezewaySyncTasksCommand extends Command
         }
 
         return [$actualizadas, $impCreadas];
+    }
+
+    // Candidatas a "Descartada" por silencio de 15 dias (ni actualizacion ni fecha planificada
+    // reciente). Antes de darlas por perdidas se confirma una a una contra el endpoint de tarea
+    // concreta de Breezeway: si ya no existe o esta marcada como eliminada, se descarta de
+    // verdad; si sigue viva, se autocorrige con su estado real (igual que el bucle principal)
+    // en vez de descartarla por error.
+    private function confirmarDescartes(string $token, array &$usuariosPorBreezeway, array $emailPorBreezewayId, array &$vmUsuariosPorEmail, array &$pendientesAcumulados): int
+    {
+        $limiteSilencio = now()->subDays(15);
+        $descartadas = 0;
+
+        foreach (['vm_tareas_limpieza', 'vm_tareas_mantenimiento'] as $tabla) {
+            $candidatas = DB::table($tabla)
+                ->where('deleted', 0)
+                ->whereNotNull('breezeway_task_id')
+                ->whereNotIn('estado', ['Completada', 'Cancelada', 'Descartada'])
+                ->where('updatedat', '<', $limiteSilencio)
+                ->where('fecha_planificada', '<', $limiteSilencio->toDateString())
+                ->get(['id', 'breezeway_task_id']);
+
+            foreach ($candidatas as $t) {
+                $task = null;
+                try {
+                    $task = $this->curlJson(
+                        "https://api.breezeway.io/public/inventory/v1/task/{$t->breezeway_task_id}",
+                        'GET',
+                        ['Authorization: JWT ' . $token]
+                    );
+                } catch (\Throwable $e) {
+                    Log::warning("BreezewaySyncTasks: error confirmando descarte de tarea {$t->breezeway_task_id}: " . $e->getMessage());
+                }
+                usleep(250000);
+
+                // Fallo transitorio (red, limite de tasa, respuesta rara): no es una confirmacion
+                // de nada, se deja tal cual sin tocar updatedat para que se reintente en el
+                // siguiente sync — tratarlo como "eliminada" descartaria tareas vivas de verdad
+                // solo porque la API fallo un momento (nos paso en pruebas: un 429 de rate limit).
+                if (!$task || isset($task['error']) || !isset($task['type_task_status']['code'])) {
+                    continue;
+                }
+
+                $code = $task['type_task_status']['code'];
+
+                // Breezeway la marca eliminada de verdad: confirmado, se descarta.
+                if ($code === 'deleted') {
+                    DB::table($tabla)->where('id', $t->id)->update(['estado' => 'Descartada', 'updatedat' => now()]);
+                    $descartadas++;
+                    continue;
+                }
+
+                // Sigue viva: se resuelve el asignado y se autocorrige con su estado real actual,
+                // igual que en el bucle principal, en vez de descartarla por error.
+                $controlUserIds = [];
+                $sinMapear = [];
+                foreach (($task['assignments'] ?? []) as $a) {
+                    $aid = $a['assignee_id'] ?? null;
+                    if (!$aid) continue;
+                    if (isset($usuariosPorBreezeway[$aid])) {
+                        $controlUserIds[] = (int) $usuariosPorBreezeway[$aid];
+                        continue;
+                    }
+                    $autoId = $this->resolverPorEmail($aid, $emailPorBreezewayId, $vmUsuariosPorEmail, $usuariosPorBreezeway);
+                    if ($autoId) {
+                        $controlUserIds[] = $autoId;
+                        continue;
+                    }
+                    $nombreAsignado = trim($a['name'] ?? "Breezeway #{$aid}");
+                    $sinMapear[] = $nombreAsignado;
+                    if (!isset($pendientesAcumulados[$aid])) {
+                        $pendientesAcumulados[$aid] = ['nombre' => $nombreAsignado, 'count' => 0];
+                    }
+                    $pendientesAcumulados[$aid]['count']++;
+                }
+
+                $stage = $task['type_task_status']['stage'] ?? null;
+                $estadoReal = match (true) {
+                    $stage === 'finished'                       => 'Completada',
+                    in_array($code, ['cancelled', 'canceled'])  => 'Cancelada',
+                    !empty($controlUserIds)                     => 'Planificada',
+                    default                                     => 'Nueva',
+                };
+                if (!in_array($estadoReal, ['Completada', 'Cancelada'], true)
+                    && !empty($task['scheduled_date'])
+                    && $task['scheduled_date'] < now()->toDateString()) {
+                    $estadoReal = 'Vencida';
+                }
+
+                DB::table($tabla)->where('id', $t->id)->update([
+                    'estado'                    => $estadoReal,
+                    'estado_breezeway'          => $code !== null ? "{$code} ({$stage})" : null,
+                    'control_user'              => json_encode($controlUserIds),
+                    'usuario_breezeway_ausente' => !empty($sinMapear) ? implode(', ', $sinMapear) : null,
+                    'hidden'                    => 0,
+                    'updatedat'                 => now(),
+                ]);
+            }
+        }
+
+        return $descartadas;
     }
 
     // Breezeway devuelve total_time como string "H:MM:SS" (ej. "9:06:58"), no como numero de minutos

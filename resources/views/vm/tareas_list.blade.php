@@ -270,6 +270,7 @@
             <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap text-center text-gray-400">Resp.</th>
             {!! $thSort('total_min', 'Tiempo', 'text-right') !!}
             <th class="w-8"></th>
+            <th class="w-8"></th>
         </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
@@ -277,7 +278,6 @@
     @php
         $cuIds    = json_decode($tarea->control_user ?? '[]', true) ?? [];
         $impIds   = json_decode($tarea->imp_user_ids, true) ?? [];
-        $vencida  = $tarea->estado === 'Vencida';
         $estadoBadgeColores = [
             'Nueva'       => ['bg'=>'#f5f5f5','tx'=>'#999'],
             'Planificada' => ['bg'=>'#E6F1FB','tx'=>'#0C447C'],
@@ -289,9 +289,8 @@
         $estadoBadge = $estadoBadgeColores[$tarea->estado] ?? ['bg'=>'#f5f5f5','tx'=>'#999'];
         $fechaFmt = $tarea->fecha_planificada ? \Carbon\Carbon::parse($tarea->fecha_planificada)->locale('es')->isoFormat('D/MMM') : '—';
         $formUrl  = route('vm.tarea', ['project'=>$project->slug,'tipo'=>$tipo,'id'=>$tarea->id]);
-        $rowBg    = $tarea->deleted ? 'opacity-50' : ($tarea->hidden ? 'bg-amber-50/40' : '');
     @endphp
-    <tr class="hover:bg-gray-50 cursor-pointer {{ $rowBg }}" onclick="window.location='{{ $formUrl }}'">
+    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{{ $formUrl }}'">
 
         {{-- Fecha + Estado --}}
         <td class="px-4 py-2 whitespace-nowrap">
@@ -318,7 +317,7 @@
                 @forelse($cuIds as $uid)
                     @php
                         $hasImp   = in_array($uid, $impIds);
-                        $dotColor = $hasImp ? '#1D9E75' : ($vencida ? '#E24B4A' : '#EF9F27');
+                        $dotColor = $hasImp ? '#1D9E75' : ($tarea->estado === 'Completada' ? '#E24B4A' : '#EF9F27');
                         $uNombre  = isset($usuariosMap[$uid]) ? $usuariosMap[$uid]->nombre : 'Usuario '.$uid;
                         $initials = collect(explode(' ', $uNombre))->filter()->take(2)->map(fn($w)=>mb_strtoupper(mb_substr($w,0,1)))->implode('');
                     @endphp
@@ -339,6 +338,37 @@
             @if($tarea->foto_count > 0)
                 <span class="app-tooltip"><i class="ti ti-camera"></i><span class="app-tooltip-box">{{ $tarea->foto_count }} foto(s)</span></span>
             @endif
+        </td>
+
+        {{-- Menu contextual, mismo patron que el listado generico --}}
+        <td class="px-2 py-2 text-right" onclick="event.stopPropagation()" x-data="{ open: false }">
+            <button @click="open = !open" @click.outside="open = false"
+                    class="p-1 rounded text-gray-300 hover:text-gray-600 hover:bg-gray-100">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
+                </svg>
+            </button>
+            <div x-show="open" x-cloak
+                 class="absolute right-6 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 text-sm">
+                <a href="{{ $formUrl }}" class="flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50">
+                    Ver ficha
+                </a>
+                @if($canEdit)
+                <form method="POST" action="{{ route('ficha.archive', [$project->slug, $tableName, $tarea->id]) }}">
+                    @csrf @method('PATCH')
+                    <button class="w-full flex items-center gap-2 px-3 py-2 text-left text-gray-600 hover:bg-gray-50">
+                        {{ $tarea->hidden ? 'Mostrar' : 'Archivar' }}
+                    </button>
+                </form>
+                <form method="POST" action="{{ route('ficha.borrar', [$project->slug, $tableName, $tarea->id]) }}"
+                      onsubmit="return confirm('{{ $tarea->deleted ? '¿Restaurar esta tarea?' : '¿Borrar esta tarea?' }}');">
+                    @csrf @method('PATCH')
+                    <button class="w-full flex items-center gap-2 px-3 py-2 text-left text-red-500 hover:bg-red-50">
+                        {{ $tarea->deleted ? 'Restaurar' : 'Borrar' }}
+                    </button>
+                </form>
+                @endif
+            </div>
         </td>
 
     </tr>
