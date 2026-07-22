@@ -131,7 +131,7 @@ class VacationmarbellaPwaController extends Controller
             ->where('t.deleted', 0)
             ->where('t.fecha_planificada', $fecha)
             ->where(function ($q) use ($filterIds) {
-                foreach ($filterIds as $fid) { $q->orWhereRaw("t.control_user::jsonb @> ?::jsonb", [json_encode([$fid])]); }
+                foreach ($filterIds as $fid) { $q->orWhereRaw("t.control_user::jsonb @> ?::jsonb", [json_encode([(int) $fid])]); }
             })
             ->select(array_merge($cols, [DB::raw("'limpieza' as tipo")]))
             ->get();
@@ -141,7 +141,7 @@ class VacationmarbellaPwaController extends Controller
             ->where('t.deleted', 0)
             ->where('t.fecha_planificada', $fecha)
             ->where(function ($q) use ($filterIds) {
-                foreach ($filterIds as $fid) { $q->orWhereRaw("t.control_user::jsonb @> ?::jsonb", [json_encode([$fid])]); }
+                foreach ($filterIds as $fid) { $q->orWhereRaw("t.control_user::jsonb @> ?::jsonb", [json_encode([(int) $fid])]); }
             })
             ->select(array_merge($cols, [DB::raw("'mantenimiento' as tipo")]))
             ->get();
@@ -151,7 +151,7 @@ class VacationmarbellaPwaController extends Controller
             ->where('t.deleted', 0)
             ->where('t.fecha_planificada', $fecha)
             ->where(function ($q) use ($filterIds) {
-                foreach ($filterIds as $fid) { $q->orWhereRaw("t.control_user::jsonb @> ?::jsonb", [json_encode([$fid])]); }
+                foreach ($filterIds as $fid) { $q->orWhereRaw("t.control_user::jsonb @> ?::jsonb", [json_encode([(int) $fid])]); }
             })
             ->select(array_merge($cols, [DB::raw("'piscina' as tipo")]))
             ->get();
@@ -393,7 +393,7 @@ class VacationmarbellaPwaController extends Controller
         $tarea = DB::table($table)
             ->where('id', $id)
             ->where('deleted', 0)
-            ->whereRaw("control_user::jsonb @> ?::jsonb", [json_encode([$uid])])
+            ->whereRaw("control_user::jsonb @> ?::jsonb", [json_encode([(int) $uid])])
             ->first();
 
         if (!$tarea) {
@@ -446,7 +446,7 @@ class VacationmarbellaPwaController extends Controller
 
         $ok = DB::table($tabla)
             ->where('id', $foto->$col)
-            ->whereRaw("control_user::jsonb @> ?::jsonb", [json_encode([$uid])])
+            ->whereRaw("control_user::jsonb @> ?::jsonb", [json_encode([(int) $uid])])
             ->exists();
 
         if (!$ok) {
@@ -642,7 +642,7 @@ class VacationmarbellaPwaController extends Controller
                 $tareasDia = DB::table($tabla)
                     ->where('deleted', 0)
                     ->whereBetween('fecha_planificada', [$desde, $ayer])
-                    ->whereRaw("control_user::jsonb @> ?::jsonb", [json_encode([(string) $user->id])])
+                    ->whereRaw("control_user::jsonb @> ?::jsonb", [json_encode([(int) $user->id])])
                     ->get(['id', 'fecha_planificada']);
 
                 if ($tareasDia->isEmpty()) continue;
@@ -919,7 +919,7 @@ class VacationmarbellaPwaController extends Controller
             'id_propiedades'    => $request->id_propiedades,
             'fecha_planificada' => $fecha,
             'fecha_finalizacion'=> $fecha,
-            'control_user'      => json_encode([(string) $user->id]),
+            'control_user'      => json_encode([(int) $user->id]),
             'createuser'        => $user->id,
             'createdat'         => now(),
             'deleted'           => 0,
