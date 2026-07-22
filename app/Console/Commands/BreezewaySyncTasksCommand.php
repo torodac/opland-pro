@@ -178,9 +178,12 @@ class BreezewaySyncTasksCommand extends Command
                     $creadas++;
                 }
 
-                // Imputaciones: solo si Breezeway ya trae tiempo total registrado
-                $duracionMin = !empty($task['total_time']) ? self::parseTotalTimeMinutes($task['total_time']) : 0;
-                if ($duracionMin > 0 && !empty($controlUserIds)) {
+                // Imputaciones: solo si Breezeway ya trae tiempo total registrado. Null (no
+                // total_time en absoluto) distinto de 0 (total_time real pero redondea a menos
+                // de 1 minuto) -- antes duracionMin=0 se descartaba igual que "sin dato", y las
+                // tareas de segundos (menos de 30s) desaparecian sin dejar ni rastro.
+                $duracionMin = !empty($task['total_time']) ? self::parseTotalTimeMinutes($task['total_time']) : null;
+                if ($duracionMin !== null && !empty($controlUserIds)) {
                     $tipoImputacion = $dept === 'housekeeping' ? 'limpieza' : 'mantenimiento';
                     $fechaImp = isset($task['finished_at']) ? substr($task['finished_at'], 0, 10) : ($task['scheduled_date'] ?? now()->toDateString());
                     foreach ($controlUserIds as $uid) {
@@ -345,8 +348,9 @@ class BreezewaySyncTasksCommand extends Command
                 ]);
                 $actualizadas++;
 
-                $duracionMin = !empty($task['total_time']) ? self::parseTotalTimeMinutes($task['total_time']) : 0;
-                if ($duracionMin > 0) {
+                // Null (sin total_time) distinto de 0 (total_time real pero < 1 minuto redondeado).
+                $duracionMin = !empty($task['total_time']) ? self::parseTotalTimeMinutes($task['total_time']) : null;
+                if ($duracionMin !== null) {
                     $fechaImp = isset($task['finished_at']) ? substr($task['finished_at'], 0, 10) : ($task['scheduled_date'] ?? now()->toDateString());
                     foreach ($controlUserIds as $uid) {
                         $yaExiste = DB::table('vm_imputaciones')
