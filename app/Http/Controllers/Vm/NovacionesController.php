@@ -114,6 +114,25 @@ class NovacionesController extends Controller
             }
         }
 
+        // Comisión Bancos: igual que Management Fee, se autocrea siempre para que su
+        // toggle sea activable desde el primer momento, sin necesidad de modificar antes el importe.
+        $existsCb = DB::table('vm_reservas_importes')
+            ->where('booking_id', $bookingId)
+            ->where('texto', 'Comisión Bancos')
+            ->exists();
+
+        if (!$existsCb) {
+            DB::table('vm_reservas_importes')->insert([
+                'id_reserva'  => $reserva->id,
+                'booking_id'  => $bookingId,
+                'texto'       => 'Comisión Bancos',
+                'importe'     => 0,
+                'propietario' => 1,
+                'createdat'   => now(),
+                'updatedat'   => now(),
+            ]);
+        }
+
         $importes = DB::table('vm_reservas_importes')
             ->where('booking_id', $bookingId)
             ->orderBy('id')
@@ -578,18 +597,20 @@ class NovacionesController extends Controller
         $tareas = DB::table('vm_tareas_mantenimiento')
             ->where('id_propiedades', $propId)
             ->where('deleted', 0)
+            ->where(fn($q) => $q->whereNull('estado')->orWhereNotIn('estado', ['Descartada', 'Cancelada']))
             ->whereBetween('fecha_finalizacion', [$desde, $hasta])
             ->whereNotNull('importe_novacion')
             ->orderBy('fecha_finalizacion')
-            ->get(['fecha_finalizacion','nombre_novacion','importe_novacion']);
+            ->get(['fecha_finalizacion','nombre','nombre_novacion','importe_novacion']);
 
         $piscinas = DB::table('vm_tareas_piscinas')
             ->where('id_propiedades', $propId)
             ->where('deleted', 0)
+            ->where(fn($q) => $q->whereNull('estado')->orWhereNotIn('estado', ['Descartada', 'Cancelada']))
             ->whereBetween('fecha_finalizacion', [$desde, $hasta])
             ->whereNotNull('importe_novacion')
             ->orderBy('fecha_finalizacion')
-            ->get(['fecha_finalizacion','nombre_novacion','importe_novacion']);
+            ->get(['fecha_finalizacion','nombre','nombre_novacion','importe_novacion']);
 
         $meses_es = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
                      'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -676,6 +697,7 @@ class NovacionesController extends Controller
         $mantenimiento = DB::table('vm_tareas_mantenimiento')
             ->where('id_propiedades', $propId)
             ->where('deleted', 0)
+            ->where(fn($q) => $q->whereNull('estado')->orWhereNotIn('estado', ['Descartada', 'Cancelada']))
             ->whereBetween('fecha_finalizacion', [$desde, $hasta])
             ->orderBy('fecha_finalizacion')
             ->get(['id', 'nombre', 'fecha_finalizacion', 'nombre_novacion', 'importe_novacion']);
@@ -683,6 +705,7 @@ class NovacionesController extends Controller
         $piscinas = DB::table('vm_tareas_piscinas')
             ->where('id_propiedades', $propId)
             ->where('deleted', 0)
+            ->where(fn($q) => $q->whereNull('estado')->orWhereNotIn('estado', ['Descartada', 'Cancelada']))
             ->whereBetween('fecha_finalizacion', [$desde, $hasta])
             ->orderBy('fecha_finalizacion')
             ->get(['id', 'nombre', 'fecha_finalizacion', 'nombre_novacion', 'importe_novacion']);

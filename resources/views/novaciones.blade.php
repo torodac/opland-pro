@@ -145,6 +145,8 @@ input[type="date"].date-empty:not(:focus)::-webkit-datetime-edit { color: transp
 .tarea-row:last-child { border-bottom:none; }
 .tarea-header { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
 .tarea-nombre { flex:1; color:#333; font-weight:500; }
+.tarea-ficha-link { color:#ccc; display:inline-flex; line-height:0; }
+.tarea-ficha-link:hover { color:#EF9F27; }
 .tarea-fecha  { font-size:.74rem; color:#aaa; white-space:nowrap; }
 .tarea-fields { display:flex; gap:8px; padding-left:44px; }
 .tarea-input-nombre  { flex:1; border:1px solid #e2e8f0; border-radius:5px;
@@ -226,7 +228,7 @@ input[type="date"].date-empty:not(:focus)::-webkit-datetime-edit { color: transp
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px;">
               <span class="bid">#{{ $r->booking_id }}</span>
               @if($r->novacion && $r->base_propietario !== null)
-                <span style="font-size:.78rem;font-weight:700;color:#059669;">
+                <span class="prop-amt" style="font-size:.78rem;font-weight:700;color:#059669;">
                   {{ number_format($r->base_propietario, 2, ',', '.') }} €
                 </span>
               @endif
@@ -321,6 +323,7 @@ const ROUTE_GASTOS      = "{{ route('novaciones.gastos',         $project->slug)
 const ROUTE_GASTOS_SAVE = "{{ route('novaciones.gastos.save',    $project->slug) }}";
 const ROUTE_UPD_TAREA   = "{{ route('novaciones.update-tarea',   $project->slug) }}";
 const ROUTE_CRE_TAREA   = "{{ route('novaciones.create-tarea',  $project->slug) }}";
+const ROUTE_TAREA_FICHA = "{{ route('vm.tarea', ['project'=>$project->slug,'tipo'=>'__TIPO__','id'=>'__ID__']) }}";
 const CSRF              = "{{ csrf_token() }}";
 const PROP_ID           = {{ $prop_id }};
 const YEAR_SEL          = {{ $year }};
@@ -725,6 +728,8 @@ async function loadGastos() {
 }
 
 function tareaRow(t, tabla) {
+  const tipoFicha = tabla === 'piscinas' ? 'piscina' : tabla;
+  const fichaUrl  = ROUTE_TAREA_FICHA.replace('__TIPO__', tipoFicha).replace('__ID__', t.id);
   return `
     <div class="tarea-row" id="tarea-${tabla}-${t.id}">
       <div class="tarea-header">
@@ -734,6 +739,14 @@ function tareaRow(t, tabla) {
           <span class="toggle-slider"></span>
         </label>
         <span class="tarea-nombre">${t.nombre ?? '—'}</span>
+        <a href="${fichaUrl}" target="_blank" rel="noopener" title="Abrir en una nueva pestaña"
+           class="tarea-ficha-link" onclick="event.stopPropagation()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+            <polyline points="15 3 21 3 21 9"/>
+            <line x1="10" y1="14" x2="21" y2="3"/>
+          </svg>
+        </a>
         <span class="tarea-fecha">${fmtDate(t.fecha_finalizacion)}</span>
       </div>
       <div class="tarea-fields">
@@ -798,7 +811,7 @@ function renderGastos() {
     </button>
 
     <div class="bloque-title" style="margin-top:20px;">
-      <span>Mantenimiento</span>
+      <span>Mantenimiento <span style="font-size:.7rem;font-weight:400;color:#999;">(no se muestran tareas Descartadas o Canceladas)</span></span>
       <button onclick="abrirModal()" style="background:none;border:none;cursor:pointer;
               font-size:1rem;color:#185FA5;font-weight:700;line-height:1;padding:0 2px;"
               title="Crear tarea">＋</button>

@@ -191,25 +191,25 @@ $totalNeto   = $totalPropietario - $totalGastos;
     </tr>
   </thead>
   <tbody>
-    @foreach($allTareas as $i => $t)
-    @php $rowClass = ($i % 2 === 1) ? ' class="even"' : ''; @endphp
-    <tr{{ $rowClass }}>
-      <td class="l">{{ $fd($t->fecha_finalizacion) }}</td>
-      <td class="l" colspan="2">{{ $t->nombre_novacion ?? $t->nombre ?? '—' }}</td>
-      <td class="r num">{{ $nf($t->importe_novacion) }} €</td>
-    </tr>
-    @endforeach
-
-    @php $sumiOffset = count($allTareas); @endphp
+    @php $mantOffset = 0; @endphp
     @foreach($SUMI_LABELS as $k => $lbl)
       @if($gastos && $gastos->$k)
-      @php $fk = 'fecha_' . $k; $rowClass = ($sumiOffset % 2 === 1) ? ' class="even"' : ''; $sumiOffset++; @endphp
+      @php $fk = 'fecha_' . $k; $rowClass = ($mantOffset % 2 === 1) ? ' class="even"' : ''; $mantOffset++; @endphp
       <tr{{ $rowClass }}>
         <td class="l">{{ ($gastos->$fk ?? null) ? $fd($gastos->$fk) : '' }}</td>
         <td class="l" colspan="2">{{ $lbl }}</td>
         <td class="r num">{{ $nf($gastos->$k) }} €</td>
       </tr>
       @endif
+    @endforeach
+
+    @foreach($allTareas as $i => $t)
+    @php $rowClass = (($mantOffset + $i) % 2 === 1) ? ' class="even"' : ''; @endphp
+    <tr{{ $rowClass }}>
+      <td class="l">{{ $fd($t->fecha_finalizacion) }}</td>
+      <td class="l" colspan="2">{{ $t->nombre_novacion ?? $t->nombre ?? '—' }}</td>
+      <td class="r num">{{ $nf($t->importe_novacion) }} €</td>
+    </tr>
     @endforeach
   </tbody>
   <tfoot>

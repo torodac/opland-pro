@@ -73,6 +73,11 @@ class IcneaSyncImportesCommand extends Command
                     continue;
                 }
 
+                // Icnea devuelve el catalan "allotjament" para el concepto de alojamiento
+                if (strcasecmp($texto, 'allotjament') === 0) {
+                    $texto = 'alojamiento';
+                }
+
                 $existing = DB::table('vm_reservas_importes')
                     ->where('booking_id', $reserva->booking_id)
                     ->where('texto', $texto)
