@@ -43,14 +43,17 @@ class ListadoController extends Controller
         } elseif ($fullTable === 'vm_propiedades' && $stat) {
             $ayer = now()->subDay()->toDateString();
             $hoy  = now()->toDateString();
-            $query->whereNotNull('icnea_code');
+            if ($stat !== 'codigo_compartido') {
+                $query->whereNotNull('icnea_code');
+            }
             match ($stat) {
-                'pte_info'        => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))->where(fn($q) => $q->whereNull('fecha_inicio')->orWhereNull('tipo_renta')),
-                'posibles_bajas'  => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))->where(fn($q) => $q->whereNull('icnea_updatedat')->orWhereDate('icnea_updatedat', '<', $ayer)),
-                'revisar_borrado' => $query->where('deleted', 1)->whereDate('icnea_updatedat', $hoy),
-                'ocultas'         => $query->where('deleted', 0)->where('hidden', 1),
-                'sin_breezeway'   => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))->whereNull('breezeway_home_id'),
-                default           => null,
+                'pte_info'          => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))->where(fn($q) => $q->whereNull('fecha_inicio')->orWhereNull('tipo_renta')),
+                'posibles_bajas'    => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))->where(fn($q) => $q->whereNull('icnea_updatedat')->orWhereDate('icnea_updatedat', '<', $ayer)),
+                'revisar_borrado'   => $query->where('deleted', 1)->whereDate('icnea_updatedat', $hoy),
+                'ocultas'           => $query->where('deleted', 0)->where('hidden', 1),
+                'sin_breezeway'     => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))->whereNull('breezeway_home_id'),
+                'codigo_compartido' => $query->whereIn('id', $this->propiedadesConCodigoCompartido()),
+                default             => null,
             };
         } else {
             // Borrados / archivados (solo si las columnas existen)
@@ -209,11 +212,12 @@ class ListadoController extends Controller
             $hoy  = now()->toDateString();
             $baseStats = fn() => DB::table($fullTable)->whereNotNull('icnea_code')->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0));
             $tablStats = [
-                'pte_info'        => $baseStats()->where(fn($q) => $q->whereNull('fecha_inicio')->orWhereNull('tipo_renta'))->count(),
-                'posibles_bajas'  => $baseStats()->where(fn($q) => $q->whereNull('icnea_updatedat')->orWhereDate('icnea_updatedat', '<', $ayer))->count(),
-                'revisar_borrado' => DB::table($fullTable)->whereNotNull('icnea_code')->where('deleted', 1)->whereDate('icnea_updatedat', $hoy)->count(),
-                'ocultas'         => DB::table($fullTable)->where('deleted', 0)->where('hidden', 1)->count(),
-                'sin_breezeway'   => $baseStats()->whereNull('breezeway_home_id')->count(),
+                'pte_info'          => $baseStats()->where(fn($q) => $q->whereNull('fecha_inicio')->orWhereNull('tipo_renta'))->count(),
+                'posibles_bajas'    => $baseStats()->where(fn($q) => $q->whereNull('icnea_updatedat')->orWhereDate('icnea_updatedat', '<', $ayer))->count(),
+                'revisar_borrado'   => DB::table($fullTable)->whereNotNull('icnea_code')->where('deleted', 1)->whereDate('icnea_updatedat', $hoy)->count(),
+                'ocultas'           => DB::table($fullTable)->where('deleted', 0)->where('hidden', 1)->count(),
+                'sin_breezeway'     => $baseStats()->whereNull('breezeway_home_id')->count(),
+                'codigo_compartido' => count($this->propiedadesConCodigoCompartido()),
             ];
             $icneaSync = Cache::get('icnea_sync_result');
         }
@@ -339,5 +343,29 @@ class ListadoController extends Controller
         if (!$usuario || !$usuario->id_rol) return null;
 
         return DB::table($rolesTable)->find($usuario->id_rol);
+    }
+
+    // IDs de propiedades activas cuyo a3_code_historial o icnea_code_historial
+    // comparte algun codigo con el de OTRA propiedad (posible duplicado a revisar).
+    private function propiedadesConCodigoCompartido(): array
+    {
+        $rows = DB::select("
+            WITH a3 AS (
+                SELECT id, trim(c) AS codigo
+                FROM vm_propiedades, unnest(string_to_array(a3_code_historial, ',')) AS c
+                WHERE a3_code_historial IS NOT NULL AND trim(c) <> ''
+            ), icnea AS (
+                SELECT id, trim(c) AS codigo
+                FROM vm_propiedades, unnest(string_to_array(icnea_code_historial, ',')) AS c
+                WHERE icnea_code_historial IS NOT NULL AND trim(c) <> ''
+            )
+            SELECT DISTINCT p.id
+            FROM vm_propiedades p
+            WHERE p.deleted = 0 AND (
+                EXISTS (SELECT 1 FROM a3 a JOIN a3 b ON a.codigo = b.codigo AND a.id <> b.id WHERE a.id = p.id)
+                OR EXISTS (SELECT 1 FROM icnea a JOIN icnea b ON a.codigo = b.codigo AND a.id <> b.id WHERE a.id = p.id)
+            )
+        ");
+        return array_column($rows, 'id');
     }
 }

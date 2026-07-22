@@ -138,6 +138,7 @@
                 'revisar_borrado' => ['label' => 'Revisar borrado',      'color' => 'blue',   'count' => $tablStats['revisar_borrado'],  'tooltip' => 'Propiedades marcadas como eliminadas que Icnea ha actualizado hoy ¿es correcto mantenerlas borradas?'],
                 'ocultas'         => ['label' => 'Propiedades ocultas',  'color' => 'gray',   'count' => $tablStats['ocultas'],          'tooltip' => 'Propiedades archivadas — no se muestran en desplegables ni en otros módulos'],
                 'sin_breezeway'   => ['label' => 'Sin ID Breezeway',      'color' => 'red',    'count' => $tablStats['sin_breezeway'],    'tooltip' => 'Propiedades activas y visibles sin breezeway_home_id — no se sincronizarán tareas de limpieza/mantenimiento para ellas.'],
+                'codigo_compartido' => ['label' => 'Código compartido',   'color' => 'red',    'count' => $tablStats['codigo_compartido'], 'tooltip' => 'Propiedades activas cuyo código histórico (A3 o Icnea) coincide con el de otra propiedad — posible duplicado a revisar.'],
             ];
         $colorMap = [
             'yellow' => ['bg' => '#fefce8', 'border' => '#fde047', 'text' => '#854d0e', 'num' => '#a16207', 'active_bg' => '#fef08a'],
