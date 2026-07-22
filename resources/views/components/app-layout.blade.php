@@ -73,7 +73,7 @@
         </a>
 
         {{-- Menú --}}
-        <nav class="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2 space-y-0.5">
+        <nav id="sidebar-nav" class="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2 space-y-0.5">
             @if($project)
                 @php
                     $authUser       = auth()->user();
@@ -167,6 +167,21 @@
                 @endif
             @endif
         </nav>
+        <script>
+        (function () {
+            // Cada clic en el menu recarga la pagina entera (no es una SPA), asi que el
+            // scroll del sidebar se resetea a 0 en cada navegacion. Se guarda en
+            // sessionStorage y se restaura aqui mismo, justo despues de que el <nav> ya
+            // exista en el DOM (script no-module, se ejecuta al vuelo durante el parseo).
+            var nav = document.getElementById('sidebar-nav');
+            if (!nav) return;
+            var saved = sessionStorage.getItem('sidebarScroll');
+            if (saved !== null) nav.scrollTop = parseInt(saved, 10) || 0;
+            nav.addEventListener('scroll', function () {
+                sessionStorage.setItem('sidebarScroll', nav.scrollTop);
+            }, { passive: true });
+        })();
+        </script>
 
         {{-- Usuario con menú contextual --}}
         <div class="border-t border-gray-200 p-3 shrink-0" x-data="{
