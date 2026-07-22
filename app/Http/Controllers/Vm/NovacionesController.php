@@ -420,13 +420,13 @@ class NovacionesController extends Controller
     private function historialDocumentos(int $propId, int $year, int $month)
     {
         return DB::table('vm_novaciones_documentos as d')
-            ->leftJoin('vm_usuarios as u', 'u.id', '=', 'd.createuser')
+            ->leftJoin('admin_users as u', 'u.id', '=', 'd.createuser')
             ->where('d.id_propiedades', $propId)
             ->where('d.year', $year)
             ->where('d.month', $month)
             ->where('d.deleted', 0)
             ->orderByDesc('d.createdat')
-            ->select('d.id', 'd.createdat', 'd.importe_propietario', 'd.importe_vm', 'd.total_gastos', 'u.nombre as createuser_nombre')
+            ->select('d.id', 'd.createdat', 'd.importe_propietario', 'd.importe_vm', 'd.total_gastos', 'u.name as createuser_nombre')
             ->get();
     }
 
