@@ -634,6 +634,18 @@ function setFieldsReadonly(readonly) {
             el.style.pointerEvents = readonly ? 'none' : '';
             el.style.backgroundColor = readonly ? BG_READONLY : '';
         });
+
+    // Los campos "desplegable" (propiedad, reserva, etc.) son un boton + panel propio, no un
+    // <select> nativo — el querySelectorAll de arriba nunca los toca, por eso quedaban
+    // editables aunque el resto de la ficha estuviera en modo consulta.
+    document.querySelectorAll('#ficha-form .fk-combo-toggle')
+        .forEach(btn => {
+            btn.style.pointerEvents   = readonly ? 'none' : '';
+            btn.style.backgroundColor = readonly ? BG_READONLY : '';
+        });
+    if (readonly) {
+        document.querySelectorAll('#ficha-form .fk-combo-panel').forEach(p => p.style.display = 'none');
+    }
 }
 
 function toggleEdit() {

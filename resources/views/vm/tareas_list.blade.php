@@ -4,7 +4,7 @@
         return intdiv($min, 60) . 'h ' . str_pad($min % 60, 2, '0', STR_PAD_LEFT) . 'm';
     }
     $hasFilters = request()->hasAny(['q','f_propiedad','f_fecha_desde','f_fecha_hasta','f_responsable']);
-    $filterKeys = ['q','f_propiedad','f_fecha_desde','f_fecha_hasta','f_responsable','stat','borrados','ocultos'];
+    $filterKeys = ['q','f_propiedad','f_fecha_desde','f_fecha_hasta','f_responsable','stat','borrados','ocultos','sort','dir'];
     $listUrl = fn($extra=[]) => route('vm.tarea.list', array_filter(array_merge(['project'=>$project->slug,'tipo'=>$tipo], request()->only($filterKeys), $extra), fn($v) => $v !== null));
 @endphp
 
@@ -237,11 +237,38 @@
 <table class="w-full text-xs">
     <thead>
         <tr class="border-b border-gray-200 bg-gray-50">
-            <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap text-left text-gray-400">Fecha</th>
-            <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap text-left text-gray-400">Propiedad</th>
-            <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap text-left text-gray-400">Nombre</th>
+            @php
+                // Cabecera ordenable, mismo patron visual que el listado generico
+                // (listado.blade.php). Construido con PHP puro (no directivas Blade): dentro de
+                // un bloque @php, Blade no vuelve a compilar {{ }} / @if — saldrian como texto
+                // literal en vez de renderizarse.
+                $thSort = function ($field, $label, $align = 'text-left') use ($sortField, $sortDir, $listUrl) {
+                    $isActive  = $sortField === $field;
+                    $nextDir   = ($isActive && $sortDir === 'asc') ? 'desc' : 'asc';
+                    $sortUrl   = e($listUrl(['sort' => $field, 'dir' => $nextDir, 'page' => null]));
+                    $labelEsc  = e($label);
+                    $linkClass = $isActive ? 'text-orange-500' : 'text-gray-400 hover:text-gray-600';
+
+                    if ($isActive) {
+                        $path = $sortDir === 'asc' ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7';
+                        $icon = '<svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">'
+                            . '<path stroke-linecap="round" stroke-linejoin="round" d="' . $path . '"/></svg>';
+                    } else {
+                        $icon = '<svg class="w-3 h-3 shrink-0 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+                            . '<path stroke-linecap="round" stroke-linejoin="round" d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg>';
+                    }
+
+                    return '<th class="' . $align . ' px-4 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap">'
+                        . '<a href="' . $sortUrl . '" class="inline-flex items-center gap-1 ' . $linkClass . '">'
+                        . $labelEsc . ' ' . $icon
+                        . '</a></th>';
+                };
+            @endphp
+            {!! $thSort('fecha_planificada', 'Fecha') !!}
+            {!! $thSort('propiedad_nombre', 'Propiedad') !!}
+            {!! $thSort('nombre', 'Nombre') !!}
             <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap text-center text-gray-400">Resp.</th>
-            <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap text-right text-gray-400">Tiempo</th>
+            {!! $thSort('total_min', 'Tiempo', 'text-right') !!}
             <th class="w-8"></th>
         </tr>
     </thead>

@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class TareaController extends Controller
 {
@@ -466,11 +467,28 @@ class TareaController extends Controller
             $query->where('t.estado', 'Vencida');
         } elseif ($stat === 'no_imputadas') {
             $query->where('t.estado', 'Completada')->whereRaw('COALESCE(imp.total_min, 0) = 0');
-        } elseif ($stat === 'propias') {
+        } elseif ($stat === 'propias' && Schema::hasColumn($tabla, 'breezeway_task_id')) {
             $query->whereNull('t.breezeway_task_id');
         }
 
-        $tareas = $query->orderByRaw('t.fecha_planificada ASC NULLS LAST, t.id DESC')->paginate(25)->withQueryString();
+        // Ordenable por cabecera, igual que el listado generico. "Resp." no es ordenable
+        // porque control_user es un array JSON, no un valor simple comparable.
+        $columnasOrdenables = [
+            'fecha_planificada' => 't.fecha_planificada',
+            'propiedad_nombre'  => 'propiedad_nombre',
+            'nombre'            => 't.nombre',
+            'total_min'         => 'total_min',
+        ];
+        $sortField = $request->input('sort');
+        $sortDir   = $request->input('dir', 'asc') === 'desc' ? 'desc' : 'asc';
+        if ($sortField && isset($columnasOrdenables[$sortField])) {
+            $query->orderBy($columnasOrdenables[$sortField], $sortDir)->orderBy('t.id', 'desc');
+        } else {
+            $sortField = null;
+            $query->orderByRaw('t.fecha_planificada ASC NULLS LAST, t.id DESC');
+        }
+
+        $tareas = $query->paginate(25)->withQueryString();
 
         // Stats (base limpia: sin borrados, sin ocultos, sin filtro de stat)
         // "Vigentes"/"vencidas" ya excluyen Completada/Cancelada porque esas se ocultan solas
@@ -483,7 +501,11 @@ class TareaController extends Controller
         $vigentes    = $statsBase()->where($noCerrada)->count();
         $vencidas    = $statsBase()->where('t.estado', 'Vencida')->count();
         $noImputadas = $statsBase()->where('t.estado', 'Completada')->whereRaw('COALESCE(imp.total_min, 0) = 0')->count();
-        $propias     = $statsBase()->whereNull('t.breezeway_task_id')->count();
+        // Piscinas no tiene breezeway_task_id (Breezeway nunca sincroniza ese departamento):
+        // todas sus tareas son "propias" por definicion, sin necesidad de filtrar la columna.
+        $propias = Schema::hasColumn($tabla, 'breezeway_task_id')
+            ? $statsBase()->whereNull('t.breezeway_task_id')->count()
+            : $statsBase()->count();
 
         $colores = [
             'limpieza'      => ['bg' => '#E6F1FB', 'bd' => '#378ADD', 'tx' => '#0C447C'],
@@ -498,7 +520,8 @@ class TareaController extends Controller
             'project', 'tipo', 'tableName', 'tareas', 'propias',
             'allUsuarios', 'usuariosMap', 'propiedades',
             'vigentes', 'vencidas', 'noImputadas',
-            'canEdit', 'c', 'tipoLabel', 'tipoIcon', 'stat'
+            'canEdit', 'c', 'tipoLabel', 'tipoIcon', 'stat',
+            'sortField', 'sortDir'
         ));
     }
 
