@@ -21,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role.project-admin' => \App\Http\Middleware\EnsureProjectAdmin::class,
             'vm.only'            => \App\Http\Middleware\EnsureVmProject::class,
             'vmf.only'           => \App\Http\Middleware\EnsureVmfProject::class,
+            'opland.only'        => \App\Http\Middleware\EnsureOplandProject::class,
             'table.access'       => \App\Http\Middleware\CheckTableAccess::class,
         ]);
         $middleware->appendToGroup('web', \App\Http\Middleware\ForcePasswordChange::class);

@@ -238,6 +238,13 @@ Route::middleware('auth')->group(function () {
             Route::get('facturas_form', [FacturasUploadController::class, 'index'])->name('vmf.facturas_form');
         }); // fin vmf.only
 
+        Route::middleware('opland.only')->group(function () {
+            Route::get('conciliacion', [\App\Http\Controllers\Opland\ConciliacionController::class, 'index'])->name('opland.conciliacion');
+            Route::post('conciliacion/vincular', [\App\Http\Controllers\Opland\ConciliacionController::class, 'vincular'])->name('opland.conciliacion.vincular');
+            Route::post('conciliacion/desvincular', [\App\Http\Controllers\Opland\ConciliacionController::class, 'desvincular'])->name('opland.conciliacion.desvincular');
+            Route::post('conciliacion/crear-desde-banco', [\App\Http\Controllers\Opland\ConciliacionController::class, 'crearDesdeBanco'])->name('opland.conciliacion.crear-desde-banco');
+        }); // fin opland.only
+
         Route::get('{table}', [ListadoController::class, 'index'])->name('listado');
         Route::post('{table}/upload-doc', [FichaController::class, 'uploadDoc'])->name('listado.upload-doc');
 
