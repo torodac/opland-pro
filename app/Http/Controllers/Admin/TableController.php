@@ -7,6 +7,7 @@ use App\Models\Project;
 use App\Models\ProjectTable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class TableController extends Controller
 {
@@ -205,6 +206,16 @@ class TableController extends Controller
 
     public function destroy(Project $project, ProjectTable $table)
     {
+        $fullTable = $table->getFullTableName();
+
+        if (!$table->is_virtual && Schema::hasTable($fullTable)) {
+            try {
+                Schema::drop($fullTable);
+            } catch (\Illuminate\Database\QueryException $e) {
+                return back()->withErrors(['error' => "No se pudo eliminar la tabla física «{$fullTable}»: probablemente otras tablas dependen de ella. Detalle: {$e->getMessage()}"]);
+            }
+        }
+
         DB::table('admin_menu_items')->where('project_table_id', $table->id)->delete();
         $table->delete();
 

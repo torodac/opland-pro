@@ -7,6 +7,7 @@ use App\Models\Project;
 use App\Models\ProjectTable;
 use App\Models\TableField;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 class FieldController extends Controller
 {
@@ -121,6 +122,16 @@ class FieldController extends Controller
 
     public function destroy(Project $project, ProjectTable $table, TableField $field)
     {
+        $fullTable = $table->getFullTableName();
+
+        if (Schema::hasTable($fullTable) && Schema::hasColumn($fullTable, $field->name)) {
+            try {
+                Schema::table($fullTable, fn ($t) => $t->dropColumn($field->name));
+            } catch (\Illuminate\Database\QueryException $e) {
+                return back()->withErrors(['error' => "No se pudo eliminar la columna física «{$field->name}»: {$e->getMessage()}"]);
+            }
+        }
+
         $field->delete();
 
         return redirect()
