@@ -92,6 +92,15 @@ class ProjectController extends Controller
         }
     }
 
+    // Genera (o rota, si ya existía) el token de API del proyecto, usado por integraciones externas (Power BI, etc.)
+    public function generateToken(Project $project)
+    {
+        $token = bin2hex(random_bytes(32));
+        $project->forceFill(['api_token' => $token])->save();
+
+        return response()->json(['token' => $token]);
+    }
+
     public function destroy(Project $project)
     {
         $project->delete();

@@ -116,6 +116,12 @@ Route::middleware('auth')->group(function () {
         });
     });
 
+    // Generar/rotar token de API de un proyecto (para integraciones tipo Power BI)
+    Route::middleware('role.project-admin')->group(function () {
+        Route::get('api/generateToken/{project}', [ProjectController::class, 'generateToken'])
+            ->name('projects.generate-token');
+    });
+
     // Perfil de usuario
     Route::get('perfil', [App\Http\Controllers\PerfilController::class, 'show'])->name('perfil');
     Route::patch('perfil', [App\Http\Controllers\PerfilController::class, 'update'])->name('perfil.update');

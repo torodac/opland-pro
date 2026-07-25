@@ -69,6 +69,23 @@
                     <input type="checkbox" name="active" value="1" {{ $project->active ? 'checked' : '' }}
                            class="w-4 h-4 accent-orange-500">
                 </div>
+
+                <div class="px-5 py-4 flex items-start gap-4">
+                    <label class="w-32 shrink-0 text-sm text-gray-400 pt-2">Token API</label>
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2">
+                            <input type="text" id="api-token-field" value="{{ $project->api_token ?? '' }}" readonly
+                                   placeholder="Sin token generado"
+                                   class="flex-1 text-xs font-mono border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-600">
+                            <button type="button" id="generate-token-btn"
+                                    data-url="{{ route('projects.generate-token', $project) }}"
+                                    class="shrink-0 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-medium rounded-lg transition-colors">
+                                {{ $project->api_token ? 'Rotar' : 'Generar' }}
+                            </button>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-1">Usado por integraciones externas (Power BI, etc.) para leer datos vía <code>/api/data/{{ $project->slug }}/...</code>. Rotarlo invalida el anterior.</p>
+                    </div>
+                </div>
                 @endif
 
             </div>
@@ -91,5 +108,27 @@
             </div>
         </form>
     </div>
+
+    @if($project->exists)
+    <script>
+        document.getElementById('generate-token-btn')?.addEventListener('click', async function () {
+            if (!confirm('¿Generar un nuevo token? El anterior dejará de funcionar.')) return;
+            const btn = this;
+            const url = btn.dataset.url;
+            btn.disabled = true;
+            try {
+                const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                if (!res.ok) throw new Error('Error al generar el token');
+                const data = await res.json();
+                document.getElementById('api-token-field').value = data.token;
+                btn.textContent = 'Rotar';
+            } catch (e) {
+                alert(e.message);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    </script>
+    @endif
 
 </x-app-layout>
