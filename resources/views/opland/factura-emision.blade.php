@@ -1,0 +1,465 @@
+<x-app-layout :project="$project" :breadcrumb="[['label'=>'Facturas','url'=>route('listado',[$project->slug,'facturas'])],['label'=>'Emisión','url'=>'']]">
+
+<x-slot name="actions"></x-slot>
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+  <div>
+    <h2 style="font-size:19px;margin-bottom:4px;font-weight:700">Emisión de facturas</h2>
+    <p style="color:#52697a;font-size:12.5px;margin:0" id="fact-subtitle">Factura {{ $f->num_fact ?? '(borrador)' }}</p>
+  </div>
+  <div style="display:flex;gap:8px">
+    <button class="fact-btn" onclick="guardarCabecera()">Guardar borrador</button>
+    <button class="fact-btn" onclick="duplicarFactura()">Duplicar</button>
+    <button class="fact-btn" onclick="abrirPreview()">Previsualizar</button>
+    <button class="fact-btn fact-btn-primary" onclick="emitirFactura()" id="btn-emitir">Emitir y descargar PDF</button>
+  </div>
+</div>
+
+<div class="fact-card" style="margin-bottom:16px">
+  <div class="fact-card-head"><h3>Datos de cabecera</h3></div>
+  <div class="fact-card-body">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 16px">
+      <div class="fact-field">
+        <div class="fact-label">Cliente</div>
+        <select class="fact-input" id="in-cliente" onchange="onHeaderChange()" style="width:100%">
+          <option value="">— Selecciona —</option>
+          @foreach($clientes as $c)
+            <option value="{{ $c->id }}" {{ $f->id_clientes==$c->id?'selected':'' }}>{{ $c->nombre }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="fact-field">
+        <div class="fact-label">Proyecto</div>
+        <select class="fact-input" id="in-proyecto" onchange="onHeaderChange()" style="width:100%">
+          <option value="">— Selecciona —</option>
+          @foreach($proyectos as $p)
+            <option value="{{ $p->id }}" data-cliente="{{ $p->id_clientes }}" {{ $f->id_proyectos==$p->id?'selected':'' }}>{{ $p->nombre }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="fact-field">
+        <div class="fact-label">Descripción (texto libre, aparece en la factura)</div>
+        <input class="fact-input" id="in-descripcion" style="width:100%" value="{{ $f->descripcion }}" oninput="onDescripcionInput(this.value)" onchange="onHeaderChange()">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div class="fact-field">
+          <div class="fact-label">Nº factura</div>
+          <input class="fact-input" id="in-numfact" style="width:100%" disabled>
+        </div>
+        <div class="fact-field">
+          <div class="fact-label">Fecha</div>
+          <input class="fact-input" type="date" id="in-fecha" style="width:100%" value="{{ $f->fecha_emision }}" {{ $f->num_fact ? 'disabled' : '' }}>
+        </div>
+        <div class="fact-field" style="margin-bottom:0">
+          <div class="fact-label">Dto. factura (€)</div>
+          <input class="fact-input" type="number" step="0.01" id="in-dtofactura" style="width:100%" value="{{ $f->dtototae ?? 0 }}" onchange="onHeaderChange()">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="fact-board">
+  <div class="fact-card">
+    <div class="fact-col-head">
+      <div>
+        <div class="fact-col-title">Líneas de factura</div>
+        <div class="fact-col-sub" id="lineas-sub"></div>
+      </div>
+      <button class="fact-btn fact-btn-sm" onclick="addLinea()">+ Añadir línea</button>
+    </div>
+    <div class="fact-list" id="col-lineas"></div>
+    <div style="padding:10px 14px 14px;border-top:1px solid #dce6ee;display:flex;flex-direction:column;gap:5px;font-size:12.5px">
+      <div style="display:flex;justify-content:space-between"><span style="color:#52697a">Base (líneas)</span><span id="sum-base"></span></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:#52697a">Dto. factura</span><span id="sum-dtofactura"></span></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:#52697a" id="sum-iva-label">IVA</span><span id="sum-iva"></span></div>
+      <div style="display:flex;justify-content:space-between;font-weight:800;font-size:14px"><span>Total factura</span><span id="sum-total"></span></div>
+    </div>
+  </div>
+
+  <div class="fact-card">
+    <div class="fact-col-head">
+      <div>
+        <div class="fact-col-title">Imputaciones facturables sin facturar</div>
+        <div class="fact-col-sub">Filtradas por el proyecto de esta factura</div>
+      </div>
+      <span class="fact-chip" id="badge-imputaciones">—</span>
+    </div>
+    <div class="fact-list" id="col-imputaciones"></div>
+  </div>
+</div>
+
+<!-- Modal de previsualización -->
+<div class="fact-modal-overlay" id="preview-overlay">
+  <div class="fact-modal fact-modal-wide">
+    <div class="fact-modal-head" style="display:flex;justify-content:space-between;align-items:center">
+      <span>Previsualización</span>
+      <button class="fact-btn fact-btn-sm" onclick="cerrarPreview()">✕</button>
+    </div>
+    <div class="fact-modal-body" style="max-height:80vh;overflow-y:auto">
+      <div class="doc-sheet">
+        <div class="doc-header">
+          <div class="doc-blob">
+            <div class="doc-logo">
+              <svg class="doc-logo-mark" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="13" stroke="#fff" stroke-width="3"/><path d="M16 3v10M16 19v10" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>
+              <span class="doc-logo-word">OPLAND</span>
+            </div>
+            <div class="doc-company">
+              OPLAND ZERO PAPER S.L<br>
+              B-10526911<br>
+              Av. Aragón, 40<br>
+              46021 Valencia<br>
+              601 41 36 35
+            </div>
+          </div>
+          <div class="doc-client">
+            <div class="doc-client-lbl">Datos cliente</div>
+            <div class="doc-client-name" id="pv-cliente-nombre">—</div>
+            <div class="doc-client-addr" id="pv-cliente-addr">—</div>
+          </div>
+          <div class="doc-meta">
+            <div class="doc-meta-lbl">Nº factura</div>
+            <div class="doc-meta-val" id="pv-numfact">—</div>
+            <div class="doc-meta-lbl">Fecha</div>
+            <div class="doc-meta-val" id="pv-fecha">—</div>
+          </div>
+        </div>
+
+        <div class="doc-service-title" id="pv-descripcion">—</div>
+
+        <div class="doc-body">
+          <table class="doc-table">
+            <thead><tr><th>Concepto</th><th style="text-align:right">Precio</th><th style="text-align:right">Dto. %</th><th style="text-align:right">Dto. €</th><th style="text-align:right">Total</th></tr></thead>
+            <tbody id="pv-lineas"></tbody>
+            <tfoot><tr class="doc-base-row"><td colspan="4" style="text-align:right">Base imponible</td><td style="text-align:right" id="pv-base-row"></td></tr></tfoot>
+          </table>
+
+          <div class="doc-totals-grid">
+            <div class="doc-total-box"><span class="val" id="pv-total-base"></span><span class="lbl">Base imponible</span></div>
+            <div class="doc-total-box"><span class="val" id="pv-total-iva"></span><span class="lbl">Total IVA</span></div>
+            <div class="doc-total-box"><span class="val" id="pv-total-factura"></span><span class="lbl">Total factura</span></div>
+          </div>
+
+          <div class="doc-payment-note">
+            Rogamos hagan efectivo el pago de la presente factura mediante transferencia a la cuenta del Banco BBVA<br>
+            ES24 0182 7710 4502 0250 8013
+          </div>
+
+          <div class="doc-legal">
+            En cumplimiento de lo establecido en el Reglamento General de Protección de Datos (UE) 2016/679 del Parlamento Europeo y del Consejo, de 27 de abril de 2016,
+            relativo a la protección de datos personales y la libre circulación de los mismos, le comunicamos que los datos que usted nos facilite quedarán incorporados y serán
+            tratados en los ficheros titularidad de OPLAND ZERO PAPER S.L. con el fin de poderle prestar nuestros servicios, así como para mantenerle informado sobre cuestiones
+            relativas a la actividad de la empresa. OPLAND ZERO PAPER S.L. se compromete a tratar de forma confidencial los datos de carácter personal facilitados y a no comunicar
+            o ceder dicha información a terceros. De acuerdo con dicha Ley, tiene derecho a ejercer los derechos de acceso, rectificación, cancelación, limitación, oposición y
+            portabilidad de manera gratuita mediante correo electrónico a opland@opland.es
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.fact-btn{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:6px;border:1px solid #dce6ee;background:#fff;color:#16232b;cursor:pointer}
+.fact-btn-primary{background:#1b5d73;border-color:#1b5d73;color:#fff}
+.fact-btn-sm{padding:5px 10px;font-size:11.5px}
+.fact-card{background:#fff;border:1px solid #dce6ee;border-radius:10px;box-shadow:0 1px 2px rgba(18,63,79,.06)}
+.fact-card-head{padding:14px 18px;border-bottom:1px solid #dce6ee}
+.fact-card-head h3{margin:0;font-size:14px}
+.fact-card-body{padding:16px 18px}
+.fact-field{margin-bottom:0}
+.fact-label{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#7e93a1;margin-bottom:4px}
+.fact-input{font-family:inherit;font-size:12px;border:1px solid #dce6ee;background:#fff;color:#16232b;border-radius:6px;padding:7px 10px}
+.fact-input:disabled{background:#f3f7fb;color:#7e93a1}
+.fact-board{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;margin-top:16px}
+@media (max-width:1100px){ .fact-board{grid-template-columns:1fr} }
+.fact-col-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:11px 14px;border-bottom:1px solid #dce6ee}
+.fact-col-title{font-size:12.5px;font-weight:800;color:#16232b}
+.fact-col-sub{font-size:10.5px;color:#7e93a1;margin-top:1px}
+.fact-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:#eaf1f6;color:#52697a;border:1px solid #dce6ee;white-space:nowrap}
+.fact-list{padding:10px;max-height:calc(100vh - 420px);min-height:200px;overflow-y:auto}
+
+.linea-card{border:1px solid #dce6ee;border-radius:6px;padding:10px 11px;margin-bottom:8px;background:#fff;transition:border-color .15s,background .15s,box-shadow .15s}
+.linea-card.drop-ready{border-style:dashed;border-color:#1b5d73}
+.linea-card.drop-over{border-color:#1b5d73;background:#e7f0f4;box-shadow:0 0 0 3px rgba(27,93,115,.15)}
+.linea-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:6px}
+.linea-concepto{flex:1;font-size:12px;padding:6px 8px}
+.linea-num{width:76px;font-size:12px;padding:6px 6px;text-align:right}
+.linea-sub{font-size:12.5px;font-weight:800;width:76px;text-align:right;padding:6px 0;flex-shrink:0}
+.linea-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.linea-hours{font-size:10.5px;font-weight:700;color:#1b5d73;background:#e7f0f4;border-radius:99px;padding:2px 9px}
+.linea-empty-hint{font-size:10.5px;color:#7e93a1}
+.linea-imps{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.imp-chip{font-size:10px;font-weight:700;background:#eaf1f6;color:#52697a;border:1px solid #dce6ee;border-radius:99px;padding:2px 4px 2px 8px;display:inline-flex;align-items:center;gap:4px}
+.imp-chip button{background:none;border:none;color:inherit;cursor:pointer;font-weight:800;padding:0 2px;font-size:11px;line-height:1}
+
+.imp-card{border:1px solid #dce6ee;border-radius:6px;padding:10px 11px;margin-bottom:8px;cursor:grab;background:#fff;transition:box-shadow .15s,opacity .15s,border-color .15s}
+.imp-card:hover{box-shadow:0 2px 10px rgba(18,63,79,.09);border-color:#7e93a1}
+.imp-card.dragging{opacity:.35;cursor:grabbing}
+.imp-top{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+.imp-date{font-size:10.5px;color:#7e93a1;font-family:ui-monospace,Consolas,monospace;flex-shrink:0}
+.imp-name{font-size:12px;font-weight:700;flex:1;min-width:80px;color:#16232b}
+.imp-horas{font-family:ui-monospace,Consolas,monospace;font-weight:800;font-size:12.5px;white-space:nowrap}
+
+.fact-modal-overlay{position:fixed;inset:0;background:rgba(14,22,27,.45);display:none;align-items:center;justify-content:center;z-index:100}
+.fact-modal-overlay.open{display:flex}
+.fact-modal{background:#fff;border-radius:10px;width:380px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.3);border:1px solid #dce6ee}
+.fact-modal.fact-modal-wide{width:760px}
+.fact-modal-head{padding:16px 18px;border-bottom:1px solid #dce6ee;font-weight:800;font-size:14px}
+.fact-modal-body{padding:16px 18px}
+
+.doc-sheet{background:#fff;color:#16232b;border-radius:10px;box-shadow:0 1px 2px rgba(18,63,79,.06);overflow:hidden;border:1px solid #dce6ee}
+.doc-header{position:relative;background:#bfdaf2;display:flex;align-items:stretch;min-height:150px;overflow:hidden}
+.doc-blob{position:relative;flex:0 0 220px;background:#1b5d73;border-bottom-right-radius:140px;color:#fff;padding:20px 22px;z-index:1}
+.doc-logo{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.doc-logo-mark{width:20px;height:20px}
+.doc-logo-word{font-weight:800;font-size:18px;letter-spacing:.03em}
+.doc-company{font-size:10.5px;line-height:1.65;font-weight:600;opacity:.95}
+.doc-client{flex:1;padding:20px 22px}
+.doc-client-lbl{font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#3f5a6b;margin-bottom:6px}
+.doc-client-name{font-weight:800;font-size:14px;color:#16232b;margin-bottom:6px}
+.doc-client-addr{color:#3f5a6b;font-size:11.5px;line-height:1.6}
+.doc-meta{flex:0 0 150px;padding:20px 22px 20px 0;text-align:right}
+.doc-meta-lbl{font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#3f5a6b}
+.doc-meta-val{font-weight:800;font-size:15px;color:#16232b;margin:2px 0 12px}
+.doc-service-title{background:#bfdaf2;text-align:center;padding:10px 20px;font-weight:700;font-size:13.5px;letter-spacing:.04em;color:#16232b}
+.doc-body{padding:22px 26px 26px;font-size:12px;color:#16232b}
+.doc-table{width:100%;border-collapse:collapse;margin-bottom:22px}
+.doc-table th{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:#7e93a1;text-align:left;padding:6px 4px;border-bottom:1.5px solid #16232b}
+.doc-table td{padding:9px 4px;font-size:11.5px;border-bottom:1px solid #eaf1f6;vertical-align:top}
+.doc-table td.num{text-align:right}
+.doc-table tr.doc-base-row td{border-bottom:none;border-top:1.5px solid #16232b;font-weight:800;padding-top:11px}
+.doc-totals-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
+.doc-total-box{border:1px solid #dce6ee;border-radius:6px;padding:12px 14px;text-align:left}
+.doc-total-box .val{display:block;font-size:16px;font-weight:800;color:#16232b}
+.doc-total-box .lbl{font-size:10.5px;color:#7e93a1;margin-top:2px}
+.doc-payment-note{text-align:center;font-weight:700;font-size:11.5px;margin-bottom:18px;line-height:1.6}
+.doc-legal{padding-top:14px;border-top:1px solid #eaf1f6;font-size:9px;color:#8a9aa5;line-height:1.6;text-align:justify}
+</style>
+
+<script>
+const PROJECT_SLUG = @json($project->slug);
+const FACTURA_ID = {{ $f->id }};
+const CSRF = @json(csrf_token());
+
+@php
+    $clientesJs = $clientes->map(fn($c) => ['id'=>$c->id,'nombre'=>$c->nombre])->values();
+    $conceptosJs = $conceptos->values();
+@endphp
+const CLIENTES = @json($clientesJs);
+const CONCEPTOS = @json($conceptosJs);
+
+const ROUTE_ESTADO   = @json(route('opland.factura-emision.estado', [$project->slug, $f->id]));
+const ROUTE_HEADER   = @json(route('opland.factura-emision.update-header', [$project->slug, $f->id]));
+const ROUTE_ADD_LINEA= @json(route('opland.factura-emision.lineas.add', [$project->slug, $f->id]));
+const ROUTE_DUPLICAR = @json(route('opland.factura-emision.duplicar', [$project->slug, $f->id]));
+const ROUTE_EMITIR   = @json(route('opland.factura-emision.emitir', [$project->slug, $f->id]));
+@php
+    $tplUpdateLinea = route('opland.factura-emision.lineas.update', [$project->slug, $f->id, '__ID__']);
+    $tplRemoveLinea = route('opland.factura-emision.lineas.remove', [$project->slug, $f->id, '__ID__']);
+    $tplAttachImp = route('opland.factura-emision.lineas.attach-imp', [$project->slug, $f->id, '__ID__']);
+    $tplDetachImp = route('opland.factura-emision.detach-imp', [$project->slug, '__ID__']);
+    $tplShow = route('opland.factura-emision.show', [$project->slug, '__ID__']);
+@endphp
+function routeUpdateLinea(id){ return @json($tplUpdateLinea).replace('__ID__', id); }
+function routeRemoveLinea(id){ return @json($tplRemoveLinea).replace('__ID__', id); }
+function routeAttachImp(lineaId){ return @json($tplAttachImp).replace('__ID__', lineaId); }
+function routeDetachImp(impId){ return @json($tplDetachImp).replace('__ID__', impId); }
+
+const fmtEUR = v => (v<0?'−':'') + Math.abs(v).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' €';
+const fmtDate = iso => { if(!iso) return '—'; const [y,m,d]=iso.split('-'); return d+'/'+m+'/'+y.slice(2); };
+
+let STATE = null;
+let dragImpPayload = null;
+
+async function apiCall(url, method, body){
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type':'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept':'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const msg = await res.json().catch(()=>({message:'Error'}));
+    alert(msg.message || 'Error al guardar.');
+    throw new Error('http ' + res.status);
+  }
+  return res.json();
+}
+
+async function cargarEstado(){
+  STATE = await apiCall(ROUTE_ESTADO, 'GET');
+  pintarTodo();
+}
+
+function clienteNombre(id){ const c = CLIENTES.find(x=>x.id==id); return c ? c.nombre : ''; }
+
+function pintarTodo(){
+  const f = STATE.factura;
+
+  document.getElementById('in-numfact').value = f.emitida ? f.num_fact : (f.num_fact_preview + ' (previsto)');
+  document.getElementById('fact-subtitle').textContent = 'Factura ' + (f.emitida ? f.num_fact : '(borrador — ' + f.num_fact_preview + ' previsto)');
+  document.getElementById('btn-emitir').style.display = f.emitida ? 'none' : '';
+  ['in-cliente','in-proyecto','in-descripcion','in-fecha','in-dtofactura'].forEach(id => {
+    document.getElementById(id).disabled = !!f.emitida;
+  });
+
+  document.getElementById('col-lineas').innerHTML = STATE.lineas.map(lineaCard).join('')
+    || `<div style="padding:26px 10px;text-align:center;color:#7e93a1;font-size:11.5px">Sin líneas todavía</div>`;
+  document.getElementById('lineas-sub').textContent = STATE.lineas.length + ' líneas';
+
+  document.getElementById('col-imputaciones').innerHTML = STATE.imputaciones_pool.map(impCard).join('')
+    || `<div style="padding:26px 10px;text-align:center;color:#7e93a1;font-size:11.5px">No hay imputaciones facturables pendientes para este proyecto</div>`;
+  document.getElementById('badge-imputaciones').textContent = STATE.imputaciones_pool.length + ' pendientes';
+
+  const t = STATE.totales;
+  document.getElementById('sum-base').textContent = fmtEUR(t.base);
+  document.getElementById('sum-dtofactura').textContent = '-' + fmtEUR(t.dto_factura);
+  document.getElementById('sum-iva-label').textContent = 'IVA (' + (f.iva ?? 21) + '%)';
+  document.getElementById('sum-iva').textContent = fmtEUR(t.iva);
+  document.getElementById('sum-total').textContent = fmtEUR(t.total);
+}
+
+function lineaCard(l){
+  return `<div class="linea-card" data-linea="${l.id}"
+      ondragover="dragOverLinea(event)" ondragleave="dragLeaveLinea(event)" ondrop="dropOnLinea(event,${l.id})">
+    <div class="linea-row">
+      <input class="fact-input linea-concepto" value="${(l.nombre||'').replace(/"/g,'&quot;')}" onchange="onLineaChange(${l.id},'nombre',this.value)">
+      <button class="fact-btn fact-btn-sm" onclick="removeLinea(${l.id})" title="Eliminar línea">✕</button>
+    </div>
+    <div class="linea-row">
+      <input class="fact-input linea-num" type="number" step="0.01" value="${l.precio}" title="Precio" onchange="onLineaChange(${l.id},'precio',this.value)">
+      <input class="fact-input linea-num" type="number" step="1" value="${l.descuentoporc||0}" title="Dto. %" onchange="onLineaChange(${l.id},'descuentoporc',this.value)">
+      <input class="fact-input linea-num" type="number" step="0.01" value="${l.descuentoe||0}" title="Dto. €" onchange="onLineaChange(${l.id},'descuentoe',this.value)">
+      <span class="linea-sub">${fmtEUR(l.precio - (l.descuentoe||0))}</span>
+    </div>
+    <div class="linea-foot">
+      ${l.horas>0 ? `<span class="linea-hours">Σ ${l.horas}h imputadas</span>` : `<span class="linea-empty-hint">Sin imputaciones — arrastra una aquí, o déjala manual</span>`}
+    </div>
+    ${l.imputaciones.length ? `<div class="linea-imps">${l.imputaciones.map(i=>`<span class="imp-chip">${fmtDate(i.fecha)} · ${(i.nombre||'').length>28?i.nombre.slice(0,27)+'…':i.nombre} · ${i.horas}h
+      <button onclick="detachImp(${i.id})" title="Quitar de esta línea">×</button></span>`).join('')}</div>` : ''}
+  </div>`;
+}
+
+function impCard(imp){
+  return `<div class="imp-card" draggable="true" ondragstart="dragStartImp(event,${imp.id})" ondragend="dragEndImp(event)">
+    <div class="imp-top">
+      <span class="imp-date">${fmtDate(imp.fecha)}</span>
+      <span class="imp-name">${imp.nombre}</span>
+      <span class="imp-horas">${imp.horas} h</span>
+    </div>
+  </div>`;
+}
+
+function onDescripcionInput(v){
+  const el = document.getElementById('pv-descripcion');
+  if (el) el.textContent = v;
+}
+
+async function onHeaderChange(){
+  const body = {
+    id_clientes: document.getElementById('in-cliente').value || null,
+    id_proyectos: document.getElementById('in-proyecto').value || null,
+    descripcion: document.getElementById('in-descripcion').value,
+    dtototae: parseFloat(document.getElementById('in-dtofactura').value) || 0,
+  };
+  await apiCall(ROUTE_HEADER, 'PATCH', body);
+  await cargarEstado();
+}
+function guardarCabecera(){ onHeaderChange(); }
+
+async function addLinea(){
+  await apiCall(ROUTE_ADD_LINEA, 'POST');
+  await cargarEstado();
+}
+async function removeLinea(id){
+  await apiCall(routeRemoveLinea(id), 'DELETE');
+  await cargarEstado();
+}
+async function onLineaChange(id, field, value){
+  await apiCall(routeUpdateLinea(id), 'PATCH', { [field]: parseFloat(value)||0 });
+  await cargarEstado();
+}
+async function detachImp(impId){
+  await apiCall(routeDetachImp(impId), 'DELETE');
+  await cargarEstado();
+}
+
+function dragStartImp(ev, impId){
+  dragImpPayload = impId;
+  ev.dataTransfer.effectAllowed = 'link';
+  ev.currentTarget.classList.add('dragging');
+  document.querySelectorAll('.linea-card').forEach(el => el.classList.add('drop-ready'));
+}
+function dragEndImp(ev){
+  ev.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('.linea-card').forEach(el => el.classList.remove('drop-ready','drop-over'));
+  dragImpPayload = null;
+}
+function dragOverLinea(ev){
+  if (!dragImpPayload) return;
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = 'link';
+  ev.currentTarget.classList.add('drop-over');
+}
+function dragLeaveLinea(ev){
+  if (!ev.currentTarget.contains(ev.relatedTarget)) ev.currentTarget.classList.remove('drop-over');
+}
+async function dropOnLinea(ev, lineaId){
+  ev.preventDefault();
+  ev.currentTarget.classList.remove('drop-over','drop-ready');
+  if (!dragImpPayload) return;
+  const impId = dragImpPayload;
+  dragImpPayload = null;
+  await apiCall(routeAttachImp(lineaId), 'POST', { imputacion_id: impId });
+  await cargarEstado();
+}
+
+async function duplicarFactura(){
+  if (!confirm('¿Duplicar esta factura? Se creará un nuevo borrador con las mismas líneas, sin imputaciones asociadas.')) return;
+  const data = await apiCall(ROUTE_DUPLICAR, 'POST');
+  window.location.href = @json($tplShow).replace('__ID__', data.id);
+}
+
+async function emitirFactura(){
+  if (!confirm('Al emitir, el número de factura quedará fijado definitivamente y no podrás editar la cabecera ni las líneas. ¿Continuar?')) return;
+  await apiCall(ROUTE_EMITIR, 'POST');
+  await cargarEstado();
+  alert('Factura emitida: ' + STATE.factura.num_fact);
+}
+
+function abrirPreview(){
+  const f = STATE.factura;
+  document.getElementById('pv-cliente-nombre').textContent = clienteNombre(f.id_clientes) || '—';
+  document.getElementById('pv-cliente-addr').textContent = '';
+  document.getElementById('pv-numfact').textContent = f.emitida ? f.num_fact : f.num_fact_preview;
+  document.getElementById('pv-fecha').textContent = fmtDate(document.getElementById('in-fecha').value);
+  document.getElementById('pv-descripcion').textContent = document.getElementById('in-descripcion').value || '—';
+
+  document.getElementById('pv-lineas').innerHTML = STATE.lineas.map(l => {
+    const dtoEur = l.descuentoe || 0;
+    const total = l.precio - dtoEur;
+    return `<tr>
+      <td>${l.nombre}</td>
+      <td class="num">${fmtEUR(l.precio)}</td>
+      <td class="num">${l.descuentoporc||0}%</td>
+      <td class="num">${fmtEUR(dtoEur)}</td>
+      <td class="num" style="font-weight:700">${fmtEUR(total)}</td>
+    </tr>`;
+  }).join('');
+
+  const t = STATE.totales;
+  document.getElementById('pv-base-row').textContent = fmtEUR(t.base);
+  document.getElementById('pv-total-base').textContent = fmtEUR(t.base_neta);
+  document.getElementById('pv-total-iva').textContent = fmtEUR(t.iva);
+  document.getElementById('pv-total-factura').textContent = fmtEUR(t.total);
+
+  document.getElementById('preview-overlay').classList.add('open');
+}
+function cerrarPreview(){
+  document.getElementById('preview-overlay').classList.remove('open');
+}
+
+cargarEstado();
+</script>
+
+</x-app-layout>
