@@ -250,17 +250,18 @@ Route::middleware('auth')->group(function () {
             Route::post('conciliacion/desvincular', [\App\Http\Controllers\Opland\ConciliacionController::class, 'desvincular'])->name('opland.conciliacion.desvincular');
             Route::post('conciliacion/crear-desde-banco', [\App\Http\Controllers\Opland\ConciliacionController::class, 'crearDesdeBanco'])->name('opland.conciliacion.crear-desde-banco');
 
-            Route::get('facturas-emision/nueva', [\App\Http\Controllers\Opland\FacturaEmisionController::class, 'nueva'])->name('opland.factura-emision.nueva');
-            Route::get('facturas-emision/{factura}', [\App\Http\Controllers\Opland\FacturaEmisionController::class, 'show'])->name('opland.factura-emision.show');
-            Route::get('facturas-emision/{factura}/estado', [\App\Http\Controllers\Opland\FacturaEmisionController::class, 'estado'])->name('opland.factura-emision.estado');
-            Route::patch('facturas-emision/{factura}', [\App\Http\Controllers\Opland\FacturaEmisionController::class, 'updateHeader'])->name('opland.factura-emision.update-header');
-            Route::post('facturas-emision/{factura}/lineas', [\App\Http\Controllers\Opland\FacturaEmisionController::class, 'addLinea'])->name('opland.factura-emision.lineas.add');
-            Route::patch('facturas-emision/{factura}/lineas/{linea}', [\App\Http\Controllers\Opland\FacturaEmisionController::class, 'updateLinea'])->name('opland.factura-emision.lineas.update');
-            Route::delete('facturas-emision/{factura}/lineas/{linea}', [\App\Http\Controllers\Opland\FacturaEmisionController::class, 'removeLinea'])->name('opland.factura-emision.lineas.remove');
-            Route::post('facturas-emision/{factura}/lineas/{linea}/imputaciones', [\App\Http\Controllers\Opland\FacturaEmisionController::class, 'attachImputacion'])->name('opland.factura-emision.lineas.attach-imp');
-            Route::delete('facturas-emision/imputaciones/{imputacion}', [\App\Http\Controllers\Opland\FacturaEmisionController::class, 'detachImputacion'])->name('opland.factura-emision.detach-imp');
-            Route::post('facturas-emision/{factura}/duplicar', [\App\Http\Controllers\Opland\FacturaEmisionController::class, 'duplicar'])->name('opland.factura-emision.duplicar');
-            Route::post('facturas-emision/{factura}/emitir', [\App\Http\Controllers\Opland\FacturaEmisionController::class, 'emitir'])->name('opland.factura-emision.emitir');
+            Route::get('facturas_form/nuevo', [\App\Http\Controllers\Opland\FacturaFormController::class, 'nueva'])->name('opland.factura_form.nueva');
+            Route::delete('facturas_form/imputaciones/{imputacion}', [\App\Http\Controllers\Opland\FacturaFormController::class, 'detachImputacion'])->where('imputacion', '[0-9]+')->name('opland.factura_form.detach-imp');
+            Route::get('facturas_form/{factura}', [\App\Http\Controllers\Opland\FacturaFormController::class, 'show'])->where('factura', '[0-9]+')->name('opland.factura_form.show');
+            Route::get('facturas_form/{factura}/estado', [\App\Http\Controllers\Opland\FacturaFormController::class, 'estado'])->where('factura', '[0-9]+')->name('opland.factura_form.estado');
+            Route::get('facturas_form/{factura}/pdf', [\App\Http\Controllers\Opland\FacturaFormController::class, 'pdf'])->where('factura', '[0-9]+')->name('opland.factura_form.pdf');
+            Route::patch('facturas_form/{factura}', [\App\Http\Controllers\Opland\FacturaFormController::class, 'updateHeader'])->where('factura', '[0-9]+')->name('opland.factura_form.update-header');
+            Route::post('facturas_form/{factura}/lineas', [\App\Http\Controllers\Opland\FacturaFormController::class, 'addLinea'])->where('factura', '[0-9]+')->name('opland.factura_form.lineas.add');
+            Route::patch('facturas_form/{factura}/lineas/{linea}', [\App\Http\Controllers\Opland\FacturaFormController::class, 'updateLinea'])->where(['factura' => '[0-9]+', 'linea' => '[0-9]+'])->name('opland.factura_form.lineas.update');
+            Route::delete('facturas_form/{factura}/lineas/{linea}', [\App\Http\Controllers\Opland\FacturaFormController::class, 'removeLinea'])->where(['factura' => '[0-9]+', 'linea' => '[0-9]+'])->name('opland.factura_form.lineas.remove');
+            Route::post('facturas_form/{factura}/lineas/{linea}/imputaciones', [\App\Http\Controllers\Opland\FacturaFormController::class, 'attachImputacion'])->where(['factura' => '[0-9]+', 'linea' => '[0-9]+'])->name('opland.factura_form.lineas.attach-imp');
+            Route::post('facturas_form/{factura}/duplicar', [\App\Http\Controllers\Opland\FacturaFormController::class, 'duplicar'])->where('factura', '[0-9]+')->name('opland.factura_form.duplicar');
+            Route::post('facturas_form/{factura}/emitir', [\App\Http\Controllers\Opland\FacturaFormController::class, 'emitir'])->where('factura', '[0-9]+')->name('opland.factura_form.emitir');
         }); // fin opland.only
 
         Route::get('{table}', [ListadoController::class, 'index'])->name('listado');

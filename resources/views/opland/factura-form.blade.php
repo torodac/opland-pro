@@ -1,6 +1,12 @@
 <x-app-layout :project="$project" :breadcrumb="[['label'=>'Facturas','url'=>route('listado',[$project->slug,'facturas'])],['label'=>'Emisión','url'=>'']]">
 
-<x-slot name="actions"></x-slot>
+<x-slot name="actions">
+    <a href="{{ route('ficha', [$project->slug, 'facturas', $f->id]) }}"
+       class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors"
+       title="Ver ficha estándar">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+    </a>
+</x-slot>
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:10px">
   <div>
@@ -88,42 +94,41 @@
   <div class="fact-modal fact-modal-wide">
     <div class="fact-modal-head" style="display:flex;justify-content:space-between;align-items:center">
       <span>Previsualización</span>
-      <button class="fact-btn fact-btn-sm" onclick="cerrarPreview()">✕</button>
+      <div style="display:flex;gap:8px">
+        <a class="fact-btn fact-btn-sm" id="btn-descargar-pdf" href="{{ route('opland.factura_form.pdf', [$project->slug, $f->id]) }}">⬇ Descargar PDF</a>
+        <button class="fact-btn fact-btn-sm" onclick="cerrarPreview()">✕</button>
+      </div>
     </div>
     <div class="fact-modal-body" style="max-height:80vh;overflow-y:auto">
       <div class="doc-sheet">
-        <div class="doc-header-wrap">
-          <div class="doc-header">
-            <div class="doc-blob">
-              <div class="doc-logo">
-                <svg class="doc-logo-mark" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="13" stroke="#fff" stroke-width="3"/><path d="M16 3v10M16 19v10" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>
-                <span class="doc-logo-word">OPLAND</span>
-              </div>
-              <div class="doc-company">
-                OPLAND ZERO PAPER S.L<br>
-                B-10526911<br>
-                Av. Aragón, 40<br>
-                46021 Valencia<br>
-                601 41 36 35
-              </div>
+        <div class="doc-header">
+          <div class="doc-blob">
+            <div class="doc-logo">
+              <img src="{{ asset('projects/opland/logo-factura-blanco.png') }}" alt="Opland" class="doc-logo-img">
             </div>
-            <div class="doc-client">
-              <div class="doc-client-lbl">Datos cliente</div>
-              <div class="doc-client-name" id="pv-cliente-nombre">—</div>
-              <div class="doc-client-addr" id="pv-cliente-addr">—</div>
-            </div>
-            <div class="doc-meta">
-              <div class="doc-meta-lbl">Nº factura</div>
-              <div class="doc-meta-val" id="pv-numfact">—</div>
-              <div class="doc-meta-lbl">Fecha</div>
-              <div class="doc-meta-val" id="pv-fecha">—</div>
+            <div class="doc-company">
+              OPLAND ZERO PAPER S.L<br>
+              B-10526911<br>
+              Av. Aragón, 40<br>
+              46021 Valencia<br>
+              601 41 36 35
             </div>
           </div>
-
-          <div class="doc-service-title" id="pv-descripcion">—</div>
+          <div class="doc-client">
+            <div class="doc-client-lbl">Datos cliente</div>
+            <div class="doc-client-name" id="pv-cliente-nombre">—</div>
+            <div class="doc-client-addr" id="pv-cliente-addr">—</div>
+          </div>
+          <div class="doc-meta">
+            <div class="doc-meta-lbl">Nº factura</div>
+            <div class="doc-meta-val" id="pv-numfact">—</div>
+            <div class="doc-meta-lbl">Fecha</div>
+            <div class="doc-meta-val" id="pv-fecha">—</div>
+          </div>
         </div>
 
         <div class="doc-body">
+          <div class="doc-service-title" id="pv-descripcion">—</div>
           <table class="doc-table">
             <colgroup>
               <col style="width:auto">
@@ -141,8 +146,8 @@
           </div>
 
           <div class="doc-payment-note">
-            Rogamos hagan efectivo el pago de la presente factura mediante transferencia a la cuenta del Banco BBVA<br>
-            ES24 0182 7710 4502 0250 8013
+            <div style="white-space:nowrap">Rogamos hagan efectivo el pago de la presente factura mediante transferencia a la cuenta del Banco BBVA</div>
+            <div>ES24 0182 7710 4502 0250 8013</div>
           </div>
 
           <div class="doc-legal">
@@ -198,8 +203,11 @@
 .imp-card.dragging{opacity:.35;cursor:grabbing}
 .imp-top{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
 .imp-date{font-size:10.5px;color:#7e93a1;font-family:ui-monospace,Consolas,monospace;flex-shrink:0}
+.imp-ext-link{color:#7e93a1;flex-shrink:0;display:inline-flex;line-height:0;margin-right:1px}
+.imp-ext-link:hover{color:#1b5d73}
 .imp-name{font-size:12px;font-weight:700;flex:1;min-width:80px;color:#16232b}
 .imp-horas{font-family:ui-monospace,Consolas,monospace;font-weight:800;font-size:12.5px;white-space:nowrap}
+.imp-tarea{font-size:10px;color:#a3adb3;margin-top:2px}
 
 .fact-modal-overlay{position:fixed;inset:0;background:rgba(14,22,27,.45);display:none;align-items:center;justify-content:center;z-index:100}
 .fact-modal-overlay.open{display:flex}
@@ -209,12 +217,10 @@
 .fact-modal-body{padding:16px 18px}
 
 .doc-sheet{background:#fff;color:#16232b;border-radius:10px;box-shadow:0 1px 2px rgba(18,63,79,.06);overflow:hidden;border:1px solid #dce6ee}
-.doc-header-wrap{background:#bfdaf2}
-.doc-header{position:relative;display:flex;align-items:stretch;min-height:150px;overflow:hidden}
+.doc-header{position:relative;background:#bfdaf2;display:flex;align-items:stretch;min-height:150px;overflow:hidden}
 .doc-blob{position:relative;flex:0 0 220px;background:#1b5d73;border-bottom-right-radius:140px;color:#fff;padding:20px 22px;z-index:1}
-.doc-logo{display:flex;align-items:center;gap:8px;margin-bottom:14px}
-.doc-logo-mark{width:20px;height:20px}
-.doc-logo-word{font-weight:800;font-size:18px;letter-spacing:.03em}
+.doc-logo{display:flex;align-items:center;margin-bottom:14px}
+.doc-logo-img{height:24px;width:auto;display:block}
 .doc-company{font-size:10.5px;line-height:1.65;font-weight:600;opacity:.95}
 .doc-client{flex:1;padding:20px 22px}
 .doc-client-lbl{font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#3f5a6b;margin-bottom:6px}
@@ -223,7 +229,7 @@
 .doc-meta{flex:0 0 150px;padding:20px 22px 20px 0;text-align:right}
 .doc-meta-lbl{font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#3f5a6b}
 .doc-meta-val{font-weight:800;font-size:15px;color:#16232b;margin:2px 0 12px}
-.doc-service-title{background:#bfdaf2;text-align:center;padding:10px 20px;font-weight:700;font-size:13.5px;letter-spacing:.04em;color:#16232b}
+.doc-service-title{font-weight:800;font-size:15px;color:#16232b;margin-bottom:16px;padding-bottom:10px;border-bottom:1.5px solid #16232b}
 .doc-body{padding:22px 26px 26px;font-size:12px;color:#16232b}
 .doc-table{width:100%;border-collapse:collapse;margin-bottom:22px}
 .doc-table th{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:#7e93a1;text-align:left;padding:6px 4px;border-bottom:1.5px solid #16232b}
@@ -253,18 +259,23 @@ const CSRF = @json(csrf_token());
 const CLIENTES = @json($clientesJs);
 const CONCEPTOS = @json($conceptosJs);
 
-const ROUTE_ESTADO   = @json(route('opland.factura-emision.estado', [$project->slug, $f->id]));
-const ROUTE_HEADER   = @json(route('opland.factura-emision.update-header', [$project->slug, $f->id]));
-const ROUTE_ADD_LINEA= @json(route('opland.factura-emision.lineas.add', [$project->slug, $f->id]));
-const ROUTE_DUPLICAR = @json(route('opland.factura-emision.duplicar', [$project->slug, $f->id]));
-const ROUTE_EMITIR   = @json(route('opland.factura-emision.emitir', [$project->slug, $f->id]));
+const ROUTE_ESTADO   = @json(route('opland.factura_form.estado', [$project->slug, $f->id]));
+const ROUTE_HEADER   = @json(route('opland.factura_form.update-header', [$project->slug, $f->id]));
+const ROUTE_ADD_LINEA= @json(route('opland.factura_form.lineas.add', [$project->slug, $f->id]));
+const ROUTE_DUPLICAR = @json(route('opland.factura_form.duplicar', [$project->slug, $f->id]));
+const ROUTE_EMITIR   = @json(route('opland.factura_form.emitir', [$project->slug, $f->id]));
 @php
-    $tplUpdateLinea = route('opland.factura-emision.lineas.update', [$project->slug, $f->id, '__ID__']);
-    $tplRemoveLinea = route('opland.factura-emision.lineas.remove', [$project->slug, $f->id, '__ID__']);
-    $tplAttachImp = route('opland.factura-emision.lineas.attach-imp', [$project->slug, $f->id, '__ID__']);
-    $tplDetachImp = route('opland.factura-emision.detach-imp', [$project->slug, '__ID__']);
-    $tplShow = route('opland.factura-emision.show', [$project->slug, '__ID__']);
+    $tplUpdateLinea = route('opland.factura_form.lineas.update', [$project->slug, $f->id, '__ID__']);
+    $tplRemoveLinea = route('opland.factura_form.lineas.remove', [$project->slug, $f->id, '__ID__']);
+    $tplAttachImp = route('opland.factura_form.lineas.attach-imp', [$project->slug, $f->id, '__ID__']);
+    $tplDetachImp = route('opland.factura_form.detach-imp', [$project->slug, '__ID__']);
+    $tplShow = route('opland.factura_form.show', [$project->slug, '__ID__']);
+    $tplImputacionFicha = route('ficha', [$project->slug, 'imputaciones', '__ID__']);
 @endphp
+const extLinkSvg = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+</svg>`;
+function routeImputacionFicha(id){ return @json($tplImputacionFicha).replace('__ID__', id); }
 function routeUpdateLinea(id){ return @json($tplUpdateLinea).replace('__ID__', id); }
 function routeRemoveLinea(id){ return @json($tplRemoveLinea).replace('__ID__', id); }
 function routeAttachImp(lineaId){ return @json($tplAttachImp).replace('__ID__', lineaId); }
@@ -393,9 +404,11 @@ function impCard(imp){
   return `<div class="imp-card" draggable="true" ondragstart="dragStartImp(event,${imp.id})" ondragend="dragEndImp(event)">
     <div class="imp-top">
       <span class="imp-date">${fmtDate(imp.fecha)}</span>
+      <a class="imp-ext-link" href="${routeImputacionFicha(imp.id)}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()" title="Abrir en una nueva pestaña">${extLinkSvg}</a>
       <span class="imp-name">${imp.nombre}</span>
       <span class="imp-horas">${imp.horas} h</span>
     </div>
+    ${imp.tarea_nombre ? `<div class="imp-tarea">${imp.tarea_nombre}</div>` : ''}
   </div>`;
 }
 

@@ -66,7 +66,7 @@
         </a>
 
         @if(auth()->user()?->isProjectAdmin($project))
-        <a href="{{ route('ficha.create', [$project->slug, $projectTable->name]) }}"
+        <a href="{{ ($projectTable->name === 'facturas' && $project->slug === 'opland') ? route('opland.factura_form.nueva', $project->slug) : route('ficha.create', [$project->slug, $projectTable->name]) }}"
            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
@@ -588,7 +588,7 @@
                                     </button>
                                     <div x-show="open"
                                          class="absolute right-6 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 text-sm">
-                                        <a href="{{ in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : route('ficha', [$project->slug, $projectTable->name, $registro->id]) }}"
+                                        <a href="{{ ($projectTable->name === 'facturas' && $project->slug === 'opland') ? route('opland.factura_form.show', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : route('ficha', [$project->slug, $projectTable->name, $registro->id])) }}"
                                            class="flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50">
                                             Ver ficha
                                         </a>
@@ -623,7 +623,7 @@
                         @else
                             {{-- ── FILA NORMAL (solo lectura) ── --}}
                             <tr class="hover:bg-gray-50 cursor-pointer"
-                                onclick="window.location='{{ $projectTable->name === 'fichaje' ? route('vm.fichaje_form', [$project->slug, $registro->id]) : ($projectTable->name === 'usuarios' && $project->slug === 'vm' ? route('vm.usuario_form', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : route('ficha', [$project->slug, $projectTable->name, $registro->id]))) }}'">
+                                onclick="window.location='{{ $projectTable->name === 'fichaje' ? route('vm.fichaje_form', [$project->slug, $registro->id]) : ($projectTable->name === 'usuarios' && $project->slug === 'vm' ? route('vm.usuario_form', [$project->slug, $registro->id]) : (($projectTable->name === 'facturas' && $project->slug === 'opland') ? route('opland.factura_form.show', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : route('ficha', [$project->slug, $projectTable->name, $registro->id])))) }}'">
                                 @foreach($campos as $campo)
                                     @php
                                         $colAlign = match(true) {
@@ -646,7 +646,7 @@
                                     </button>
                                     <div x-show="open"
                                          class="absolute right-6 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 text-sm">
-                                        <a href="{{ in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : route('ficha', [$project->slug, $projectTable->name, $registro->id]) }}"
+                                        <a href="{{ ($projectTable->name === 'facturas' && $project->slug === 'opland') ? route('opland.factura_form.show', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : route('ficha', [$project->slug, $projectTable->name, $registro->id])) }}"
                                            class="flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50">
                                             Ver ficha
                                         </a>

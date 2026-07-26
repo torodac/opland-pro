@@ -7,7 +7,7 @@ use App\Models\Project;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
-class FacturaEmisionController extends Controller
+class FacturaFormController extends Controller
 {
     private function nextNumFact(): string
     {
@@ -54,7 +54,7 @@ class FacturaEmisionController extends Controller
             'updatedat'      => now(),
         ]);
 
-        return redirect()->route('opland.factura-emision.show', ['project' => $project->slug, 'factura' => $id]);
+        return redirect()->route('opland.factura_form.show', ['project' => $project->slug, 'factura' => $id]);
     }
 
     public function show(Request $request, Project $project, int $factura)
@@ -67,7 +67,7 @@ class FacturaEmisionController extends Controller
         $proyectos = DB::table('opland_proyectos')->where('deleted', false)->orderBy('nombre')->get(['id', 'nombre', 'id_clientes']);
         $conceptos = DB::table('opland_conceptos')->where('deleted', 0)->orderBy('nombre')->get(['id', 'nombre']);
 
-        return view('opland.factura-emision', compact('project', 'f', 'clientes', 'proyectos', 'conceptos'));
+        return view('opland.factura-form', compact('project', 'f', 'clientes', 'proyectos', 'conceptos'));
     }
 
     // Estado completo de la factura (cabecera + lineas + imputaciones del proyecto) en JSON, para pintar/refrescar el tablero
@@ -117,8 +117,8 @@ class FacturaEmisionController extends Controller
                 ->where(function ($q) { $q->whereNull('i.factura_opland')->orWhere('i.factura_opland', ''); })
                 ->whereNull('i.id_factura_lineas')
                 ->orderBy('i.fecha_imputacion')
-                ->get(['i.id', 'i.nombre', 'i.fecha_imputacion', 'i.duracion'])
-                ->map(fn ($i) => ['id' => $i->id, 'nombre' => $i->nombre, 'fecha' => $i->fecha_imputacion, 'horas' => $this->durHoras($i->duracion)]);
+                ->get(['i.id', 'i.nombre', 'i.fecha_imputacion', 'i.duracion', 't.nombre as tarea_nombre'])
+                ->map(fn ($i) => ['id' => $i->id, 'nombre' => $i->nombre, 'tarea_nombre' => $i->tarea_nombre, 'fecha' => $i->fecha_imputacion, 'horas' => $this->durHoras($i->duracion)]);
         }
 
         $base = $lineasOut->sum(fn ($l) => $l['precio'] - $l['descuentoe']);
@@ -294,5 +294,43 @@ class FacturaEmisionController extends Controller
             ->update(['factura_opland' => $numFact, 'updatedat' => now(), 'updateuser' => auth()->id()]);
 
         return response()->json(['ok' => true, 'num_fact' => $numFact]);
+    }
+
+    // Genera el PDF del documento (borrador o emitida) para descargar desde la previsualización
+    public function pdf(Request $request, Project $project, int $factura)
+    {
+        $f = $this->factura($factura);
+        abort_unless($f, 404);
+
+        $cliente = $f->id_clientes ? DB::table('opland_clientes')->where('id', $f->id_clientes)->first() : null;
+
+        $lineas = DB::table('opland_factura_lineas')
+            ->where('id_facturas', $factura)->where('deleted', false)->orderBy('id')->get();
+
+        $base = $lineas->sum(fn ($l) => $l->precio - $l->descuentoe);
+        $dtoFactura = (float) ($f->dtototae ?? 0);
+        $baseNeta = $base - $dtoFactura;
+        $iva = $baseNeta * (($f->iva ?? 21) / 100);
+        $total = $baseNeta + $iva;
+        $numFact = $f->num_fact ?? $this->nextNumFact();
+
+        $logoPath = public_path('projects/opland/logo-factura-blanco.png');
+        $logoB64 = file_exists($logoPath)
+            ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
+            : null;
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('opland.factura-pdf', [
+            'f' => $f, 'cliente' => $cliente, 'lineas' => $lineas,
+            'numFact' => $numFact, 'base' => $base, 'baseNeta' => $baseNeta, 'iva' => $iva, 'total' => $total,
+            'logoB64' => $logoB64,
+        ])->setPaper('a4', 'portrait');
+
+        $prefijo = is_null($f->num_fact) ? 'prefactura_' : 'factura_';
+        $nombre = $prefijo . str_replace('/', '-', $numFact) . '.pdf';
+
+        return response($pdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $nombre . '"',
+        ]);
     }
 }
