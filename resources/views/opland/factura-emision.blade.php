@@ -21,21 +21,11 @@
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 16px">
       <div class="fact-field">
         <div class="fact-label">Cliente</div>
-        <select class="fact-input" id="in-cliente" onchange="onHeaderChange()" style="width:100%">
-          <option value="">— Selecciona —</option>
-          @foreach($clientes as $c)
-            <option value="{{ $c->id }}" {{ $f->id_clientes==$c->id?'selected':'' }}>{{ $c->nombre }}</option>
-          @endforeach
-        </select>
+        @include('opland.partials.fk-combo', ['id' => 'in-cliente', 'opciones' => $clientes->pluck('nombre','id'), 'seleccionado' => $f->id_clientes, 'onChangeJs' => 'onHeaderChange()'])
       </div>
       <div class="fact-field">
         <div class="fact-label">Proyecto</div>
-        <select class="fact-input" id="in-proyecto" onchange="onHeaderChange()" style="width:100%">
-          <option value="">— Selecciona —</option>
-          @foreach($proyectos as $p)
-            <option value="{{ $p->id }}" data-cliente="{{ $p->id_clientes }}" {{ $f->id_proyectos==$p->id?'selected':'' }}>{{ $p->nombre }}</option>
-          @endforeach
-        </select>
+        @include('opland.partials.fk-combo', ['id' => 'in-proyecto', 'opciones' => $proyectos->pluck('nombre','id'), 'seleccionado' => $f->id_proyectos, 'onChangeJs' => 'onHeaderChange()'])
       </div>
       <div class="fact-field">
         <div class="fact-label">Descripción (texto libre, aparece en la factura)</div>
@@ -52,7 +42,11 @@
         </div>
         <div class="fact-field" style="margin-bottom:0">
           <div class="fact-label">Dto. factura (€)</div>
-          <input class="fact-input" type="number" step="0.01" id="in-dtofactura" style="width:100%" value="{{ $f->dtototae ?? 0 }}" onchange="onHeaderChange()">
+          <input type="hidden" id="in-dtofactura" value="{{ $f->dtototae ?? 0 }}">
+          <input class="fact-input" type="text" inputmode="decimal" id="in-dtofactura-disp" style="width:100%"
+                 value="{{ number_format($f->dtototae ?? 0, 2, ',', '.') }}"
+                 oninput="document.getElementById('in-dtofactura').value=this.value.replace(/\./g,'').replace(',','.')"
+                 onblur="commitFormattedNumber('in-dtofactura', 2); onHeaderChange()">
         </div>
       </div>
     </div>
@@ -319,17 +313,61 @@ function pintarTodo(){
   document.getElementById('sum-total').textContent = fmtEUR(t.total);
 }
 
+function numField(id, value, decimals, title, saveJs){
+  const raw = value ?? 0;
+  const formatted = Number(raw).toLocaleString('es-ES',{minimumFractionDigits:decimals,maximumFractionDigits:decimals});
+  return `<input type="hidden" id="${id}" value="${raw}">
+    <input class="fact-input linea-num" type="text" inputmode="decimal" title="${title}"
+      value="${formatted}"
+      oninput="document.getElementById('${id}').value=this.value.replace(/\\./g,'').replace(',','.')"
+      onblur="commitFormattedNumber('${id}',${decimals}); ${saveJs}">`;
+}
+function commitFormattedNumber(id, decimals){
+  const hidden = document.getElementById(id);
+  let n = parseFloat(hidden.value);
+  if (isNaN(n)) n = 0;
+  hidden.value = n;
+  const disp = hidden.nextElementSibling;
+  if (disp) disp.value = n.toLocaleString('es-ES',{minimumFractionDigits:decimals,maximumFractionDigits:decimals});
+}
+
+function fkComboJs(id, opciones, seleccionado, onChangeJs){
+  const sel = opciones.find(o => o.id == seleccionado);
+  const labelText = sel ? sel.nombre : '— Selecciona —';
+  const labelColor = sel ? '#111827' : '#9ca3af';
+  const items = opciones.map(o => `<li data-id="${o.id}" style="padding:0.5rem 0.75rem;font-size:0.75rem;cursor:pointer;color:#374151;">${o.nombre}</li>`).join('');
+  return `<div class="fk-combo" style="position:relative;">
+    <button type="button" class="fk-combo-toggle" style="width:100%;text-align:left;padding:0.5rem 0.75rem;border:1px solid #e5e7eb;border-radius:0.5rem;background:#fff;font-size:0.75rem;display:flex;justify-content:space-between;align-items:center;gap:6px;cursor:pointer;color:${labelColor};">
+      <span class="fk-combo-label" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${labelText}</span>
+      <span style="flex-shrink:0;color:#9ca3af;">▾</span>
+    </button>
+    <div class="fk-combo-panel" style="display:none;position:absolute;z-index:30;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid #e5e7eb;border-radius:0.5rem;box-shadow:0 6px 16px rgba(0,0,0,.12);">
+      <input type="text" class="fk-combo-search" placeholder="Buscar…" style="width:100%;box-sizing:border-box;padding:0.5rem 0.75rem;border:none;border-bottom:1px solid #f3f4f6;font-size:0.75rem;outline:none;border-radius:0.5rem 0.5rem 0 0;">
+      <ul class="fk-combo-list" style="list-style:none;margin:0;padding:2px 0;max-height:12rem;overflow-y:auto;">
+        <li data-id="" style="padding:0.5rem 0.75rem;font-size:0.75rem;cursor:pointer;color:#9ca3af;">— Selecciona —</li>
+        ${items}
+      </ul>
+    </div>
+    <input type="hidden" id="${id}" class="fk-combo-value" value="${seleccionado ?? ''}" onchange="${onChangeJs}">
+  </div>`;
+}
+
 function lineaCard(l){
+  const idPrecio = 'precio_' + l.id, idDtoP = 'dtop_' + l.id, idDtoE = 'dtoe_' + l.id, idConcepto = 'concepto_' + l.id;
   return `<div class="linea-card" data-linea="${l.id}"
       ondragover="dragOverLinea(event)" ondragleave="dragLeaveLinea(event)" ondrop="dropOnLinea(event,${l.id})">
     <div class="linea-row">
       <input class="fact-input linea-concepto" value="${(l.nombre||'').replace(/"/g,'&quot;')}" onchange="onLineaChange(${l.id},'nombre',this.value)">
       <button class="fact-btn fact-btn-sm" onclick="removeLinea(${l.id})" title="Eliminar línea">✕</button>
     </div>
+    <div class="linea-row" style="align-items:center">
+      <div style="flex:1;font-size:10.5px;color:#7e93a1;">Concepto (catálogo, opcional)</div>
+      <div style="width:220px">${fkComboJs(idConcepto, CONCEPTOS, l.id_conceptos, `onLineaChange(${l.id},'id_conceptos',document.getElementById('${idConcepto}').value)`)}</div>
+    </div>
     <div class="linea-row">
-      <input class="fact-input linea-num" type="number" step="0.01" value="${l.precio}" title="Precio" onchange="onLineaChange(${l.id},'precio',this.value)">
-      <input class="fact-input linea-num" type="number" step="1" value="${l.descuentoporc||0}" title="Dto. %" onchange="onLineaChange(${l.id},'descuentoporc',this.value)">
-      <input class="fact-input linea-num" type="number" step="0.01" value="${l.descuentoe||0}" title="Dto. €" onchange="onLineaChange(${l.id},'descuentoe',this.value)">
+      ${numField(idPrecio, l.precio, 2, 'Precio', `onLineaChange(${l.id},'precio',document.getElementById('${idPrecio}').value)`)}
+      ${numField(idDtoP, l.descuentoporc||0, 0, 'Dto. %', `onLineaChange(${l.id},'descuentoporc',document.getElementById('${idDtoP}').value)`)}
+      ${numField(idDtoE, l.descuentoe||0, 2, 'Dto. €', `onLineaChange(${l.id},'descuentoe',document.getElementById('${idDtoE}').value)`)}
       <span class="linea-sub">${fmtEUR(l.precio - (l.descuentoe||0))}</span>
     </div>
     <div class="linea-foot">
@@ -376,7 +414,10 @@ async function removeLinea(id){
   await cargarEstado();
 }
 async function onLineaChange(id, field, value){
-  const payload = field === 'nombre' ? value : (parseFloat(value) || 0);
+  let payload;
+  if (field === 'nombre') payload = value;
+  else if (field === 'id_conceptos') payload = (value === '' || value === null) ? null : parseInt(value);
+  else { const n = parseFloat(value); payload = isNaN(n) ? 0 : n; }
   await apiCall(routeUpdateLinea(id), 'PATCH', { [field]: payload });
   await cargarEstado();
 }
