@@ -376,7 +376,8 @@ async function removeLinea(id){
   await cargarEstado();
 }
 async function onLineaChange(id, field, value){
-  await apiCall(routeUpdateLinea(id), 'PATCH', { [field]: parseFloat(value)||0 });
+  const payload = field === 'nombre' ? value : (parseFloat(value) || 0);
+  await apiCall(routeUpdateLinea(id), 'PATCH', { [field]: payload });
   await cargarEstado();
 }
 async function detachImp(impId){
