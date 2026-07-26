@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <style>
+  @page{margin:0 0 1cm 0}
   body{font-family:DejaVu Sans, sans-serif; color:#16232b; font-size:12px; margin:0}
   .doc-header{width:100%; background-color:#bfdaf2; border-collapse:collapse}
   .doc-blob-cell{width:220px; padding:0; vertical-align:top}
@@ -23,18 +24,18 @@
   .doc-table td{padding:9px 4px; font-size:11px; border-bottom:1px solid #eaf1f6; word-wrap:break-word}
   .doc-table td.num{text-align:right; white-space:nowrap}
   .doc-table tr.doc-base-row td{border-bottom:none; border-top:1.5px solid #16232b; font-weight:bold; padding-top:11px; white-space:nowrap}
-  .doc-col-concepto{width:auto}
-  .doc-col-precio{width:80px}
-  .doc-col-dtop{width:56px}
-  .doc-col-dtoe{width:64px}
-  .doc-col-total{width:92px}
+  .doc-col-concepto{width:50%}
+  .doc-col-precio{width:14%}
+  .doc-col-dtop{width:8%}
+  .doc-col-dtoe{width:14%}
+  .doc-col-total{width:14%}
   .doc-totals-grid{width:100%; border-collapse:separate; border-spacing:8px 0; margin-bottom:18px}
   .doc-total-box{border:1px solid #dce6ee; padding:12px 14px; width:33%}
   .doc-total-box .val{display:block; font-size:15px; font-weight:bold; color:#16232b}
   .doc-total-box .lbl{font-size:10px; color:#7e93a1; margin-top:2px}
   .doc-payment-note{text-align:center; font-weight:bold; font-size:11px; margin-bottom:18px; line-height:1.6}
-  .doc-legal{padding-top:14px; border-top:1px solid #eaf1f6; font-size:8.5px; color:#8a9aa5; line-height:1.6; text-align:justify}
-  .doc-footer-fixed{position:fixed; bottom:0; left:0; right:0; padding:0 26px 22px}
+  .doc-legal{padding-top:14px; border-top:1px solid #eaf1f6; font-size:8.5px; color:#8a9aa5; line-height:1.25; text-align:justify}
+  .doc-footer-fixed{position:fixed; bottom:0; left:0; right:0; padding:0 26px}
 </style>
 </head>
 <body>
