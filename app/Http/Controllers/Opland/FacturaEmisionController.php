@@ -62,7 +62,8 @@ class FacturaEmisionController extends Controller
         $f = $this->factura($factura);
         abort_unless($f, 404);
 
-        $clientes = DB::table('opland_clientes')->where('deleted', false)->orderBy('nombre')->get(['id', 'nombre']);
+        $clientes = DB::table('opland_clientes')->where('deleted', false)->orderBy('nombre')
+            ->get(['id', 'nombre', 'nombre_fiscal', 'nif', 'direccion', 'cp', 'poblacion']);
         $proyectos = DB::table('opland_proyectos')->where('deleted', false)->orderBy('nombre')->get(['id', 'nombre', 'id_clientes']);
         $conceptos = DB::table('opland_conceptos')->where('deleted', 0)->orderBy('nombre')->get(['id', 'nombre']);
 

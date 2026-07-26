@@ -92,38 +92,44 @@
     </div>
     <div class="fact-modal-body" style="max-height:80vh;overflow-y:auto">
       <div class="doc-sheet">
-        <div class="doc-header">
-          <div class="doc-blob">
-            <div class="doc-logo">
-              <svg class="doc-logo-mark" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="13" stroke="#fff" stroke-width="3"/><path d="M16 3v10M16 19v10" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>
-              <span class="doc-logo-word">OPLAND</span>
+        <div class="doc-header-wrap">
+          <div class="doc-header">
+            <div class="doc-blob">
+              <div class="doc-logo">
+                <svg class="doc-logo-mark" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="13" stroke="#fff" stroke-width="3"/><path d="M16 3v10M16 19v10" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>
+                <span class="doc-logo-word">OPLAND</span>
+              </div>
+              <div class="doc-company">
+                OPLAND ZERO PAPER S.L<br>
+                B-10526911<br>
+                Av. Aragón, 40<br>
+                46021 Valencia<br>
+                601 41 36 35
+              </div>
             </div>
-            <div class="doc-company">
-              OPLAND ZERO PAPER S.L<br>
-              B-10526911<br>
-              Av. Aragón, 40<br>
-              46021 Valencia<br>
-              601 41 36 35
+            <div class="doc-client">
+              <div class="doc-client-lbl">Datos cliente</div>
+              <div class="doc-client-name" id="pv-cliente-nombre">—</div>
+              <div class="doc-client-addr" id="pv-cliente-addr">—</div>
+            </div>
+            <div class="doc-meta">
+              <div class="doc-meta-lbl">Nº factura</div>
+              <div class="doc-meta-val" id="pv-numfact">—</div>
+              <div class="doc-meta-lbl">Fecha</div>
+              <div class="doc-meta-val" id="pv-fecha">—</div>
             </div>
           </div>
-          <div class="doc-client">
-            <div class="doc-client-lbl">Datos cliente</div>
-            <div class="doc-client-name" id="pv-cliente-nombre">—</div>
-            <div class="doc-client-addr" id="pv-cliente-addr">—</div>
-          </div>
-          <div class="doc-meta">
-            <div class="doc-meta-lbl">Nº factura</div>
-            <div class="doc-meta-val" id="pv-numfact">—</div>
-            <div class="doc-meta-lbl">Fecha</div>
-            <div class="doc-meta-val" id="pv-fecha">—</div>
-          </div>
-        </div>
 
-        <div class="doc-service-title" id="pv-descripcion">—</div>
+          <div class="doc-service-title" id="pv-descripcion">—</div>
+        </div>
 
         <div class="doc-body">
           <table class="doc-table">
-            <thead><tr><th>Concepto</th><th style="text-align:right">Precio</th><th style="text-align:right">Dto. %</th><th style="text-align:right">Dto. €</th><th style="text-align:right">Total</th></tr></thead>
+            <colgroup>
+              <col style="width:auto">
+              <col style="width:80px"><col style="width:56px"><col style="width:64px"><col style="width:92px">
+            </colgroup>
+            <thead><tr><th>Concepto</th><th style="text-align:right;white-space:nowrap">Precio</th><th style="text-align:right;white-space:nowrap">Dto. %</th><th style="text-align:right;white-space:nowrap">Dto. €</th><th style="text-align:right;white-space:nowrap">Total</th></tr></thead>
             <tbody id="pv-lineas"></tbody>
             <tfoot><tr class="doc-base-row"><td colspan="4" style="text-align:right">Base imponible</td><td style="text-align:right" id="pv-base-row"></td></tr></tfoot>
           </table>
@@ -203,7 +209,8 @@
 .fact-modal-body{padding:16px 18px}
 
 .doc-sheet{background:#fff;color:#16232b;border-radius:10px;box-shadow:0 1px 2px rgba(18,63,79,.06);overflow:hidden;border:1px solid #dce6ee}
-.doc-header{position:relative;background:#bfdaf2;display:flex;align-items:stretch;min-height:150px;overflow:hidden}
+.doc-header-wrap{background:#bfdaf2}
+.doc-header{position:relative;display:flex;align-items:stretch;min-height:150px;overflow:hidden}
 .doc-blob{position:relative;flex:0 0 220px;background:#1b5d73;border-bottom-right-radius:140px;color:#fff;padding:20px 22px;z-index:1}
 .doc-logo{display:flex;align-items:center;gap:8px;margin-bottom:14px}
 .doc-logo-mark{width:20px;height:20px}
@@ -221,11 +228,11 @@
 .doc-table{width:100%;border-collapse:collapse;margin-bottom:22px}
 .doc-table th{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:#7e93a1;text-align:left;padding:6px 4px;border-bottom:1.5px solid #16232b}
 .doc-table td{padding:9px 4px;font-size:11.5px;border-bottom:1px solid #eaf1f6;vertical-align:top}
-.doc-table td.num{text-align:right}
-.doc-table tr.doc-base-row td{border-bottom:none;border-top:1.5px solid #16232b;font-weight:800;padding-top:11px}
+.doc-table td.num{text-align:right;white-space:nowrap}
+.doc-table tr.doc-base-row td{border-bottom:none;border-top:1.5px solid #16232b;font-weight:800;padding-top:11px;white-space:nowrap}
 .doc-totals-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
 .doc-total-box{border:1px solid #dce6ee;border-radius:6px;padding:12px 14px;text-align:left}
-.doc-total-box .val{display:block;font-size:16px;font-weight:800;color:#16232b}
+.doc-total-box .val{display:block;font-size:16px;font-weight:800;color:#16232b;white-space:nowrap}
 .doc-total-box .lbl{font-size:10.5px;color:#7e93a1;margin-top:2px}
 .doc-payment-note{text-align:center;font-weight:700;font-size:11.5px;margin-bottom:18px;line-height:1.6}
 .doc-legal{padding-top:14px;border-top:1px solid #eaf1f6;font-size:9px;color:#8a9aa5;line-height:1.6;text-align:justify}
@@ -237,7 +244,10 @@ const FACTURA_ID = {{ $f->id }};
 const CSRF = @json(csrf_token());
 
 @php
-    $clientesJs = $clientes->map(fn($c) => ['id'=>$c->id,'nombre'=>$c->nombre])->values();
+    $clientesJs = $clientes->map(fn($c) => [
+        'id'=>$c->id,'nombre'=>$c->nombre,'nombre_fiscal'=>$c->nombre_fiscal,
+        'nif'=>$c->nif,'direccion'=>$c->direccion,'cp'=>$c->cp,'poblacion'=>$c->poblacion,
+    ])->values();
     $conceptosJs = $conceptos->values();
 @endphp
 const CLIENTES = @json($clientesJs);
@@ -286,6 +296,7 @@ async function cargarEstado(){
 }
 
 function clienteNombre(id){ const c = CLIENTES.find(x=>x.id==id); return c ? c.nombre : ''; }
+function clientePorId(id){ return CLIENTES.find(x=>x.id==id) || null; }
 
 function pintarTodo(){
   const f = STATE.factura;
@@ -471,8 +482,15 @@ async function emitirFactura(){
 
 function abrirPreview(){
   const f = STATE.factura;
-  document.getElementById('pv-cliente-nombre').textContent = clienteNombre(f.id_clientes) || '—';
-  document.getElementById('pv-cliente-addr').textContent = '';
+  const c = clientePorId(f.id_clientes);
+  document.getElementById('pv-cliente-nombre').textContent = (c ? (c.nombre_fiscal || c.nombre) : '—');
+  const addrLines = [];
+  if (c) {
+    if (c.nif) addrLines.push(c.nif);
+    if (c.direccion) addrLines.push(c.direccion);
+    if (c.cp || c.poblacion) addrLines.push([c.cp, c.poblacion].filter(Boolean).join(' '));
+  }
+  document.getElementById('pv-cliente-addr').innerHTML = addrLines.join('<br>');
   document.getElementById('pv-numfact').textContent = f.emitida ? f.num_fact : f.num_fact_preview;
   document.getElementById('pv-fecha').textContent = fmtDate(document.getElementById('in-fecha').value);
   document.getElementById('pv-descripcion').textContent = document.getElementById('in-descripcion').value || '—';
