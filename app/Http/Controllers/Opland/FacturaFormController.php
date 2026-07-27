@@ -79,6 +79,7 @@ class FacturaFormController extends Controller
         $lineas = DB::table('opland_factura_lineas')
             ->where('id_facturas', $factura)
             ->where('deleted', false)
+            ->orderBy('orden')
             ->orderBy('id')
             ->get(['id', 'nombre', 'precio', 'descuentoporc', 'descuentoe', 'id_conceptos']);
 
@@ -172,9 +173,11 @@ class FacturaFormController extends Controller
         abort_unless($f, 404);
         abort_if($f->num_fact, 422, 'Factura ya emitida.');
 
+        $nextOrden = (int) (DB::table('opland_factura_lineas')->where('id_facturas', $factura)->max('orden')) + 1;
+
         $id = DB::table('opland_factura_lineas')->insertGetId([
             'nombre' => 'Nueva línea', 'id_facturas' => $factura, 'precio' => 0,
-            'descuentoporc' => 0, 'descuentoe' => 0, 'deleted' => false,
+            'descuentoporc' => 0, 'descuentoe' => 0, 'deleted' => false, 'orden' => $nextOrden,
             'createuser' => auth()->id(), 'createdat' => now(), 'updatedat' => now(),
         ]);
 
@@ -212,6 +215,17 @@ class FacturaFormController extends Controller
     {
         DB::table('opland_imputaciones')->where('id_factura_lineas', $linea)->update(['id_factura_lineas' => null]);
         DB::table('opland_factura_lineas')->where('id', $linea)->where('id_facturas', $factura)->delete();
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function reorderLineas(Request $request, Project $project, int $factura)
+    {
+        $data = $request->validate(['ids' => 'required|array', 'ids.*' => 'integer']);
+
+        foreach ($data['ids'] as $index => $lineaId) {
+            DB::table('opland_factura_lineas')->where('id', $lineaId)->where('id_facturas', $factura)->update(['orden' => $index + 1]);
+        }
 
         return response()->json(['ok' => true]);
     }

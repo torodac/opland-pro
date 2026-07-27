@@ -64,8 +64,8 @@
   </div>
 </div>
 
-<div class="fact-board">
-  <div class="fact-card">
+<div class="fact-board" id="fact-board">
+  <div class="fact-card" id="panel-lineas">
     <div class="fact-col-head">
       <div>
         <div class="fact-col-title">Líneas de factura</div>
@@ -82,13 +82,16 @@
     </div>
   </div>
 
-  <div class="fact-card">
+  <div class="fact-card" id="panel-imputaciones">
     <div class="fact-col-head">
       <div>
         <div class="fact-col-title">Imputaciones facturables sin facturar</div>
         <div class="fact-col-sub">Filtradas por el proyecto de esta factura</div>
       </div>
-      <span class="fact-chip" id="badge-imputaciones">—</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="fact-chip" id="badge-imputaciones">—</span>
+        <button class="fact-btn fact-btn-sm" onclick="toggleImpPanel()" id="btn-toggle-imp" title="Ocultar panel">−</button>
+      </div>
     </div>
     <div class="fact-list" id="col-imputaciones"></div>
   </div>
@@ -182,6 +185,8 @@
 .fact-input:disabled{background:#f3f7fb;color:#7e93a1}
 .fact-board{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;margin-top:16px}
 @media (max-width:1100px){ .fact-board{grid-template-columns:1fr} }
+.fact-board.imp-collapsed{grid-template-columns:1fr}
+.fact-board.imp-collapsed #panel-imputaciones{display:none}
 .fact-col-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:11px 14px;border-bottom:1px solid #dce6ee}
 .fact-col-title{font-size:12.5px;font-weight:800;color:#16232b}
 .fact-col-sub{font-size:10.5px;color:#7e93a1;margin-top:1px}
@@ -191,6 +196,9 @@
 .linea-card{border:1px solid #dce6ee;border-radius:6px;padding:10px 11px;margin-bottom:8px;background:#fff;transition:border-color .15s,background .15s,box-shadow .15s}
 .linea-card.drop-ready{border-style:dashed;border-color:#1b5d73}
 .linea-card.drop-over{border-color:#1b5d73;background:#e7f0f4;box-shadow:0 0 0 3px rgba(27,93,115,.15)}
+.linea-card.dragging{opacity:.35}
+.linea-drag-handle{cursor:grab;color:#a3adb3;flex-shrink:0;display:flex;align-items:center;padding:2px 0;user-select:none}
+.linea-drag-handle:hover{color:#7e93a1}
 .linea-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:6px}
 .linea-concepto{flex:1;font-size:12px;padding:6px 8px}
 .linea-num{width:76px;font-size:12px;padding:6px 6px;text-align:right}
@@ -266,6 +274,7 @@ const CONCEPTOS = @json($conceptosJs);
 const ROUTE_ESTADO   = @json(route('opland.factura_form.estado', [$project->slug, $f->id]));
 const ROUTE_HEADER   = @json(route('opland.factura_form.update-header', [$project->slug, $f->id]));
 const ROUTE_ADD_LINEA= @json(route('opland.factura_form.lineas.add', [$project->slug, $f->id]));
+const ROUTE_REORDER_LINEAS = @json(route('opland.factura_form.lineas.reorder', [$project->slug, $f->id]));
 const ROUTE_DUPLICAR = @json(route('opland.factura_form.duplicar', [$project->slug, $f->id]));
 const ROUTE_EMITIR   = @json(route('opland.factura_form.emitir', [$project->slug, $f->id]));
 @php
@@ -290,6 +299,7 @@ const fmtDate = iso => { if(!iso) return '—'; const [y,m,d]=iso.split('-'); re
 
 let STATE = null;
 let dragImpPayload = null;
+let dragLineaPayload = null;
 
 async function apiCall(url, method, body){
   const res = await fetch(url, {
@@ -383,6 +393,7 @@ function lineaCard(l){
   return `<div class="linea-card" data-linea="${l.id}"
       ondragover="dragOverLinea(event)" ondragleave="dragLeaveLinea(event)" ondrop="dropOnLinea(event,${l.id})">
     <div class="linea-row">
+      <span class="linea-drag-handle" draggable="true" ondragstart="dragStartLinea(event,${l.id})" ondragend="dragEndLinea(event)" title="Arrastrar para reordenar">⠿</span>
       <input class="fact-input linea-concepto" value="${(l.nombre||'').replace(/"/g,'&quot;')}" onchange="onLineaChange(${l.id},'nombre',this.value)">
       <button class="fact-btn fact-btn-sm" onclick="removeLinea(${l.id})" title="Eliminar línea">✕</button>
     </div>
@@ -464,10 +475,20 @@ function dragEndImp(ev){
   document.querySelectorAll('.linea-card').forEach(el => el.classList.remove('drop-ready','drop-over'));
   dragImpPayload = null;
 }
+function dragStartLinea(ev, lineaId){
+  dragLineaPayload = lineaId;
+  ev.dataTransfer.effectAllowed = 'move';
+  ev.currentTarget.closest('.linea-card').classList.add('dragging');
+}
+function dragEndLinea(ev){
+  ev.currentTarget.closest('.linea-card').classList.remove('dragging');
+  document.querySelectorAll('.linea-card').forEach(el => el.classList.remove('drop-over'));
+  dragLineaPayload = null;
+}
 function dragOverLinea(ev){
-  if (!dragImpPayload) return;
+  if (!dragImpPayload && !dragLineaPayload) return;
   ev.preventDefault();
-  ev.dataTransfer.dropEffect = 'link';
+  ev.dataTransfer.dropEffect = dragLineaPayload ? 'move' : 'link';
   ev.currentTarget.classList.add('drop-over');
 }
 function dragLeaveLinea(ev){
@@ -476,11 +497,33 @@ function dragLeaveLinea(ev){
 async function dropOnLinea(ev, lineaId){
   ev.preventDefault();
   ev.currentTarget.classList.remove('drop-over','drop-ready');
+
+  if (dragLineaPayload) {
+    const draggedId = dragLineaPayload;
+    dragLineaPayload = null;
+    if (draggedId === lineaId) return;
+    const ids = STATE.lineas.map(l => l.id);
+    const from = ids.indexOf(draggedId), to = ids.indexOf(lineaId);
+    ids.splice(from, 1);
+    ids.splice(to, 0, draggedId);
+    await apiCall(ROUTE_REORDER_LINEAS, 'POST', { ids });
+    await cargarEstado();
+    return;
+  }
+
   if (!dragImpPayload) return;
   const impId = dragImpPayload;
   dragImpPayload = null;
   await apiCall(routeAttachImp(lineaId), 'POST', { imputacion_id: impId });
   await cargarEstado();
+}
+
+function toggleImpPanel(){
+  const board = document.getElementById('fact-board');
+  const collapsed = board.classList.toggle('imp-collapsed');
+  const btn = document.getElementById('btn-toggle-imp');
+  btn.textContent = collapsed ? '▸' : '−';
+  btn.title = collapsed ? 'Mostrar panel' : 'Ocultar panel';
 }
 
 async function duplicarFactura(){
