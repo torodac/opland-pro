@@ -689,6 +689,15 @@ class FichaController extends Controller
             $data[$field->name] = json_encode($request->input($field->name, []));
         }
 
+        // Campos numericos: si llegan vacios, no se envian (para que la BD aplique su propio
+        // default en el insert, o se deje el valor existente sin tocar en el update). Enviar ''
+        // provoca que Postgres reciba NULL y falle en columnas NOT NULL sin default aplicable.
+        foreach ($projectTable->fields->whereIn('type', ['decimal', 'int']) as $field) {
+            if (array_key_exists($field->name, $data) && $data[$field->name] === '') {
+                unset($data[$field->name]);
+            }
+        }
+
         // Campos file: guardar el archivo subido; si no se sube nada, no sobreescribir
         foreach ($projectTable->fields->where('type', 'file') as $field) {
             if ($request->hasFile($field->name)) {

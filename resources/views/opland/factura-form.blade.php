@@ -6,19 +6,24 @@
        title="Ver ficha estándar">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
     </a>
+    <a href="{{ route('opland.factura_form.nueva', $project->slug) }}"
+       class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+        + Nuevo
+    </a>
+    <button class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors" onclick="duplicarFactura()">
+        Duplicar
+    </button>
+    <button class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors" onclick="abrirPreview()">
+        Previsualizar
+    </button>
+    <button class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors" onclick="emitirFactura()" id="btn-emitir">
+        Emitir y descargar PDF
+    </button>
 </x-slot>
 
-<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-  <div>
-    <h2 style="font-size:19px;margin-bottom:4px;font-weight:700">Emisión de facturas</h2>
-    <p style="color:#52697a;font-size:12.5px;margin:0" id="fact-subtitle">Factura {{ $f->num_fact ?? '(borrador)' }}</p>
-  </div>
-  <div style="display:flex;gap:8px">
-    <button class="fact-btn" onclick="guardarCabecera()">Guardar borrador</button>
-    <button class="fact-btn" onclick="duplicarFactura()">Duplicar</button>
-    <button class="fact-btn" onclick="abrirPreview()">Previsualizar</button>
-    <button class="fact-btn fact-btn-primary" onclick="emitirFactura()" id="btn-emitir">Emitir y descargar PDF</button>
-  </div>
+<div style="margin-bottom:16px">
+  <h2 style="font-size:19px;margin-bottom:4px;font-weight:700">Emisión de facturas</h2>
+  <p style="color:#52697a;font-size:12.5px;margin:0" id="fact-subtitle">Factura {{ $f->num_fact ?? '(borrador)' }}</p>
 </div>
 
 <div class="fact-card" style="margin-bottom:16px">
@@ -166,7 +171,6 @@
 
 <style>
 .fact-btn{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:6px;border:1px solid #dce6ee;background:#fff;color:#16232b;cursor:pointer}
-.fact-btn-primary{background:#1b5d73;border-color:#1b5d73;color:#fff}
 .fact-btn-sm{padding:5px 10px;font-size:11.5px}
 .fact-card{background:#fff;border:1px solid #dce6ee;border-radius:10px;box-shadow:0 1px 2px rgba(18,63,79,.06)}
 .fact-card-head{padding:14px 18px;border-bottom:1px solid #dce6ee}
@@ -427,7 +431,6 @@ async function onHeaderChange(){
   await apiCall(ROUTE_HEADER, 'PATCH', body);
   await cargarEstado();
 }
-function guardarCabecera(){ onHeaderChange(); }
 
 async function addLinea(){
   await apiCall(ROUTE_ADD_LINEA, 'POST');

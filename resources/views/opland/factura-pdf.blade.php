@@ -20,7 +20,7 @@
   .doc-body{padding:22px 26px 26px}
   .doc-service-title{font-weight:bold; font-size:14px; color:#16232b; margin-bottom:16px; padding-bottom:10px; border-bottom:1.5px solid #16232b}
   .doc-table{width:100%; border-collapse:collapse; margin-bottom:22px; table-layout:fixed}
-  .doc-table th{font-size:9px; text-transform:uppercase; letter-spacing:1px; color:#7e93a1; text-align:left; padding:6px 4px; border-bottom:1.5px solid #16232b; white-space:nowrap}
+  .doc-table th{font-size:9px; text-transform:uppercase; letter-spacing:1px; color:#7e93a1; text-align:left; padding:4px; line-height:1.2; vertical-align:middle; border-bottom:1.5px solid #16232b; white-space:nowrap}
   .doc-table td{padding:9px 4px; font-size:11px; border-bottom:1px solid #eaf1f6; word-wrap:break-word}
   .doc-table td.num{text-align:right; white-space:nowrap}
   .doc-table tr.doc-base-row td{border-bottom:none; border-top:1.5px solid #16232b; font-weight:bold; padding-top:11px; white-space:nowrap}
@@ -90,21 +90,21 @@
     </colgroup>
     <thead>
       <tr>
-        <th>Concepto</th>
-        <th style="text-align:right">Precio</th>
-        <th style="text-align:right">Dto. %</th>
-        <th style="text-align:right">Dto. €</th>
-        <th style="text-align:right">Total</th>
+        <th class="doc-col-concepto">Concepto</th>
+        <th class="doc-col-precio" style="text-align:right">Precio</th>
+        <th class="doc-col-dtop" style="text-align:right">Dto. %</th>
+        <th class="doc-col-dtoe" style="text-align:right">Dto. €</th>
+        <th class="doc-col-total" style="text-align:right">Total</th>
       </tr>
     </thead>
     <tbody>
       @foreach($lineas as $l)
         <tr>
-          <td>{{ $l->nombre }}</td>
-          <td class="num">{{ $fmt($l->precio) }}</td>
-          <td class="num">{{ $l->descuentoporc ?: 0 }}%</td>
-          <td class="num">{{ $fmt($l->descuentoe ?: 0) }}</td>
-          <td class="num"><strong>{{ $fmt($l->precio - ($l->descuentoe ?: 0)) }}</strong></td>
+          <td class="doc-col-concepto">{{ $l->nombre }}</td>
+          <td class="num doc-col-precio">{{ $fmt($l->precio) }}</td>
+          <td class="num doc-col-dtop">{{ $l->descuentoporc ?: 0 }}%</td>
+          <td class="num doc-col-dtoe">{{ $fmt($l->descuentoe ?: 0) }}</td>
+          <td class="num doc-col-total"><strong>{{ $fmt($l->precio - ($l->descuentoe ?: 0)) }}</strong></td>
         </tr>
       @endforeach
       <tr class="doc-base-row">
