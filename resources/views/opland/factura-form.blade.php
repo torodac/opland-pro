@@ -71,7 +71,10 @@
         <div class="fact-col-title">Líneas de factura</div>
         <div class="fact-col-sub" id="lineas-sub"></div>
       </div>
-      <button class="fact-btn fact-btn-sm" onclick="addLinea()">+ Añadir línea</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="fact-btn fact-btn-sm" onclick="toggleImpPanel()" id="btn-toggle-imp" title="Ocultar panel de imputaciones">Ocultar imputaciones</button>
+        <button class="fact-btn fact-btn-sm" onclick="addLinea()">+ Añadir línea</button>
+      </div>
     </div>
     <div class="fact-list" id="col-lineas"></div>
     <div style="padding:10px 14px 14px;border-top:1px solid #dce6ee;display:flex;flex-direction:column;gap:5px;font-size:12.5px">
@@ -88,10 +91,7 @@
         <div class="fact-col-title">Imputaciones facturables sin facturar</div>
         <div class="fact-col-sub">Filtradas por el proyecto de esta factura</div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <span class="fact-chip" id="badge-imputaciones">—</span>
-        <button class="fact-btn fact-btn-sm" onclick="toggleImpPanel()" id="btn-toggle-imp" title="Ocultar panel">−</button>
-      </div>
+      <span class="fact-chip" id="badge-imputaciones">—</span>
     </div>
     <div class="fact-list" id="col-imputaciones"></div>
   </div>
@@ -197,12 +197,13 @@
 .linea-card.drop-ready{border-style:dashed;border-color:#1b5d73}
 .linea-card.drop-over{border-color:#1b5d73;background:#e7f0f4;box-shadow:0 0 0 3px rgba(27,93,115,.15)}
 .linea-card.dragging{opacity:.35}
-.linea-drag-handle{cursor:grab;color:#a3adb3;flex-shrink:0;display:flex;align-items:center;padding:2px 0;user-select:none}
+.linea-drag-handle{cursor:grab;color:#a3adb3;flex-shrink:0;display:flex;align-items:center;padding:6px 0;user-select:none}
 .linea-drag-handle:hover{color:#7e93a1}
-.linea-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:6px}
-.linea-concepto{flex:1;font-size:12px;padding:6px 8px}
-.linea-num{width:76px;font-size:12px;padding:6px 6px;text-align:right}
-.linea-sub{font-size:12.5px;font-weight:800;width:76px;text-align:right;padding:6px 0;flex-shrink:0}
+.linea-fields{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px}
+.linea-concepto{flex:1 1 160px;max-width:320px;min-width:120px;font-size:12px;padding:6px 8px}
+.linea-catalogo{flex:0 0 180px;min-width:150px}
+.linea-num{width:76px;flex:0 0 76px;font-size:12px;padding:6px 6px;text-align:right}
+.linea-sub{font-size:12.5px;font-weight:800;width:76px;flex:0 0 76px;text-align:right;padding:6px 0}
 .linea-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .linea-hours{font-size:10.5px;font-weight:700;color:#1b5d73;background:#e7f0f4;border-radius:99px;padding:2px 9px}
 .linea-empty-hint{font-size:10.5px;color:#7e93a1}
@@ -392,20 +393,15 @@ function lineaCard(l){
   const idPrecio = 'precio_' + l.id, idDtoP = 'dtop_' + l.id, idDtoE = 'dtoe_' + l.id, idConcepto = 'concepto_' + l.id;
   return `<div class="linea-card" data-linea="${l.id}"
       ondragover="dragOverLinea(event)" ondragleave="dragLeaveLinea(event)" ondrop="dropOnLinea(event,${l.id})">
-    <div class="linea-row">
+    <div class="linea-fields">
       <span class="linea-drag-handle" draggable="true" ondragstart="dragStartLinea(event,${l.id})" ondragend="dragEndLinea(event)" title="Arrastrar para reordenar">⠿</span>
       <input class="fact-input linea-concepto" value="${(l.nombre||'').replace(/"/g,'&quot;')}" onchange="onLineaChange(${l.id},'nombre',this.value)">
-      <button class="fact-btn fact-btn-sm" onclick="removeLinea(${l.id})" title="Eliminar línea">✕</button>
-    </div>
-    <div class="linea-row" style="align-items:center">
-      <div style="flex:1;font-size:10.5px;color:#7e93a1;">Concepto (catálogo, opcional)</div>
-      <div style="width:220px">${fkComboJs(idConcepto, CONCEPTOS, l.id_conceptos, `onLineaChange(${l.id},'id_conceptos',document.getElementById('${idConcepto}').value)`)}</div>
-    </div>
-    <div class="linea-row">
+      <div class="linea-catalogo" title="Concepto (catálogo, opcional)">${fkComboJs(idConcepto, CONCEPTOS, l.id_conceptos, `onLineaChange(${l.id},'id_conceptos',document.getElementById('${idConcepto}').value)`)}</div>
       ${numField(idPrecio, l.precio, 2, 'Precio', `onLineaChange(${l.id},'precio',document.getElementById('${idPrecio}').value)`)}
       ${numField(idDtoP, l.descuentoporc||0, 0, 'Dto. %', `onLineaChange(${l.id},'descuentoporc',document.getElementById('${idDtoP}').value)`)}
       ${numField(idDtoE, l.descuentoe||0, 2, 'Dto. €', `onLineaChange(${l.id},'descuentoe',document.getElementById('${idDtoE}').value)`)}
       <span class="linea-sub">${fmtEUR(l.precio - (l.descuentoe||0))}</span>
+      <button class="fact-btn fact-btn-sm" onclick="removeLinea(${l.id})" title="Eliminar línea">✕</button>
     </div>
     <div class="linea-foot">
       ${l.horas>0 ? `<span class="linea-hours">Σ ${l.horas}h imputadas</span>` : `<span class="linea-empty-hint">Sin imputaciones — arrastra una aquí, o déjala manual</span>`}
@@ -522,8 +518,8 @@ function toggleImpPanel(){
   const board = document.getElementById('fact-board');
   const collapsed = board.classList.toggle('imp-collapsed');
   const btn = document.getElementById('btn-toggle-imp');
-  btn.textContent = collapsed ? '▸' : '−';
-  btn.title = collapsed ? 'Mostrar panel' : 'Ocultar panel';
+  btn.textContent = collapsed ? 'Mostrar imputaciones' : 'Ocultar imputaciones';
+  btn.title = collapsed ? 'Mostrar panel de imputaciones' : 'Ocultar panel de imputaciones';
 }
 
 async function duplicarFactura(){
