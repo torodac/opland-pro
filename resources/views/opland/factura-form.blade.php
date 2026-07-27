@@ -23,11 +23,9 @@
 
 <div style="margin-bottom:16px">
   <h2 style="font-size:19px;margin-bottom:4px;font-weight:700">Emisión de facturas</h2>
-  <p style="color:#52697a;font-size:12.5px;margin:0" id="fact-subtitle">Factura {{ $f->num_fact ?? '(borrador)' }}</p>
 </div>
 
 <div class="fact-card" style="margin-bottom:16px">
-  <div class="fact-card-head"><h3>Datos de cabecera</h3></div>
   <div class="fact-card-body">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 16px">
       <div class="fact-field">
@@ -76,7 +74,7 @@
         <button class="fact-btn fact-btn-sm" onclick="addLinea()">+ Añadir línea</button>
       </div>
     </div>
-    <div class="fact-list" id="col-lineas"></div>
+    <div class="fact-list fact-list-auto" id="col-lineas"></div>
     <div style="padding:10px 14px 14px;border-top:1px solid #dce6ee;display:flex;flex-direction:column;gap:5px;font-size:12.5px">
       <div style="display:flex;justify-content:space-between"><span style="color:#52697a">Base (líneas)</span><span id="sum-base"></span></div>
       <div style="display:flex;justify-content:space-between"><span style="color:#52697a">Dto. factura</span><span id="sum-dtofactura"></span></div>
@@ -176,8 +174,6 @@
 .fact-btn{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:6px;border:1px solid #dce6ee;background:#fff;color:#16232b;cursor:pointer}
 .fact-btn-sm{padding:5px 10px;font-size:11.5px}
 .fact-card{background:#fff;border:1px solid #dce6ee;border-radius:10px;box-shadow:0 1px 2px rgba(18,63,79,.06)}
-.fact-card-head{padding:14px 18px;border-bottom:1px solid #dce6ee}
-.fact-card-head h3{margin:0;font-size:14px}
 .fact-card-body{padding:16px 18px}
 .fact-field{margin-bottom:0}
 .fact-label{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#7e93a1;margin-bottom:4px}
@@ -192,6 +188,7 @@
 .fact-col-sub{font-size:10.5px;color:#7e93a1;margin-top:1px}
 .fact-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:#eaf1f6;color:#52697a;border:1px solid #dce6ee;white-space:nowrap}
 .fact-list{padding:10px;max-height:calc(100vh - 420px);min-height:200px;overflow-y:auto}
+.fact-list-auto{max-height:none;min-height:0;overflow-y:visible}
 
 .linea-card{border:1px solid #dce6ee;border-radius:6px;padding:10px 11px;margin-bottom:8px;background:#fff;transition:border-color .15s,background .15s,box-shadow .15s}
 .linea-card.drop-ready{border-style:dashed;border-color:#1b5d73}
@@ -204,11 +201,10 @@
 .linea-catalogo{flex:0 0 180px;min-width:150px}
 .linea-num{width:76px;flex:0 0 76px;font-size:12px;padding:6px 6px;text-align:right}
 .linea-sub{font-size:12.5px;font-weight:800;width:76px;flex:0 0 76px;text-align:right;padding:6px 0}
-.linea-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
-.linea-hours{font-size:10.5px;font-weight:700;color:#1b5d73;background:#e7f0f4;border-radius:99px;padding:2px 9px}
-.linea-empty-hint{font-size:10.5px;color:#7e93a1}
-.linea-imps{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
-.imp-chip{font-size:10px;font-weight:700;background:#eaf1f6;color:#52697a;border:1px solid #dce6ee;border-radius:99px;padding:2px 4px 2px 8px;display:inline-flex;align-items:center;gap:4px}
+.linea-foot{display:flex;align-items:center;justify-content:flex-start;gap:6px;flex-wrap:wrap}
+.linea-hours{font-size:10.5px;font-weight:700;color:#fff;background:#f97316;border-radius:99px;padding:2px 9px;flex-shrink:0}
+.imp-chip{font-size:10px;font-weight:700;background:#eaf1f6;color:#52697a;border:1px solid #dce6ee;border-radius:99px;padding:2px 4px 2px 8px;display:inline-flex;align-items:center;gap:4px;text-decoration:none;cursor:pointer;transition:border-color .15s,color .15s}
+.imp-chip:hover{border-color:#f97316;color:#1b5d73}
 .imp-chip button{background:none;border:none;color:inherit;cursor:pointer;font-weight:800;padding:0 2px;font-size:11px;line-height:1}
 
 .imp-card{border:1px solid #dce6ee;border-radius:6px;padding:10px 11px;margin-bottom:8px;cursor:grab;background:#fff;transition:box-shadow .15s,opacity .15s,border-color .15s}
@@ -328,7 +324,6 @@ function pintarTodo(){
   const f = STATE.factura;
 
   document.getElementById('in-numfact').value = f.emitida ? f.num_fact : (f.num_fact_preview + ' (previsto)');
-  document.getElementById('fact-subtitle').textContent = 'Factura ' + (f.emitida ? f.num_fact : '(borrador — ' + f.num_fact_preview + ' previsto)');
   document.getElementById('btn-emitir').style.display = f.emitida ? 'none' : '';
   ['in-cliente','in-proyecto','in-descripcion','in-fecha','in-dtofactura'].forEach(id => {
     document.getElementById(id).disabled = !!f.emitida;
@@ -403,11 +398,11 @@ function lineaCard(l){
       <span class="linea-sub">${fmtEUR(l.precio - (l.descuentoe||0))}</span>
       <button class="fact-btn fact-btn-sm" onclick="removeLinea(${l.id})" title="Eliminar línea">✕</button>
     </div>
-    <div class="linea-foot">
-      ${l.horas>0 ? `<span class="linea-hours">Σ ${l.horas}h imputadas</span>` : `<span class="linea-empty-hint">Sin imputaciones — arrastra una aquí, o déjala manual</span>`}
-    </div>
-    ${l.imputaciones.length ? `<div class="linea-imps">${l.imputaciones.map(i=>`<span class="imp-chip">${fmtDate(i.fecha)} · ${(i.nombre||'').length>28?i.nombre.slice(0,27)+'…':i.nombre} · ${i.horas}h
-      <button onclick="detachImp(${i.id})" title="Quitar de esta línea">×</button></span>`).join('')}</div>` : ''}
+    ${l.horas>0 ? `<div class="linea-foot">
+      <span class="linea-hours">Σ ${l.horas}h imputadas</span>
+      ${l.imputaciones.map(i=>`<a class="imp-chip" href="${routeImputacionFicha(i.id)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Abrir imputación en una nueva pestaña">${(i.nombre||'').length>28?i.nombre.slice(0,27)+'…':i.nombre} · ${i.horas}h
+        <button onclick="event.stopPropagation();event.preventDefault();detachImp(${i.id})" title="Quitar de esta línea">×</button></a>`).join('')}
+    </div>` : ''}
   </div>`;
 }
 
