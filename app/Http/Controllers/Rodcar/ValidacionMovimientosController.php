@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Rodcar;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ClasificarMovimientosJob;
 use App\Models\Project;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -11,23 +12,46 @@ class ValidacionMovimientosController extends Controller
 {
     public function index(Request $request, Project $project)
     {
+        $sinClasificar = DB::table('rodcar_movs')->whereNull('estado_clasificacion')->where('deleted', false)->count();
+
+        $q             = trim((string) $request->input('q', ''));
+        $fase          = $request->input('fase', '');
+        $confianzaMin  = $request->input('confianza_min', '');
+        $cuenta        = $request->input('cuenta', '');
+
         $pendientes = DB::table('rodcar_movs as m')
             ->leftJoin('rodcar_movs_tipo1 as t1', 't1.id', '=', 'm.id_movs_tipo1_propuesto')
             ->leftJoin('rodcar_movs_tipo2 as t2', 't2.id', '=', 'm.id_movs_tipo2_propuesto')
+            ->leftJoin('rodcar_movs_cuenta as c', 'c.id', '=', 'm.id_movs_cuenta')
             ->whereIn('m.estado_clasificacion', ['pendiente_validacion', 'clasificado_ia_alta_confianza'])
             ->where('m.deleted', false)
+            ->when($q !== '', fn ($qq) => $qq->where('m.nombre', 'ilike', '%' . $q . '%'))
+            ->when($fase !== '', fn ($qq) => $qq->where('m.fase_clasificacion', (int) $fase))
+            ->when($confianzaMin !== '', fn ($qq) => $qq->where('m.confianza_ia', '>=', (int) $confianzaMin))
+            ->when($cuenta !== '', fn ($qq) => $qq->where('m.id_movs_cuenta', (int) $cuenta))
             ->orderByDesc('m.clasificado_en')
             ->get([
                 'm.id', 'm.fecha_operacion', 'm.nombre', 'm.importe',
                 'm.estado_clasificacion', 'm.fase_clasificacion', 'm.confianza_ia', 'm.justificacion_ia',
                 'm.id_movs_tipo1_propuesto', 'm.id_movs_tipo2_propuesto',
                 't1.nombre as tipo1_propuesto_nombre', 't2.nombre as tipo2_propuesto_nombre',
+                'c.nombre as cuenta_nombre',
             ]);
 
-        $tipos1 = DB::table('rodcar_movs_tipo1')->where('deleted', false)->orderBy('nombre')->get(['id', 'nombre']);
-        $tipos2 = DB::table('rodcar_movs_tipo2')->where('deleted', false)->orderBy('nombre')->get(['id', 'nombre']);
+        $tipos1  = DB::table('rodcar_movs_tipo1')->where('deleted', false)->orderBy('nombre')->get(['id', 'nombre']);
+        $tipos2  = DB::table('rodcar_movs_tipo2')->where('deleted', false)->orderBy('nombre')->get(['id', 'nombre']);
+        $cuentas = DB::table('rodcar_movs_cuenta')->where('deleted', false)->orderBy('nombre')->get(['id', 'nombre']);
 
-        return view('rodcar.validacion', compact('project', 'pendientes', 'tipos1', 'tipos2'));
+        return view('rodcar.validacion', compact(
+            'project', 'pendientes', 'tipos1', 'tipos2', 'cuentas', 'sinClasificar', 'q', 'fase', 'confianzaMin', 'cuenta'
+        ));
+    }
+
+    public function clasificar(Request $request, Project $project)
+    {
+        ClasificarMovimientosJob::dispatch();
+
+        return response()->json(['ok' => true]);
     }
 
     public function validar(Request $request, Project $project, int $movimiento)

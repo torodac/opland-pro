@@ -267,6 +267,7 @@ Route::middleware('auth')->group(function () {
 
         Route::middleware('rodcar.only')->group(function () {
             Route::get('movs-validacion', [\App\Http\Controllers\Rodcar\ValidacionMovimientosController::class, 'index'])->name('rodcar.movs-validacion');
+            Route::post('movs-validacion/clasificar', [\App\Http\Controllers\Rodcar\ValidacionMovimientosController::class, 'clasificar'])->name('rodcar.movs-validacion.clasificar');
             Route::post('movs-validacion/{movimiento}', [\App\Http\Controllers\Rodcar\ValidacionMovimientosController::class, 'validar'])->where('movimiento', '[0-9]+')->name('rodcar.movs-validacion.validar');
         }); // fin rodcar.only
 
