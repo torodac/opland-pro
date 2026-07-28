@@ -1,4 +1,4 @@
-﻿{{-- Interior de tarjeta de proyecto. Variables: $project, $firstTable --}}
+﻿{{-- Interior de tarjeta de proyecto. Variables: $project --}}
 
 {{-- Botón favorito --}}
 <button @click="toggleFavorite({{ $project->id }}, $event)"

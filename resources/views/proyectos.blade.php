@@ -29,11 +29,11 @@
                 </h2>
                 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                     @foreach($projects as $project)
-                        @php $firstTable = $project->tables->first(); @endphp
+                        @php $homeUrl = \App\Http\Controllers\ProjectController::resolveHomeUrl(auth()->user(), $project); @endphp
                         <template x-if="favorites.includes({{ $project->id }})">
-                            <div @click="@if($firstTable) window.location='{{ route('listado', [$project->slug, $firstTable->name]) }}' @endif"
+                            <div @click="window.location='{{ $homeUrl }}'"
                                  class="bg-white rounded-xl border border-amber-200 shadow-sm flex flex-col items-center text-center p-5 gap-3 relative cursor-pointer hover:shadow-md hover:border-amber-300 transition-all">
-                                @include('partials.project-card-inner', ['project' => $project, 'firstTable' => $firstTable])
+                                @include('partials.project-card-inner', ['project' => $project])
                             </div>
                         </template>
                     @endforeach
@@ -53,10 +53,10 @@
             </div>
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                 @forelse($projects as $project)
-                    @php $firstTable = $project->tables->first(); @endphp
-                    <div @click="@if($firstTable) window.location='{{ route('listado', [$project->slug, $firstTable->name]) }}' @endif"
+                    @php $homeUrl = \App\Http\Controllers\ProjectController::resolveHomeUrl(auth()->user(), $project); @endphp
+                    <div @click="window.location='{{ $homeUrl }}'"
                          class="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col items-center text-center p-5 gap-3 relative cursor-pointer hover:shadow-md hover:border-orange-300 transition-all">
-                        @include('partials.project-card-inner', ['project' => $project, 'firstTable' => $firstTable])
+                        @include('partials.project-card-inner', ['project' => $project])
                     </div>
                 @empty
                     <div class="col-span-full text-center text-gray-400 text-sm py-12">
