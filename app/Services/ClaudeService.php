@@ -56,10 +56,10 @@ class ClaudeService
         return '';
     }
 
-    public function preguntar(string $prompt, int $maxTokens = 1024): string
+    public function preguntar(string $prompt, int $maxTokens = 1024, ?string $model = null): string
     {
         $message = $this->client->messages->create(
-            model: $this->model,
+            model: $model ?? $this->model,
             maxTokens: $maxTokens,
             messages: [
                 ['role' => 'user', 'content' => $prompt],

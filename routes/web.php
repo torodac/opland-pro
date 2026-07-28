@@ -265,6 +265,11 @@ Route::middleware('auth')->group(function () {
             Route::post('facturas_form/{factura}/emitir', [\App\Http\Controllers\Opland\FacturaFormController::class, 'emitir'])->where('factura', '[0-9]+')->name('opland.factura_form.emitir');
         }); // fin opland.only
 
+        Route::middleware('rodcar.only')->group(function () {
+            Route::get('movs-validacion', [\App\Http\Controllers\Rodcar\ValidacionMovimientosController::class, 'index'])->name('rodcar.movs-validacion');
+            Route::post('movs-validacion/{movimiento}', [\App\Http\Controllers\Rodcar\ValidacionMovimientosController::class, 'validar'])->where('movimiento', '[0-9]+')->name('rodcar.movs-validacion.validar');
+        }); // fin rodcar.only
+
         Route::get('{table}', [ListadoController::class, 'index'])->name('listado');
         Route::post('{table}/upload-doc', [FichaController::class, 'uploadDoc'])->name('listado.upload-doc');
 
