@@ -632,6 +632,10 @@ function setFieldsReadonly(readonly) {
         .forEach(f => {
             if (f.dataset.readonly) return;
             if (f.type === 'checkbox' || f.type === 'radio') {
+                // Quitar el foco ANTES de deshabilitar: si el campo lo tuviera al pasar a modo
+                // consulta, disabled se lo retira de golpe y el navegador puede saltar el scroll
+                // (mismo bug que ya hubo aquí el 2026-06-28 con "disabled" en todos los campos).
+                if (readonly) f.blur();
                 f.disabled = readonly;
             } else {
                 f.readOnly = readonly;
