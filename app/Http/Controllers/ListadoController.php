@@ -24,102 +24,10 @@ class ListadoController extends Controller
         $fullTable    = $projectTable->getFullTableName();
         $tieneDeleted = Schema::hasColumn($fullTable, 'deleted');
         $tieneHidden  = Schema::hasColumn($fullTable, 'hidden');
+        $sortField    = $request->input('sort');
+        $sortDir      = $request->input('dir', 'asc') === 'desc' ? 'desc' : 'asc';
 
-        $query = DB::table($fullTable);
-
-        // Filtro stat
-        $stat = $request->input('stat');
-        if ($fullTable === 'vm_reservas' && $stat) {
-            $hoy    = now()->toDateString();
-            $manana = now()->addDay()->toDateString();
-            $pasado = now()->addDays(2)->toDateString();
-            $query->whereNotIn('booking_status', ['cancelled', 'canceled']);
-            match ($stat) {
-                'en_curso' => $query->where('check_in_date', '<=', $hoy)->where('check_out_date', '>=', $hoy),
-                'manana'   => $query->where('check_in_date', $manana),
-                'pasado'   => $query->where('check_in_date', $pasado),
-                default    => null,
-            };
-        } elseif ($fullTable === 'vm_propiedades' && $stat) {
-            $ayer = now()->subDay()->toDateString();
-            $hoy  = now()->toDateString();
-            if ($stat !== 'codigo_compartido') {
-                $query->whereNotNull('icnea_code');
-            }
-            match ($stat) {
-                'pte_info'          => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))->where(fn($q) => $q->whereNull('fecha_inicio')->orWhereNull('tipo_renta')),
-                'posibles_bajas'    => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))->where(fn($q) => $q->whereNull('icnea_updatedat')->orWhereDate('icnea_updatedat', '<', $ayer)),
-                'revisar_borrado'   => $query->where('deleted', 1)->whereDate('icnea_updatedat', $hoy),
-                'ocultas'           => $query->where('deleted', 0)->where('hidden', 1),
-                'sin_breezeway'     => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))->whereNull('breezeway_home_id'),
-                'codigo_compartido' => $query->whereIn('id', $this->propiedadesConCodigoCompartido()),
-                default             => null,
-            };
-        } else {
-            // Borrados / archivados (solo si las columnas existen)
-            if ($tieneDeleted) {
-                if ($request->boolean('borrados')) {
-                    $query->where('deleted', 1);
-                } else {
-                    $query->where('deleted', 0);
-                }
-            }
-            if ($tieneHidden && !$request->boolean('borrados')) {
-                if ($request->boolean('ocultos')) {
-                    $query->where('hidden', 1);
-                } else {
-                    $query->where('hidden', 0);
-                }
-            }
-        }
-
-        // Búsqueda global por texto (ILIKE en PostgreSQL, LIKE en SQLite)
-        if ($request->filled('q')) {
-            $q      = $request->q;
-            $likeOp = DB::connection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
-            $query->where(function ($sub) use ($q, $projectTable, $likeOp) {
-                foreach ($projectTable->listFields as $field) {
-                    if (in_array($field->type, ['string', 'text', 'email', 'telefono'])) {
-                        $sub->orWhere($field->name, $likeOp, "%{$q}%");
-                    }
-                }
-            });
-        }
-
-        // Filtros por campo
-        foreach ($projectTable->listFields as $field) {
-            $param = 'f_' . $field->name;
-
-            if ($field->type === 'fecha') {
-                if ($request->filled($param . '_desde')) {
-                    $query->where($field->name, '>=', $request->input($param . '_desde'));
-                }
-                if ($request->filled($param . '_hasta')) {
-                    $query->where($field->name, '<=', $request->input($param . '_hasta'));
-                }
-            } elseif (in_array($field->type, ['select', 'tinyint', 'smallint', 'id', 'desplegable'])) {
-                if ($request->filled($param)) {
-                    $query->where($field->name, $request->input($param));
-                }
-            }
-        }
-
-        // Filtro control_user: si el usuario no tiene acceso a todos los registros
-        $this->applyControlUserFilter($query, $project, $fullTable);
-
-        // Ordenación por columna
-        $sortField = $request->input('sort');
-        $sortDir   = $request->input('dir', 'asc') === 'desc' ? 'desc' : 'asc';
-        $sortableFields = $projectTable->listFields->pluck('name')->toArray();
-        if ($sortField && in_array($sortField, $sortableFields)) {
-            // NULLS LAST siempre, en ambas direcciones: si no, Postgres pone los NULL
-            // primero al ordenar descendente (comportamiento por defecto), y con columnas
-            // mayoritariamente vacías (p.ej. un booleano poco usado) el resultado parece
-            // "no hacer nada" porque la primera página sigue llena de valores en blanco.
-            $query->orderByRaw('"' . $sortField . '" ' . $sortDir . ' NULLS LAST');
-        } else {
-            $query->orderByDesc('id');
-        }
+        $query = $this->filteredSortedQuery($request, $project, $projectTable);
 
         $registros = $query->paginate(50)->withQueryString();
 
@@ -256,6 +164,129 @@ class ListadoController extends Controller
         ]);
     }
 
+    // Devuelve el listado de IDs que cumplen el filtro/búsqueda activos (sin paginar),
+    // para el botón "Copiar IDs" -- usa exactamente los mismos filtros que index().
+    public function ids(Request $request, Project $project, string $table)
+    {
+        $projectTable = $project->tables()
+            ->where('name', $table)
+            ->with(['listFields'])
+            ->firstOrFail();
+
+        abort_unless(Auth::user()?->canViewTable($project, $table), 403);
+
+        $ids = $this->filteredSortedQuery($request, $project, $projectTable)->pluck('id');
+
+        return response()->json(['ids' => $ids, 'count' => $ids->count()]);
+    }
+
+    // Construye la query de listado con todos los filtros (stat, borrados/ocultos, búsqueda,
+    // filtros por campo, control_user) y la ordenación aplicados, sin paginar.
+    // Compartido entre index() (paginado) e ids() (todos los IDs, para "Copiar IDs").
+    private function filteredSortedQuery(Request $request, Project $project, ProjectTable $projectTable)
+    {
+        $fullTable    = $projectTable->getFullTableName();
+        $tieneDeleted = Schema::hasColumn($fullTable, 'deleted');
+        $tieneHidden  = Schema::hasColumn($fullTable, 'hidden');
+
+        $query = DB::table($fullTable);
+
+        // Filtro stat
+        $stat = $request->input('stat');
+        if ($fullTable === 'vm_reservas' && $stat) {
+            $hoy    = now()->toDateString();
+            $manana = now()->addDay()->toDateString();
+            $pasado = now()->addDays(2)->toDateString();
+            $query->whereNotIn('booking_status', ['cancelled', 'canceled']);
+            match ($stat) {
+                'en_curso' => $query->where('check_in_date', '<=', $hoy)->where('check_out_date', '>=', $hoy),
+                'manana'   => $query->where('check_in_date', $manana),
+                'pasado'   => $query->where('check_in_date', $pasado),
+                default    => null,
+            };
+        } elseif ($fullTable === 'vm_propiedades' && $stat) {
+            $ayer = now()->subDay()->toDateString();
+            $hoy  = now()->toDateString();
+            if ($stat !== 'codigo_compartido') {
+                $query->whereNotNull('icnea_code');
+            }
+            match ($stat) {
+                'pte_info'          => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))->where(fn($q) => $q->whereNull('fecha_inicio')->orWhereNull('tipo_renta')),
+                'posibles_bajas'    => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))->where(fn($q) => $q->whereNull('icnea_updatedat')->orWhereDate('icnea_updatedat', '<', $ayer)),
+                'revisar_borrado'   => $query->where('deleted', 1)->whereDate('icnea_updatedat', $hoy),
+                'ocultas'           => $query->where('deleted', 0)->where('hidden', 1),
+                'sin_breezeway'     => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))->whereNull('breezeway_home_id'),
+                'codigo_compartido' => $query->whereIn('id', $this->propiedadesConCodigoCompartido()),
+                default             => null,
+            };
+        } else {
+            // Borrados / archivados (solo si las columnas existen)
+            if ($tieneDeleted) {
+                if ($request->boolean('borrados')) {
+                    $query->where('deleted', 1);
+                } else {
+                    $query->where('deleted', 0);
+                }
+            }
+            if ($tieneHidden && !$request->boolean('borrados')) {
+                if ($request->boolean('ocultos')) {
+                    $query->where('hidden', 1);
+                } else {
+                    $query->where('hidden', 0);
+                }
+            }
+        }
+
+        // Búsqueda global por texto (ILIKE en PostgreSQL, LIKE en SQLite)
+        if ($request->filled('q')) {
+            $q      = $request->q;
+            $likeOp = DB::connection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
+            $query->where(function ($sub) use ($q, $projectTable, $likeOp) {
+                foreach ($projectTable->listFields as $field) {
+                    if (in_array($field->type, ['string', 'text', 'email', 'telefono'])) {
+                        $sub->orWhere($field->name, $likeOp, "%{$q}%");
+                    }
+                }
+            });
+        }
+
+        // Filtros por campo
+        foreach ($projectTable->listFields as $field) {
+            $param = 'f_' . $field->name;
+
+            if ($field->type === 'fecha') {
+                if ($request->filled($param . '_desde')) {
+                    $query->where($field->name, '>=', $request->input($param . '_desde'));
+                }
+                if ($request->filled($param . '_hasta')) {
+                    $query->where($field->name, '<=', $request->input($param . '_hasta'));
+                }
+            } elseif (in_array($field->type, ['select', 'tinyint', 'smallint', 'id', 'desplegable'])) {
+                if ($request->filled($param)) {
+                    $query->where($field->name, $request->input($param));
+                }
+            }
+        }
+
+        // Filtro control_user: si el usuario no tiene acceso a todos los registros
+        $this->applyControlUserFilter($query, $project, $fullTable);
+
+        // Ordenación por columna
+        $sortField = $request->input('sort');
+        $sortDir   = $request->input('dir', 'asc') === 'desc' ? 'desc' : 'asc';
+        $sortableFields = $projectTable->listFields->pluck('name')->toArray();
+        if ($sortField && in_array($sortField, $sortableFields)) {
+            // NULLS LAST siempre, en ambas direcciones: si no, Postgres pone los NULL
+            // primero al ordenar descendente (comportamiento por defecto), y con columnas
+            // mayoritariamente vacías (p.ej. un booleano poco usado) el resultado parece
+            // "no hacer nada" porque la primera página sigue llena de valores en blanco.
+            $query->orderByRaw('"' . $sortField . '" ' . $sortDir . ' NULLS LAST');
+        } else {
+            $query->orderByDesc('id');
+        }
+
+        return $query;
+    }
 
     // Aplica filtro control_user segun visibilidad del rol (personales/supervisados/todos)
     private function applyControlUserFilter($query, Project $project, string $fullTable): void

@@ -272,6 +272,7 @@ Route::middleware('auth')->group(function () {
         }); // fin rodcar.only
 
         Route::get('{table}', [ListadoController::class, 'index'])->name('listado');
+        Route::get('{table}/ids', [ListadoController::class, 'ids'])->name('listado.ids');
         Route::post('{table}/upload-doc', [FichaController::class, 'uploadDoc'])->name('listado.upload-doc');
 
         // Excel export: disponible para todos
@@ -284,6 +285,9 @@ Route::middleware('auth')->group(function () {
             Route::get('{table}/import/template', [ExcelController::class, 'importTemplate'])->name('excel.import-template');
             Route::post('{table}/import/preview', [ExcelController::class, 'importPreview'])->name('excel.import-preview');
             Route::post('{table}/import/confirm', [ExcelController::class, 'import'])->name('excel.import');
+
+            Route::get('{table}/actualizacion-masiva', [FichaController::class, 'bulkEditForm'])->name('ficha.bulk-edit-form');
+            Route::post('{table}/actualizacion-masiva', [FichaController::class, 'bulkUpdate'])->name('ficha.bulk-update');
         });
 
         Route::get('{table}/nuevo', [FichaController::class, 'create'])->name('ficha.create');

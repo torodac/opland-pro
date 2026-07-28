@@ -76,22 +76,21 @@
         @endif
         @endif
 
-        {{-- Excel exportar (dropdown) --}}
+        {{-- Acciones (dropdown): exportar, importar, actualización masiva, copiar IDs --}}
         <div class="relative" x-data="{ open: false }" @click.outside="open = false">
             <button @click="open = !open"
                     class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
-                <i class="fas fa-file-excel text-green-600"></i>
-                Exportar
+                Acciones
                 <i class="fas fa-chevron-down text-[10px] text-gray-400 ml-0.5"></i>
             </button>
-            <div x-show="open" x-cloak
-                 class="absolute right-0 mt-1 w-52 bg-white border border-gray-200 rounded-xl shadow-lg z-20 py-1 text-sm">
+            <div x-show="open" x-cloak @click="open = false"
+                 class="absolute right-0 mt-1 w-60 bg-white border border-gray-200 rounded-xl shadow-lg z-20 py-1 text-sm">
                 @php $qs = http_build_query(request()->except('page')); @endphp
                 <a href="{{ route('excel.export', [$project->slug, $projectTable->name]) }}?tipo=listado&{{ $qs }}"
                    class="flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50">
                     <i class="fas fa-filter text-orange-400 mt-0.5"></i>
                     <div>
-                        <p class="font-medium text-gray-700">Listado</p>
+                        <p class="font-medium text-gray-700">Exportar listado</p>
                         <p class="text-xs text-gray-400">Columnas visibles y filtros aplicados</p>
                     </div>
                 </a>
@@ -99,21 +98,37 @@
                    class="flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50">
                     <i class="fas fa-table text-blue-400 mt-0.5"></i>
                     <div>
-                        <p class="font-medium text-gray-700">Tabla completa</p>
+                        <p class="font-medium text-gray-700">Exportar tabla completa</p>
                         <p class="text-xs text-gray-400">Todas las columnas y registros</p>
                     </div>
                 </a>
+                <button type="button" @click="copiarIds()"
+                        class="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50 text-left">
+                    <i class="fas fa-copy text-gray-400 mt-0.5"></i>
+                    <div>
+                        <p class="font-medium text-gray-700">Copiar IDs</p>
+                        <p class="text-xs text-gray-400">Todos los que cumplen el filtro actual</p>
+                    </div>
+                </button>
+                @if(auth()->user()?->isProjectAdmin($project))
+                <a href="{{ route('excel.import-form', [$project->slug, $projectTable->name]) }}"
+                   class="flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50">
+                    <i class="fas fa-file-upload text-blue-500 mt-0.5"></i>
+                    <div>
+                        <p class="font-medium text-gray-700">Importar</p>
+                    </div>
+                </a>
+                <a href="{{ route('ficha.bulk-edit-form', [$project->slug, $projectTable->name]) }}"
+                   class="flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50">
+                    <i class="fas fa-layer-group text-purple-500 mt-0.5"></i>
+                    <div>
+                        <p class="font-medium text-gray-700">Actualización masiva</p>
+                        <p class="text-xs text-gray-400">Aplica un valor a varios registros a la vez</p>
+                    </div>
+                </a>
+                @endif
             </div>
         </div>
-
-        {{-- Excel importar: solo admin del proyecto --}}
-        @if(auth()->user()?->isProjectAdmin($project))
-        <a href="{{ route('excel.import-form', [$project->slug, $projectTable->name]) }}"
-           class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
-            <i class="fas fa-file-upload text-blue-500"></i>
-            Importar
-        </a>
-        @endif
     </x-slot>
 
     @php
@@ -996,4 +1011,24 @@ document.addEventListener('DOMContentLoaded', function () {
     table.style.width = '100%';
     ths.forEach((th, i) => { th.style.width = widths[i] + 'px'; });
 });
+</script>
+
+<script>
+async function copiarIds() {
+    const qs = new URLSearchParams(window.location.search);
+    qs.delete('page');
+    const url = '{{ route('listado.ids', [$project->slug, $projectTable->name]) }}?' + qs.toString();
+
+    try {
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        if (!res.ok || !data.ids) { alert('No se pudieron obtener los IDs.'); return; }
+        if (data.count === 0) { alert('No hay ningún registro que coincida con el filtro actual.'); return; }
+
+        await navigator.clipboard.writeText(data.ids.join(','));
+        alert(`${data.count} ID(s) copiados al portapapeles.`);
+    } catch (e) {
+        alert('Error al copiar los IDs.');
+    }
+}
 </script>

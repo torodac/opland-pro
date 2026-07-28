@@ -194,6 +194,78 @@ class FichaController extends Controller
         ]);
     }
 
+    public function bulkEditForm(Project $project, string $table)
+    {
+        $projectTable = $this->resolveTable($project, $table);
+        abort_unless(Auth::user()?->canEditTable($project, $table), 403);
+
+        return view('actualizacion-masiva', [
+            'project'         => $project,
+            'projectTable'    => $projectTable,
+            'campos'          => $projectTable->fields, // todos, incluidos deleted/hidden/blocked
+            'fkOptions'       => $this->loadFkOptions($project, $projectTable),
+            'usuariosMap'     => $this->loadUsuariosMap($project),
+            'projectUsuarios' => $this->loadUsuariosForForm($project, $projectTable),
+            'breadcrumb'      => [
+                ['label' => $projectTable->label,       'url' => route('listado', [$project->slug, $table])],
+                ['label' => 'Actualización masiva',     'url' => ''],
+            ],
+        ]);
+    }
+
+    public function bulkUpdate(Request $request, Project $project, string $table)
+    {
+        $projectTable = $this->resolveTable($project, $table);
+        abort_unless(Auth::user()?->canEditTable($project, $table), 403);
+
+        $ids = collect(explode(',', (string) $request->input('ids', '')))
+            ->map(fn ($id) => trim($id))
+            ->filter(fn ($id) => $id !== '' && ctype_digit($id))
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        abort_if($ids->isEmpty(), 422, 'No se ha indicado ningún ID válido.');
+
+        // Solo se envían al servidor los campos cuyo checkbox "aplicar" estaba marcado
+        // (ver actualizacion-masiva.blade.php) -- filterData() ya descarta cualquier
+        // clave que no venga en la petición, así que basta con reutilizarla tal cual.
+        $data = $this->filterData($request, $projectTable);
+
+        // filterData() fuerza siempre un valor para multitabla/multiusuario (json_encode con
+        // default []), incluso si el campo no venía en la petición -- aquí eso sería sobrescribir
+        // el campo en todos los registros aunque su checkbox "aplicar" estuviera desmarcado.
+        foreach ($projectTable->fields->whereIn('type', ['multitabla', 'multiusuario']) as $field) {
+            if (!$request->has($field->name)) {
+                unset($data[$field->name]);
+            }
+        }
+
+        // Los campos marcados como required no pueden dejarse en blanco si se van a aplicar
+        // (a diferencia de crear/editar, aquí NO exigimos el resto de required de la tabla,
+        // porque la inmensa mayoría de campos se dejan sin tocar a propósito).
+        $rules = [];
+        foreach ($projectTable->fields->where('required', true) as $field) {
+            if (array_key_exists($field->name, $data)) {
+                $rules[$field->name] = 'required';
+            }
+        }
+        if ($rules) {
+            $labels = $projectTable->fields->pluck('label', 'name')->toArray();
+            $request->validate($rules, [], $labels);
+        }
+
+        abort_if(empty($data), 422, 'No se ha marcado ningún campo para aplicar.');
+
+        $fullTable = $projectTable->getFullTableName();
+        $data['updatedat']  = now();
+        $data['updateuser'] = $this->currentUserId();
+
+        $afectados = DB::table($fullTable)->whereIn('id', $ids)->update($data);
+
+        return response()->json(['ok' => true, 'afectados' => $afectados, 'ids_recibidos' => $ids->count()]);
+    }
+
     public function store(Request $request, Project $project, string $table)
     {
         $projectTable = $this->resolveTable($project, $table);
