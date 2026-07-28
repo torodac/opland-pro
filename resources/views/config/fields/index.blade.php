@@ -519,7 +519,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <option value="">— Selecciona —</option>
                             @foreach(array_keys(\App\Models\TableField::$typeMap) as $key)
                                 @if(in_array($key, ['id', 'multitabla'])) @continue @endif
-                                <option value="{{ $key }}" {{ old('type') === $key ? 'selected' : '' }}>{{ $key }}</option>
+                                <option value="{{ $key }}" {{ old('type') === $key ? 'selected' : '' }}>{{ \App\Models\TableField::$typeLabels[$key] ?? $key }}</option>
                             @endforeach
                         </select>
                         <p x-show="errors.type" x-text="errors.type?.[0]" class="text-xs text-red-500 mt-1"></p>

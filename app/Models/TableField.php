@@ -59,6 +59,14 @@ class TableField extends Model
         'multitabla'   => 'json',
     ];
 
+    // Texto descriptivo para el desplegable de "Tipo" al crear/editar un campo.
+    // Solo hace falta para tipos que puedan confundirse entre sí (p.ej. tinyint/smallint,
+    // ambos booleanos pero con un control distinto); el resto usa la clave tal cual.
+    public static array $typeLabels = [
+        'tinyint'  => 'tinyint (desplegable)',
+        'smallint' => 'smallint (checkbox)',
+    ];
+
     // Añade esta columna a la tabla dinámica en la BD
     public function addColumnToTable(): void
     {
