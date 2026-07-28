@@ -117,7 +117,7 @@
     </x-slot>
 
     @php
-        $camposFiltrables = $campos->filter(fn($c) => in_array($c->type, ['select','tinyint','fecha','id','desplegable']));
+        $camposFiltrables = $campos->filter(fn($c) => in_array($c->type, ['select','tinyint','smallint','fecha','id','desplegable']));
         $filtrosActivos   = collect(request()->except(['q','ocultos','borrados','page','modo','stat']))->filter()->isNotEmpty();
     @endphp
 
@@ -298,7 +298,7 @@
                                 </select>
                             </div>
 
-                        @elseif($campo->type === 'tinyint')
+                        @elseif(in_array($campo->type, ['tinyint', 'smallint']))
                             <div>
                                 <label class="block text-xs font-medium text-gray-500 mb-1">{{ $campo->label }}</label>
                                 <select name="{{ $param }}"
@@ -537,6 +537,12 @@
                                                 <option value="0">No</option>
                                                 <option value="1">Sí</option>
                                             </select>
+                                        @elseif($campo->type === 'smallint')
+                                            <div class="px-2 py-1">
+                                                <input type="checkbox" :checked="value === '1'"
+                                                       @change="value = $event.target.checked ? '1' : '0'; save()"
+                                                       class="w-4 h-4 accent-orange-500 cursor-pointer">
+                                            </div>
                                         @elseif($campo->type === 'fecha')
                                             <input type="date" x-model="value"
                                                    @change="save()"
@@ -723,6 +729,11 @@
                                         <option value="0">No</option>
                                         <option value="1">Sí</option>
                                     </select>
+                                @elseif($campo->type === 'smallint')
+                                    <div class="px-2 py-1">
+                                        <input type="checkbox" x-model="fields['{{ $campo->name }}']"
+                                               class="w-4 h-4 accent-orange-500 cursor-pointer">
+                                    </div>
                                 @elseif($campo->type === 'fecha')
                                     <input type="date" x-model="fields['{{ $campo->name }}']"
                                            @keydown.enter="save()"

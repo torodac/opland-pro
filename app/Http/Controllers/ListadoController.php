@@ -97,7 +97,7 @@ class ListadoController extends Controller
                 if ($request->filled($param . '_hasta')) {
                     $query->where($field->name, '<=', $request->input($param . '_hasta'));
                 }
-            } elseif (in_array($field->type, ['select', 'tinyint', 'id', 'desplegable'])) {
+            } elseif (in_array($field->type, ['select', 'tinyint', 'smallint', 'id', 'desplegable'])) {
                 if ($request->filled($param)) {
                     $query->where($field->name, $request->input($param));
                 }
@@ -112,7 +112,11 @@ class ListadoController extends Controller
         $sortDir   = $request->input('dir', 'asc') === 'desc' ? 'desc' : 'asc';
         $sortableFields = $projectTable->listFields->pluck('name')->toArray();
         if ($sortField && in_array($sortField, $sortableFields)) {
-            $query->orderBy($sortField, $sortDir);
+            // NULLS LAST siempre, en ambas direcciones: si no, Postgres pone los NULL
+            // primero al ordenar descendente (comportamiento por defecto), y con columnas
+            // mayoritariamente vacías (p.ej. un booleano poco usado) el resultado parece
+            // "no hacer nada" porque la primera página sigue llena de valores en blanco.
+            $query->orderByRaw('"' . $sortField . '" ' . $sortDir . ' NULLS LAST');
         } else {
             $query->orderByDesc('id');
         }
