@@ -625,11 +625,26 @@
 const BG_READONLY = '#f3f4f6'; // gray-100
 
 function setFieldsReadonly(readonly) {
-    document.querySelectorAll('#ficha-form input, #ficha-form select, #ficha-form textarea')
+    // input/textarea: usar el atributo nativo "readonly" en vez de pointer-events/user-select,
+    // para poder seguir seleccionando y copiando el texto aunque el campo no sea editable.
+    // checkbox/radio no soportan "readonly" en HTML, así que ahí sí hace falta disabled.
+    document.querySelectorAll('#ficha-form input, #ficha-form textarea')
+        .forEach(f => {
+            if (f.dataset.readonly) return;
+            if (f.type === 'checkbox' || f.type === 'radio') {
+                f.disabled = readonly;
+            } else {
+                f.readOnly = readonly;
+            }
+            f.tabIndex              = readonly ? -1 : 0;
+            f.style.backgroundColor = readonly ? BG_READONLY : '';
+        });
+
+    // select: no soporta "readonly" nativo, se mantiene el bloqueo por pointer-events
+    document.querySelectorAll('#ficha-form select')
         .forEach(f => {
             if (f.dataset.readonly) return;
             f.style.pointerEvents   = readonly ? 'none' : '';
-            f.style.userSelect      = readonly ? 'none' : '';
             f.tabIndex              = readonly ? -1 : 0;
             f.style.backgroundColor = readonly ? BG_READONLY : '';
         });
