@@ -1,5 +1,5 @@
 const API = 'https://app.opland.es/api/vm';
-const APP_VERSION = '2026.07.03-1';
+const APP_VERSION = '2026.08.02-1';
 
 // ── Bottom nav (única fuente de verdad, evita 4 bloques duplicados en el HTML) ──
 const NAV_ITEMS = [
@@ -65,6 +65,16 @@ async function api(method, path, body) {
   }
   const res = await fetch(API + path, opts);
   const json = await res.json().catch(() => ({}));
+
+  // Token caducado/inválido: cierre de sesión automático en CUALQUIER endpoint (antes solo
+  // loadTareas() lo detectaba, el resto se quedaba mostrando un error genérico sin volver al
+  // login). Se excluyen /login (ahí un 401 es "credenciales incorrectas", no sesión caducada;
+  // no queremos redirigir la propia pantalla de login) y /logout (evita reentrancia: doLogout()
+  // llama a este mismo endpoint con el token ya inválido, y volvería a disparar el logout forzado).
+  if (res.status === 401 && path !== '/login' && !path.startsWith('/logout')) {
+    forzarLogoutPorTokenInvalido();
+  }
+
   if (!res.ok) throw new Error(json.error || json.message || 'Error ' + res.status);
   return json;
 }
@@ -114,6 +124,7 @@ async function doLogin() {
 
   try {
     const data = await api('POST', '/login', { email, password, remember });
+    sesionExpirando = false; // rearma el aviso de "sesión caducada" para la nueva sesión
     state.token = data.token;
     state.user  = data.user;
     state.esSupervisor = !!data.es_supervisor;
@@ -134,13 +145,29 @@ async function doLogin() {
   }
 }
 
-async function doLogout() {
-  try { await api('POST', '/logout'); } catch {}
+function limpiarSesionLocal() {
   state.token = null;
   state.user  = null;
   store.del('vm_token');
   store.del('vm_user');
   showScreen('login');
+}
+
+async function doLogout() {
+  try { await api('POST', '/logout'); } catch {}
+  limpiarSesionLocal();
+}
+
+// Se dispara desde api() ante cualquier 401 (token caducado o inválido), en cualquier pantalla.
+// No llama a /logout (el token ya no vale igualmente) y avisa una sola vez por sesión perdida
+// aunque varias llamadas en paralelo fallen a la vez (p.ej. al recargar una pantalla con
+// varios fetch simultáneos).
+let sesionExpirando = false;
+function forzarLogoutPorTokenInvalido() {
+  if (sesionExpirando) return;
+  sesionExpirando = true;
+  limpiarSesionLocal();
+  toast('Tu sesión ha caducado. Vuelve a iniciar sesión.');
 }
 
 function mostrarCambioPassword() {
@@ -211,9 +238,8 @@ async function loadTareas(fecha) {
     state.fichajeCerrado = !!data.fichaje_cerrado;
     renderTareas(data);
   } catch (e) {
-    if (e.message.includes('401') || e.message.toLowerCase().includes('token')) {
-      doLogout(); return;
-    }
+    // El 401 ya se gestiona de forma centralizada en api() (forzarLogoutPorTokenInvalido());
+    // aquí solo queda el resto de errores reales (red, 500, etc.).
     list.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><p>${e.message}</p></div>`;
   }
 }
