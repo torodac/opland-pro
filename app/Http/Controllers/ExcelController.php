@@ -25,44 +25,16 @@ class ExcelController extends Controller
         $fullTable    = $projectTable->getFullTableName();
         $tipo         = $request->input('tipo', 'listado'); // 'listado' | 'tabla'
 
-        $query = DB::table($fullTable);
-
         if ($tipo === 'tabla') {
             // Todas las columnas, todos los registros (sin ningún filtro)
-            $query->orderByDesc('id');
+            $query = DB::table($fullTable)->orderByDesc('id');
             $usarCampos = $projectTable->fields; // todos los campos
         } else {
-            // Mismos filtros que el listado actual
-            if ($request->boolean('borrados')) {
-                $query->where('deleted', 1);
-            } else {
-                $query->where('deleted', 0);
-                $query->where('hidden', $request->boolean('ocultos') ? 1 : 0);
-            }
-
-            if ($request->filled('q')) {
-                $q      = $request->q;
-                $likeOp = DB::connection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
-                $query->where(function ($sub) use ($q, $projectTable, $likeOp) {
-                    foreach ($projectTable->listFields as $field) {
-                        if (in_array($field->type, ['string', 'text', 'email', 'telefono'])) {
-                            $sub->orWhere($field->name, $likeOp, "%{$q}%");
-                        }
-                    }
-                });
-            }
-
-            foreach ($projectTable->listFields as $field) {
-                $param = 'f_' . $field->name;
-                if ($field->type === 'fecha') {
-                    if ($request->filled($param . '_desde')) $query->where($field->name, '>=', $request->input($param . '_desde'));
-                    if ($request->filled($param . '_hasta')) $query->where($field->name, '<=', $request->input($param . '_hasta'));
-                } elseif (in_array($field->type, ['select', 'tinyint'])) {
-                    if ($request->filled($param)) $query->where($field->name, $request->input($param));
-                }
-            }
-
-            $query->orderByDesc('id');
+            // Mismos filtros que el listado actual (incluye stat, control_user, búsqueda y filtros por campo)
+            // -- reutiliza ListadoController::filteredSortedQuery() para no duplicar la lógica y no
+            // exportar de más: exportar sin aplicar el stat activo agotaba la memoria de PHP en tablas
+            // grandes como mb_cuotas (bug 2026-07-29, ~30.000 filas sin filtrar).
+            $query = app(ListadoController::class)->filteredSortedQuery($request, $project, $projectTable);
             $usarCampos = $projectTable->listFields; // solo columnas visibles
         }
 

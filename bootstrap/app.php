@@ -23,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'vmf.only'           => \App\Http\Middleware\EnsureVmfProject::class,
             'opland.only'        => \App\Http\Middleware\EnsureOplandProject::class,
             'rodcar.only'        => \App\Http\Middleware\EnsureRodcarProject::class,
+            'mb.only'            => \App\Http\Middleware\EnsureMbProject::class,
             'table.access'       => \App\Http\Middleware\CheckTableAccess::class,
         ]);
         $middleware->appendToGroup('web', \App\Http\Middleware\ForcePasswordChange::class);

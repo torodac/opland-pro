@@ -193,6 +193,8 @@ Route::middleware('auth')->group(function () {
             Route::post('vm_usuarios/{id}/nominas', [VmUsuarioController::class, 'storeNomina'])->where('project', 'vm')->name('vm.nomina.store');
         });
 
+        Route::get('fotos_list', [\App\Http\Controllers\Vm\FotosGaleriaController::class, 'index'])->where('project', 'vm')->name('vm.fotos-list');
+
         Route::get('tareas_{tipo}_list', [\App\Http\Controllers\Vm\TareaController::class, 'index'])->name('vm.tarea.list')->where(['tipo' => 'limpieza|mantenimiento|piscina']);
         Route::post('tareas_{tipo}_list', [\App\Http\Controllers\Vm\TareaController::class, 'store'])->name('vm.tarea.store')->where(['tipo' => 'limpieza|mantenimiento|piscina']);
         Route::get('tareas_{tipo}_form/{id}', [\App\Http\Controllers\Vm\TareaController::class, 'show'])
@@ -268,8 +270,40 @@ Route::middleware('auth')->group(function () {
         Route::middleware('rodcar.only')->group(function () {
             Route::get('movs-validacion', [\App\Http\Controllers\Rodcar\ValidacionMovimientosController::class, 'index'])->name('rodcar.movs-validacion');
             Route::post('movs-validacion/clasificar', [\App\Http\Controllers\Rodcar\ValidacionMovimientosController::class, 'clasificar'])->name('rodcar.movs-validacion.clasificar');
-            Route::post('movs-validacion/{movimiento}', [\App\Http\Controllers\Rodcar\ValidacionMovimientosController::class, 'validar'])->where('movimiento', '[0-9]+')->name('rodcar.movs-validacion.validar');
+            Route::post('movs-validacion/{origen}/{id}', [\App\Http\Controllers\Rodcar\ValidacionMovimientosController::class, 'validar'])->where(['origen' => 'movs|detalle', 'id' => '[0-9]+'])->name('rodcar.movs-validacion.validar');
+
+            Route::get('importar', [\App\Http\Controllers\Rodcar\ImportarMovimientosController::class, 'index'])->where('project', 'rodcar')->name('rodcar.importar');
+            Route::post('importar', [\App\Http\Controllers\Rodcar\ImportarMovimientosController::class, 'subir'])->where('project', 'rodcar')->name('rodcar.importar.subir');
+            Route::post('importar/confirmar-dudosos', [\App\Http\Controllers\Rodcar\ImportarMovimientosController::class, 'confirmarDudosos'])->where('project', 'rodcar')->name('rodcar.importar.confirmar-dudosos');
+            Route::get('importar/huerfanos/{lote}', [\App\Http\Controllers\Rodcar\ImportarMovimientosController::class, 'huerfanosLote'])->where(['project' => 'rodcar', 'lote' => '[0-9]+'])->name('rodcar.importar.huerfanos');
+            Route::post('importar/huerfanos/{lote}/vincular', [\App\Http\Controllers\Rodcar\ImportarMovimientosController::class, 'vincular'])->where(['project' => 'rodcar', 'lote' => '[0-9]+'])->name('rodcar.importar.vincular');
         }); // fin rodcar.only
+
+        Route::middleware('mb.only')->group(function () {
+            Route::get('clasificacion_gastos', [\App\Http\Controllers\Mb\ClasificacionGastosController::class, 'index'])->name('mb.clasificacion-gastos');
+            Route::post('clasificacion_gastos/{gasto}/clasificar', [\App\Http\Controllers\Mb\ClasificacionGastosController::class, 'clasificar'])->where('gasto', '[0-9]+')->name('mb.clasificacion-gastos.clasificar');
+            Route::post('clasificacion_gastos/{gasto}/deshacer', [\App\Http\Controllers\Mb\ClasificacionGastosController::class, 'deshacer'])->where('gasto', '[0-9]+')->name('mb.clasificacion-gastos.deshacer');
+
+            // ->where('project','mb') además del middleware mb.only: el segmento estático "pyg" coincide también
+            // con vm/pyg (tabla real vm_pyg) y sin esta restricción Laravel prioriza esta ruta sobre el
+            // comodín genérico {table} para CUALQUIER slug, rompiendo vm/pyg con 404 (regresión detectada 2026-07-28).
+            Route::get('pyg', [\App\Http\Controllers\Mb\DesgloseContableController::class, 'index'])->where('project', 'mb')->name('mb.pyg');
+            Route::get('pyg/movimientos', [\App\Http\Controllers\Mb\DesgloseContableController::class, 'movimientos'])->where('project', 'mb')->name('mb.pyg.movimientos');
+
+            // Sustituye al listado genérico de "viviendas" (mismo motivo que "pyg" arriba: ->where('project','mb')
+            // para que el comodín genérico {table} siga funcionando igual para cualquier otro proyecto).
+            Route::get('viviendas', [\App\Http\Controllers\Mb\ViviendasController::class, 'index'])->where('project', 'mb')->name('mb.viviendas');
+            Route::get('viviendas/export', [\App\Http\Controllers\Mb\ViviendasController::class, 'export'])->where('project', 'mb')->name('mb.viviendas.export');
+
+            // Idem: sustituye al listado genérico de "propietarios".
+            Route::get('propietarios', [\App\Http\Controllers\Mb\PropietariosController::class, 'index'])->where('project', 'mb')->name('mb.propietarios');
+
+            Route::post('cuotas/generar', [\App\Http\Controllers\Mb\GenerarCuotasController::class, 'store'])->where('project', 'mb')->name('mb.cuotas.generar');
+
+            Route::post('viviendas/{vivienda}/entregas-cuenta', [\App\Http\Controllers\Mb\EntregasCuentaController::class, 'store'])->where(['project' => 'mb', 'vivienda' => '[0-9]+'])->name('mb.entregas-cuenta.store');
+            Route::post('entregas-cuenta/{entrega}/aplicar', [\App\Http\Controllers\Mb\EntregasCuentaController::class, 'aplicar'])->where(['project' => 'mb', 'entrega' => '[0-9]+'])->name('mb.entregas-cuenta.aplicar');
+            Route::get('entregas-cuenta/{entrega}/pendientes', [\App\Http\Controllers\Mb\EntregasCuentaController::class, 'pendientes'])->where(['project' => 'mb', 'entrega' => '[0-9]+'])->name('mb.entregas-cuenta.pendientes');
+        }); // fin mb.only
 
         Route::get('{table}', [ListadoController::class, 'index'])->name('listado');
         Route::get('{table}/ids', [ListadoController::class, 'ids'])->name('listado.ids');

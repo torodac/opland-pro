@@ -74,6 +74,15 @@
             Nuevo
         </a>
         @endif
+
+        {{-- Generar cuotas (solo mb_cuotas): modal con concepto/ejercicio/tipo/módulo --}}
+        @if($projectTable->name === 'cuotas' && $project->slug === 'mb')
+        <button type="button" onclick="document.getElementById('gc-modal').classList.remove('hidden')"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+            <i class="fa-solid fa-file-invoice-dollar text-orange-400"></i>
+            Generar cuotas
+        </button>
+        @endif
         @endif
 
         {{-- Acciones (dropdown): exportar, importar, actualización masiva, copiar IDs --}}
@@ -136,49 +145,82 @@
         $filtrosActivos   = collect(request()->except(['q','ocultos','borrados','page','modo','stat']))->filter()->isNotEmpty();
     @endphp
 
+    @if(session('success'))
+        <div class="mb-4 px-4 py-3 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg">
+            {{ session('success') }}
+        </div>
+    @endif
+
     {{-- Stats vm_propiedades --}}
     @if($tablStats)
     @php $statActiva = request('stat'); @endphp
-    <div class="flex gap-3 mb-4 flex-wrap">
-        @php
-        $stats = isset($tablStats['en_curso'])
+
+    @if(isset($tablStats['emitido_anio']) && ($ejercicioCuotasSel ?? null))
+    @php
+        [$ejY1, $ejY2] = explode('-', $ejercicioCuotasSel);
+        $ejPrev = ((int) $ejY1 - 1) . '-' . ((int) $ejY2 - 1);
+        $ejNext = ((int) $ejY1 + 1) . '-' . ((int) $ejY2 + 1);
+    @endphp
+    <div class="flex items-center gap-2 mb-3">
+        <span style="font-size:0.8rem;color:#7e93a1">Ejercicio</span>
+        <a href="{{ request()->fullUrlWithQuery(['ejercicio' => $ejPrev, 'page' => null]) }}"
+           style="width:26px;height:26px;border-radius:7px;border:1px solid #dce6ee;background:#fff;color:#52697a;display:inline-flex;align-items:center;justify-content:center;text-decoration:none">‹</a>
+        <span style="font-size:0.85rem;font-weight:700;color:#16232b;min-width:70px;text-align:center">{{ $ejercicioCuotasSel }}</span>
+        <a href="{{ request()->fullUrlWithQuery(['ejercicio' => $ejNext, 'page' => null]) }}"
+           style="width:26px;height:26px;border-radius:7px;border:1px solid #dce6ee;background:#fff;color:#52697a;display:inline-flex;align-items:center;justify-content:center;text-decoration:none">›</a>
+    </div>
+    @endif
+
+    @php
+        $stats = isset($tablStats['emitido_anio'])
             ? [
-                'en_curso' => ['label' => 'reservas en curso',                                               'color' => 'green',  'count' => $tablStats['en_curso'],  'tooltip' => 'Reservas activas hoy (check-in pasado, check-out futuro)'],
-                'manana'   => ['label' => 'checkins mañana ' . now()->addDay()->format('d/m'),              'color' => 'blue',   'count' => $tablStats['manana'],    'tooltip' => 'Reservas con check-in mañana'],
-                'pasado'   => ['label' => 'checkins pasado mañana ' . now()->addDays(2)->format('d/m'),    'color' => 'yellow', 'count' => $tablStats['pasado'],    'tooltip' => 'Reservas con check-in pasado mañana'],
+                'emitido_anio'       => ['label' => 'Emitido ' . ($ejercicioCuotasSel ?? 'este año'),      'count' => $tablStats['emitido_anio'],       'row' => 1, 'tooltip' => 'Importe total emitido (suma de importe) de las cuotas del ejercicio seleccionado, sin contar Anuladas.'],
+                'pendiente_anio'     => ['label' => 'Pendiente ' . ($ejercicioCuotasSel ?? 'este año'),    'count' => $tablStats['pendiente_anio'],     'row' => 1, 'tooltip' => 'Importe pendiente de las cuotas del ejercicio seleccionado (sin contar Anuladas). % = importe pendiente / importe total emitido del ejercicio.'],
+                'cobrado_ejercicio'  => ['label' => 'Cobrado ' . ($ejercicioCuotasSel ?? 'este año'),        'count' => $tablStats['cobrado_ejercicio'],  'row' => 1, 'tooltip' => 'Cuotas del ejercicio seleccionado, cobradas (fecha_pago) dentro del propio ejercicio. % = importe cobrado / importe total emitido del ejercicio.'],
+                'cobrado_anteriores' => ['label' => 'Cobrado anteriores',                                   'count' => $tablStats['cobrado_anteriores'], 'row' => 1, 'tooltip' => 'Cuotas de ejercicios anteriores al seleccionado, cobradas (fecha_pago) dentro del ejercicio seleccionado.'],
+                'pendiente_total'    => ['label' => 'Pendiente total',       'count' => $tablStats['pendiente_total'], 'row' => 2, 'tooltip' => 'Importe pendiente de todas las cuotas, todos los ejercicios (sin contar Anuladas).'],
+                'demandado_total'    => ['label' => 'Demandado total',       'count' => $tablStats['demandado_total'], 'row' => 2, 'tooltip' => 'Importe pendiente de las cuotas en estado Demandada, todos los ejercicios.'],
+                'a_demandar'         => ['label' => 'A demandar',            'count' => $tablStats['a_demandar'],      'row' => 2, 'tooltip' => $aDemandarTooltip],
+            ]
+            : (isset($tablStats['en_curso'])
+            ? [
+                'en_curso' => ['label' => 'reservas en curso',                                               'count' => $tablStats['en_curso'],  'row' => 1, 'tooltip' => 'Reservas activas hoy (check-in pasado, check-out futuro)'],
+                'manana'   => ['label' => 'checkins mañana ' . now()->addDay()->format('d/m'),              'count' => $tablStats['manana'],    'row' => 1, 'tooltip' => 'Reservas con check-in mañana'],
+                'pasado'   => ['label' => 'checkins pasado mañana ' . now()->addDays(2)->format('d/m'),    'count' => $tablStats['pasado'],    'row' => 1, 'tooltip' => 'Reservas con check-in pasado mañana'],
             ]
             : [
-                'pte_info'        => ['label' => 'Pte. información',     'color' => 'yellow', 'count' => $tablStats['pte_info'],        'tooltip' => 'Propiedades activas y visibles a las que les falta la fecha de inicio o el tipo de renta.'],
-                'posibles_bajas'  => ['label' => 'Posibles bajas',       'color' => 'red',    'count' => $tablStats['posibles_bajas'],   'tooltip' => 'Propiedades activas sin sincronización con Icnea en las últimas 24 h ¿siguen estando en cartera o hay que borrarlas?'],
-                'revisar_borrado' => ['label' => 'Revisar borrado',      'color' => 'blue',   'count' => $tablStats['revisar_borrado'],  'tooltip' => 'Propiedades marcadas como eliminadas que Icnea ha actualizado hoy ¿es correcto mantenerlas borradas?'],
-                'ocultas'         => ['label' => 'Propiedades ocultas',  'color' => 'gray',   'count' => $tablStats['ocultas'],          'tooltip' => 'Propiedades archivadas — no se muestran en desplegables ni en otros módulos'],
-                'sin_breezeway'   => ['label' => 'Sin ID Breezeway',      'color' => 'red',    'count' => $tablStats['sin_breezeway'],    'tooltip' => 'Propiedades activas y visibles sin breezeway_home_id — no se sincronizarán tareas de limpieza/mantenimiento para ellas.'],
-                'codigo_compartido' => ['label' => 'Código compartido',   'color' => 'red',    'count' => $tablStats['codigo_compartido'], 'tooltip' => 'Propiedades activas cuyo código histórico (A3 o Icnea) coincide con el de otra propiedad — posible duplicado a revisar.'],
-            ];
-        $colorMap = [
-            'yellow' => ['bg' => '#fefce8', 'border' => '#fde047', 'text' => '#854d0e', 'num' => '#a16207', 'active_bg' => '#fef08a'],
-            'red'    => ['bg' => '#fef2f2', 'border' => '#fca5a5', 'text' => '#991b1b', 'num' => '#b91c1c', 'active_bg' => '#fecaca'],
-            'blue'   => ['bg' => '#eff6ff', 'border' => '#93c5fd', 'text' => '#1e40af', 'num' => '#1d4ed8', 'active_bg' => '#bfdbfe'],
-            'green'  => ['bg' => '#f0fdf4', 'border' => '#86efac', 'text' => '#166534', 'num' => '#15803d', 'active_bg' => '#bbf7d0'],
-            'gray'   => ['bg' => '#f9fafb', 'border' => '#d1d5db', 'text' => '#374151', 'num' => '#374151', 'active_bg' => '#e5e7eb'],
-        ];
-        @endphp
-        @foreach($stats as $key => $stat)
-        @php $c = $colorMap[$stat['color']]; $activa = $statActiva === $key; @endphp
-        <a href="{{ request()->fullUrlWithQuery(['stat' => $activa ? null : $key, 'page' => null]) }}"
-           style="background:{{ $activa ? $c['active_bg'] : $c['bg'] }};border:1px solid {{ $c['border'] }};border-radius:0.75rem;padding:0.625rem 1rem;display:flex;align-items:center;gap:0.625rem;text-decoration:none;transition:opacity .15s"
-           class="hover:opacity-80">
-            <span style="font-size:1.25rem;font-weight:700;color:{{ $c['num'] }}">{{ $stat['count'] }}</span>
-            <span style="font-size:0.75rem;font-weight:500;color:{{ $c['text'] }}">{{ $stat['label'] }}</span>
-            @if(!empty($stat['tooltip']))
-            <span class="app-tooltip" onclick="event.preventDefault()">
-                <span style="font-size:0.7rem;color:{{ $c['text'] }};opacity:0.6;flex-shrink:0">&#9432;</span>
-                <span class="app-tooltip-box">{{ $stat['tooltip'] }}</span>
-            </span>
-            @endif
-        </a>
-        @endforeach
-    </div>
+                'pte_info'        => ['label' => 'Pte. información',     'count' => $tablStats['pte_info'],        'row' => 1, 'tooltip' => 'Propiedades activas y visibles a las que les falta la fecha de inicio o el tipo de renta.'],
+                'posibles_bajas'  => ['label' => 'Posibles bajas',       'count' => $tablStats['posibles_bajas'],   'row' => 1, 'tooltip' => 'Propiedades activas sin sincronización con Icnea en las últimas 24 h ¿siguen estando en cartera o hay que borrarlas?'],
+                'revisar_borrado' => ['label' => 'Revisar borrado',      'count' => $tablStats['revisar_borrado'],  'row' => 1, 'tooltip' => 'Propiedades marcadas como eliminadas que Icnea ha actualizado hoy ¿es correcto mantenerlas borradas?'],
+                'ocultas'         => ['label' => 'Propiedades ocultas',  'count' => $tablStats['ocultas'],          'row' => 1, 'tooltip' => 'Propiedades archivadas — no se muestran en desplegables ni en otros módulos'],
+                'sin_breezeway'   => ['label' => 'Sin ID Breezeway',      'count' => $tablStats['sin_breezeway'],    'row' => 1, 'tooltip' => 'Propiedades activas y visibles sin breezeway_home_id — no se sincronizarán tareas de limpieza/mantenimiento para ellas.'],
+                'codigo_compartido' => ['label' => 'Código compartido',   'count' => $tablStats['codigo_compartido'], 'row' => 1, 'tooltip' => 'Propiedades activas cuyo código histórico (A3 o Icnea) coincide con el de otra propiedad — posible duplicado a revisar.'],
+            ]);
+    @endphp
+    @foreach([1, 2] as $rowNum)
+        @php $statsRow = collect($stats)->filter(fn($s) => $s['row'] === $rowNum); @endphp
+        @if($statsRow->isNotEmpty())
+        <div class="flex gap-3 {{ $rowNum === 2 ? 'mb-4' : 'mb-3' }} flex-wrap">
+            @foreach($statsRow as $key => $stat)
+            @php $activa = $statActiva === $key; @endphp
+            <a href="{{ request()->fullUrlWithQuery(['stat' => $activa ? null : $key, 'page' => null]) }}"
+               style="background:{{ $activa ? '#fff7ed' : '#fff' }};border:1px solid {{ $activa ? '#fdba74' : '#dce6ee' }};border-radius:0.75rem;padding:0.875rem 1rem;text-decoration:none;transition:opacity .15s;width:200px;box-sizing:border-box"
+               class="hover:opacity-80">
+                <div style="font-size:1.15rem;font-weight:700;color:#16232b;font-variant-numeric:tabular-nums">{{ $stat['count'] }}</div>
+                <div style="font-size:0.75rem;font-weight:500;color:{{ $activa ? '#c2410c' : '#7e93a1' }};margin-top:0.125rem;display:flex;align-items:center;gap:4px">
+                    <span>{{ $stat['label'] }}</span>
+                    @if(!empty($stat['tooltip']))
+                    <span class="app-tooltip" onclick="event.preventDefault()">
+                        <span style="font-size:0.7rem;flex-shrink:0">&#9432;</span>
+                        <span class="app-tooltip-box" style="{{ $key === 'a_demandar' ? 'width:26rem;text-align:left;white-space:pre-line' : '' }}">{{ $stat['tooltip'] }}</span>
+                    </span>
+                    @endif
+                </div>
+            </a>
+            @endforeach
+        </div>
+        @endif
+    @endforeach
     @endif
 
     @if($icneaSync ?? null)
@@ -398,7 +440,11 @@
                             $val = $registro->{$fkCampo->name} ?? null;
                             if ($val && isset($fkOptions[$fkCampo->name][$val])) {
                                 $tareaLabel = $fkOptions[$fkCampo->name][$val];
-                                $tareaUrl   = route('ficha', [$project->slug, $fkRefTablas[$fkCampo->name], $val]);
+                                // vm_fotos.id_tareas_mantenimiento: ir a la ficha personalizada de la
+                                // tarea (tareas_mantenimiento_form) en vez de la ficha genérica.
+                                $tareaUrl   = $fkCampo->name === 'id_tareas_mantenimiento' && $project->slug === 'vm'
+                                    ? route('vm.tarea', [$project->slug, 'mantenimiento', $val])
+                                    : route('ficha', [$project->slug, $fkRefTablas[$fkCampo->name], $val]);
                                 break;
                             }
                         }
@@ -439,7 +485,7 @@
     </div>
     @else
     {{-- Tabla de datos --}}
-    <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div class="bg-white rounded-xl border border-gray-200">
         <div class="overflow-x-auto" @if($modoTabla) x-data="newRowForm()" @endif>
             <table class="w-full text-xs">
                 <thead>
@@ -817,6 +863,63 @@
     @endif {{-- fin @else modoGaleria --}}
 
 </x-app-layout>
+
+@if($projectTable->name === 'cuotas' && $project->slug === 'mb')
+{{-- Modal "Generar cuotas": concepto/ejercicio/tipo/módulo, con cálculo en vivo del importe total --}}
+<div id="gc-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/40" onclick="document.getElementById('gc-modal').classList.add('hidden')"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="relative bg-white rounded-xl shadow-xl w-1/2 min-w-80">
+            <div class="px-5 py-4 border-b border-gray-100">
+                <h3 class="text-base font-semibold text-gray-800">Generar nuevas cuotas</h3>
+                <p class="text-xs text-gray-400 mt-0.5">Se emitirá una cuota por cada una de las {{ $countViviendasActivas ?? 0 }} viviendas activas.</p>
+            </div>
+            <form method="POST" action="{{ route('mb.cuotas.generar', $project->slug) }}" class="px-5 py-4 space-y-3">
+                @csrf
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Concepto</label>
+                    <input type="text" name="concepto" required maxlength="255"
+                           class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Ejercicio</label>
+                        <input type="text" name="ejercicio" value="{{ $ejercicioActualDefault ?? '' }}" required maxlength="9"
+                               class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Tipo de cuota</label>
+                        <select name="tipo_cuota" required class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2">
+                            <option value="Ordinaria">Ordinaria</option>
+                            <option value="Extraordinaria">Extraordinaria</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Módulo (€ por m² de cuota)</label>
+                    <input type="number" step="0.000001" min="0.000001" name="modulo" required
+                           oninput="document.getElementById('gc-total').textContent = ((parseFloat(this.value)||0) * {{ (float) ($sumSuperficieViviendas ?? 0) }}).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' €'"
+                           class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2">
+                </div>
+                <div class="bg-gray-50 rounded-lg px-3 py-2.5 text-sm flex items-center justify-between">
+                    <span class="text-gray-500">Total a emitir</span>
+                    <span id="gc-total" class="font-semibold text-gray-800">0,00 €</span>
+                </div>
+                <div class="flex justify-end gap-2 pt-1">
+                    <button type="button" onclick="document.getElementById('gc-modal').classList.add('hidden')"
+                            class="px-4 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="submit"
+                            class="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors bg-orange-500 hover:bg-orange-600">
+                        Generar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
 
 {{-- Modal confirmación borrar (soft delete) --}}
 <div id="modal-borrar" class="fixed inset-0 z-50 hidden">

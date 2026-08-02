@@ -118,6 +118,20 @@ class ListadoController extends Controller
             ];
         }
 
+        $ejercicioCuotasSel = null;
+        $ejercicioActualDefault = null;
+        $sumSuperficieViviendas = null;
+        $countViviendasActivas = null;
+        $aDemandarTooltip = null;
+        if ($fullTable === 'mb_cuotas') {
+            $ejercicioCuotasSel = $request->input('ejercicio') ?: $this->ejercicioActualCuotas();
+            $tablStats = $this->cuotasStats($ejercicioCuotasSel);
+            $ejercicioActualDefault = $this->ejercicioActualCuotas();
+            $sumSuperficieViviendas = (float) DB::table('mb_viviendas')->where('deleted', 0)->sum(DB::raw('COALESCE(superf_calculada_cuota,0)'));
+            $countViviendasActivas  = DB::table('mb_viviendas')->where('deleted', 0)->count();
+            $aDemandarTooltip       = $this->aDemandarPorAnio($ejercicioActualDefault);
+        }
+
         $icneaSync = null;
         if ($fullTable === 'vm_propiedades') {
             $ayer = now()->subDay()->toDateString();
@@ -158,6 +172,11 @@ class ListadoController extends Controller
             'sortDir'           => $sortDir,
             'tablStats'         => $tablStats,
             'icneaSync'         => $icneaSync,
+            'ejercicioCuotasSel' => $ejercicioCuotasSel,
+            'ejercicioActualDefault' => $ejercicioActualDefault,
+            'sumSuperficieViviendas' => $sumSuperficieViviendas,
+            'countViviendasActivas'  => $countViviendasActivas,
+            'aDemandarTooltip'       => $aDemandarTooltip,
             'breadcrumb'        => [
                 ['label' => $projectTable->label, 'url' => ''],
             ],
@@ -183,7 +202,7 @@ class ListadoController extends Controller
     // Construye la query de listado con todos los filtros (stat, borrados/ocultos, búsqueda,
     // filtros por campo, control_user) y la ordenación aplicados, sin paginar.
     // Compartido entre index() (paginado) e ids() (todos los IDs, para "Copiar IDs").
-    private function filteredSortedQuery(Request $request, Project $project, ProjectTable $projectTable)
+    public function filteredSortedQuery(Request $request, Project $project, ProjectTable $projectTable)
     {
         $fullTable    = $projectTable->getFullTableName();
         $tieneDeleted = Schema::hasColumn($fullTable, 'deleted');
@@ -218,6 +237,20 @@ class ListadoController extends Controller
                 'sin_breezeway'     => $query->where('deleted', 0)->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))->whereNull('breezeway_home_id'),
                 'codigo_compartido' => $query->whereIn('id', $this->propiedadesConCodigoCompartido()),
                 default             => null,
+            };
+        } elseif ($fullTable === 'mb_cuotas' && $stat) {
+            $ejercicioSel = $request->input('ejercicio') ?: $this->ejercicioActualCuotas();
+            $rangoSel     = $this->ejercicioRango($ejercicioSel);
+            $anioSel      = (int) substr($ejercicioSel, 0, 4);
+            match ($stat) {
+                'emitido_anio'       => $query->where('ejercicio', $ejercicioSel)->where('estado', '!=', 'Anulada'),
+                'pendiente_anio'     => $query->where('ejercicio', $ejercicioSel)->where('estado', '!=', 'Anulada')->where('pendiente', '>', 0),
+                'cobrado_ejercicio'  => $query->where('ejercicio', $ejercicioSel)->where('estado', 'Pagada')->whereBetween('fecha_pago', $rangoSel),
+                'cobrado_anteriores' => $query->whereRaw('CAST(LEFT(ejercicio, 4) AS INTEGER) < ?', [$anioSel])->where('estado', 'Pagada')->whereBetween('fecha_pago', $rangoSel),
+                'pendiente_total'    => $query->where('estado', '!=', 'Anulada')->where('pendiente', '>', 0),
+                'demandado_total'    => $query->where('estado', 'Demandada'),
+                'a_demandar'         => $query->whereIn('id_viviendas', $this->viviendasProximasAPrescribir())->where('estado', 'Pendiente')->where('pendiente', '>', 0),
+                default              => null,
             };
         } else {
             // Borrados / archivados (solo si las columnas existen)
@@ -402,5 +435,151 @@ class ListadoController extends Controller
             )
         ");
         return array_column($rows, 'id');
+    }
+
+    private function ejercicioActualCuotas(): string
+    {
+        $hoy  = now();
+        $anio = (int) $hoy->format('n') >= 7 ? (int) $hoy->format('Y') : (int) $hoy->format('Y') - 1;
+        return $anio . '-' . ($anio + 1);
+    }
+
+    // Viviendas con alguna cuota pendiente (no demandada/anulada) cuya antigüedad desde fecha_emision
+    // cumple 5 años dentro del PRÓXIMO ejercicio -- último momento para reclamarla antes de prescribir.
+    private function viviendasProximasAPrescribir(): array
+    {
+        $anioActual = (int) substr($this->ejercicioActualCuotas(), 0, 4);
+        $nextStart  = ($anioActual + 1) . '-07-01';
+        $nextEnd    = ($anioActual + 2) . '-06-30';
+
+        return DB::table('mb_cuotas')
+            ->where('estado', 'Pendiente')
+            ->where('pendiente', '>', 0)
+            ->whereRaw("(fecha_emision + INTERVAL '5 years') BETWEEN ? AND ?", [$nextStart, $nextEnd])
+            ->distinct()
+            ->pluck('id_viviendas')
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    // Rango de fechas [desde, hasta] del ejercicio (formato "YYYY-YYYY", julio a junio).
+    private function ejercicioRango(string $ejercicio): array
+    {
+        [$y1, $y2] = explode('-', $ejercicio);
+        return [$y1 . '-07-01', $y2 . '-06-30'];
+    }
+
+    // Ejercicio (formato "YYYY-YYYY") en el que cae una fecha dada.
+    private function ejercicioDeFecha($fecha): string
+    {
+        $d    = \Carbon\Carbon::parse($fecha);
+        $anio = $d->month >= 7 ? $d->year : $d->year - 1;
+        return $anio . '-' . ($anio + 1);
+    }
+
+    // Agrupa por "año de demanda" (ejercicio en que la cuota Pendiente más antigua de cada
+    // vivienda cumple 5 años de antigüedad) las viviendas con deuda pendiente, mostrando para
+    // cada una su deuda cobrable (fecha_emision dentro de los últimos 5 años desde el inicio
+    // del ejercicio actual) y, si la hay, la deuda ya perdida (prescrita, fuera de esos 5 años).
+    // Solo se incluyen años de demanda hasta el próximo ejercicio (pasados + actual + próximo).
+    private function aDemandarPorAnio(string $ejercicioActual): string
+    {
+        $anioActual        = (int) substr($ejercicioActual, 0, 4);
+        [$inicioActual]    = $this->ejercicioRango($ejercicioActual);
+        $cutoff            = \Carbon\Carbon::parse($inicioActual)->subYears(5)->toDateString();
+
+        $rows = DB::table('mb_cuotas as c')
+            ->join('mb_viviendas as v', 'v.id', '=', 'c.id_viviendas')
+            ->where('c.estado', 'Pendiente')
+            ->where('c.pendiente', '>', 0)
+            ->where('v.deleted', 0)
+            ->get(['c.id_viviendas', 'v.nombre', 'c.fecha_emision', 'c.pendiente']);
+
+        $grupos = [];
+        foreach ($rows->groupBy('id_viviendas') as $cuotas) {
+            $nombre = $cuotas->first()->nombre;
+            $oldest = $cuotas->min('fecha_emision');
+
+            $ejercicioDemanda = $this->ejercicioDeFecha(\Carbon\Carbon::parse($oldest)->addYears(5));
+            $anioDemanda      = (int) substr($ejercicioDemanda, 0, 4);
+            if ($anioDemanda > $anioActual + 1) {
+                continue; // aún no urgente
+            }
+
+            $recuperable = (float) $cuotas->filter(fn ($c) => $c->fecha_emision >= $cutoff)->sum('pendiente');
+            $perdido     = (float) $cuotas->filter(fn ($c) => $c->fecha_emision < $cutoff)->sum('pendiente');
+
+            $grupos[$ejercicioDemanda][] = ['nombre' => $nombre, 'recuperable' => $recuperable, 'perdido' => $perdido];
+        }
+
+        if (empty($grupos)) {
+            return 'No hay viviendas próximas a demandar.';
+        }
+
+        ksort($grupos);
+
+        $lineas = [];
+        foreach ($grupos as $ejercicio => $viviendas) {
+            usort($viviendas, fn ($a, $b) => strcmp($a['nombre'], $b['nombre']));
+            $partes = array_map(function ($v) {
+                $txt = number_format($v['recuperable'], 2, ',', '.') . '€';
+                if ($v['perdido'] > 0) {
+                    $txt .= ', perdido: ' . number_format($v['perdido'], 2, ',', '.') . '€';
+                }
+                return $v['nombre'] . ' (' . $txt . ')';
+            }, $viviendas);
+            $lineas[] = $ejercicio . ': ' . implode(', ', $partes);
+        }
+
+        return implode("\n", $lineas);
+    }
+
+    private function cuotasStats(string $ejercicioActual): array
+    {
+        // Importe total emitido (suma de importe, sin filtrar por estado de cobro) para el ejercicio.
+        $emitidoAnioSum = (float) DB::table('mb_cuotas')->where('ejercicio', $ejercicioActual)->where('estado', '!=', 'Anulada')->sum('importe');
+
+        $pendienteAnioSum = (float) DB::table('mb_cuotas')->where('ejercicio', $ejercicioActual)->where('estado', '!=', 'Anulada')->where('pendiente', '>', 0)->sum('pendiente');
+
+        $pendienteTotalSum = (float) DB::table('mb_cuotas')->where('estado', '!=', 'Anulada')->where('pendiente', '>', 0)->sum('pendiente');
+
+        $demandadoSum = (float) DB::table('mb_cuotas')->where('estado', 'Demandada')->sum('pendiente');
+
+        $viviendasIds   = $this->viviendasProximasAPrescribir();
+        $aDemandarBase  = fn() => DB::table('mb_cuotas')->whereIn('id_viviendas', $viviendasIds)->where('estado', 'Pendiente')->where('pendiente', '>', 0);
+        $aDemandarSum   = (float) $aDemandarBase()->sum('pendiente');
+
+        // Cobros: cuotas Pagadas con fecha_pago dentro del ejercicio seleccionado, separando
+        // según si la cuota es del propio ejercicio o de uno anterior (deuda cobrada con retraso).
+        $rangoActual  = $this->ejercicioRango($ejercicioActual);
+        $anioActual   = (int) substr($ejercicioActual, 0, 4);
+
+        // importe_cobrado no está fiablemente relleno en los lotes históricos (a menudo 0 aunque la
+        // cuota esté Pagada), así que el importe realmente cobrado se calcula como importe - pendiente.
+        $cobradoEjercicioSum = (float) DB::table('mb_cuotas')
+            ->where('ejercicio', $ejercicioActual)
+            ->where('estado', 'Pagada')
+            ->whereBetween('fecha_pago', $rangoActual)
+            ->sum(DB::raw('importe - pendiente'));
+
+        $cobradoAnterioresSum = (float) DB::table('mb_cuotas')
+            ->whereRaw('CAST(LEFT(ejercicio, 4) AS INTEGER) < ?', [$anioActual])
+            ->where('estado', 'Pagada')
+            ->whereBetween('fecha_pago', $rangoActual)
+            ->sum(DB::raw('importe - pendiente'));
+
+        $fmtImporte = fn($sum, $denomSum) => number_format($sum, 2, ',', '.') . ' € (' . ($denomSum > 0 ? round($sum / $denomSum * 100) : 0) . '%)';
+        $fmtPlain   = fn($sum) => number_format($sum, 2, ',', '.') . ' €';
+
+        return [
+            'emitido_anio'        => $fmtPlain($emitidoAnioSum),
+            'pendiente_anio'      => $fmtImporte($pendienteAnioSum, $emitidoAnioSum),
+            'cobrado_ejercicio'   => $fmtImporte($cobradoEjercicioSum, $emitidoAnioSum),
+            'cobrado_anteriores'  => $fmtPlain($cobradoAnterioresSum),
+            'pendiente_total'     => $fmtPlain($pendienteTotalSum),
+            'demandado_total'     => $fmtPlain($demandadoSum),
+            'a_demandar'          => $fmtPlain($aDemandarSum),
+        ];
     }
 }
