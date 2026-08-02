@@ -82,25 +82,25 @@
     <a href="{{ $listUrl(['stat' => $stat === 'vigentes' ? null : 'vigentes', 'page' => null]) }}"
        class="tl-stat {{ $stat === 'vigentes' ? 'active' : '' }}">
         <span class="tl-stat-num">{{ $vigentes }}</span>
-        <span class="tl-stat-lbl">Vigentes <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;opacity:0.6;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Tareas en estado distinto de Completada o Cancelada.</span></span></span>
+        <span class="tl-stat-lbl">Vigentes <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Tareas en estado distinto de Completada o Cancelada.</span></span></span>
     </a>
 
     <a href="{{ $listUrl(['stat' => $stat === 'vencidas' ? null : 'vencidas', 'page' => null]) }}"
        class="tl-stat {{ $stat === 'vencidas' ? 'active' : '' }}">
         <span class="tl-stat-num">{{ $vencidas }}</span>
-        <span class="tl-stat-lbl">Vencidas <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;opacity:0.6;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Fecha de planificación anterior a hoy y estado distinto de Completada o Cancelada.</span></span></span>
+        <span class="tl-stat-lbl">Vencidas <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Fecha de planificación anterior a hoy y estado distinto de Completada o Cancelada.</span></span></span>
     </a>
 
     <a href="{{ $listUrl(['stat' => $stat === 'no_imputadas' ? null : 'no_imputadas', 'page' => null]) }}"
        class="tl-stat {{ $stat === 'no_imputadas' ? 'active' : '' }}">
         <span class="tl-stat-num">{{ $noImputadas }}</span>
-        <span class="tl-stat-lbl">No imputadas <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;opacity:0.6;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Tareas en estado Completada sin ninguna imputación de tiempo registrada.</span></span></span>
+        <span class="tl-stat-lbl">No imputadas <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Tareas en estado Completada sin ninguna imputación de tiempo registrada.</span></span></span>
     </a>
 
     <a href="{{ $listUrl(['stat' => $stat === 'propias' ? null : 'propias', 'page' => null]) }}"
        class="tl-stat {{ $stat === 'propias' ? 'active' : '' }}">
         <span class="tl-stat-num">{{ $propias }}</span>
-        <span class="tl-stat-lbl">Tareas Opland <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;opacity:0.6;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Tareas creadas directamente en Opland, sin vínculo con Breezeway.</span></span></span>
+        <span class="tl-stat-lbl">Tareas Opland <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Tareas creadas directamente en Opland, sin vínculo con Breezeway.</span></span></span>
     </a>
 
 </div>

@@ -268,6 +268,13 @@ class PygController extends Controller
     {
         $deleted = DB::table('vm_pyg_valores')->where('periodo', $periodo)->delete();
 
+        // El fichero trae el acumulado desde enero, no el importe aislado del mes: para no romper
+        // los informes (todos asumen "un periodo = el importe de ESE mes"), calculamos aquí el delta
+        // = acumulado_del_fichero - acumulado_ya_guardado_en_meses_anteriores_del_mismo_año, y solo
+        // guardamos ese delta en `importe` (igual que siempre). El acumulado bruto se guarda aparte
+        // en `importe_acumulado`, solo a efectos de auditoría.
+        $acumuladoPrevio = $this->mapaAcumuladoPrevio($periodo);
+
         $currentEpigrafe    = ['codigo' => null, 'nombre' => null];
         $currentSubepigrafe = ['codigo' => null, 'nombre' => null];
         $orden = 0;
@@ -289,7 +296,7 @@ class PygController extends Controller
                 foreach ($pendientes as $acc) {
                     [$cid, $nueva] = $this->upsertCuenta($acc, $bloque);
                     if ($nueva) $cuentasNuevas++;
-                    $valoresInsertados += $this->insertarValores($periodo, $cid, $acc['row'], $resolved);
+                    $valoresInsertados += $this->insertarValores($periodo, $cid, $acc['row'], $resolved, $acumuladoPrevio);
                 }
                 $pendientes = [];
                 continue;
@@ -320,7 +327,7 @@ class PygController extends Controller
         foreach ($pendientes as $acc) {
             [$cid, $nueva] = $this->upsertCuenta($acc, ['codigo' => null, 'nombre' => null]);
             if ($nueva) $cuentasNuevas++;
-            $valoresInsertados += $this->insertarValores($periodo, $cid, $acc['row'], $resolved);
+            $valoresInsertados += $this->insertarValores($periodo, $cid, $acc['row'], $resolved, $acumuladoPrevio);
         }
 
         $this->guardarResumenPeriodo($periodo, $filePath, $originalName);
@@ -331,6 +338,34 @@ class PygController extends Controller
             'valores'    => $valoresInsertados,
             'sustituido' => $deleted > 0,
         ];
+    }
+
+    // Suma, por cada (cuenta, propiedad|ceco), lo ya guardado en `importe` (delta aislado) en los
+    // meses ANTERIORES del mismo año -- solo entre periodos activos (vm_pyg.deleted=0), para no
+    // arrastrar valores huérfanos de una re-importación. En enero (o el primer mes con datos del
+    // año) el mapa sale vacío y el cálculo posterior se reduce a "importe = acumulado del fichero",
+    // igual que el comportamiento de siempre.
+    private function mapaAcumuladoPrevio(string $periodo): array
+    {
+        $anio = (int) substr($periodo, 0, 4);
+
+        $filas = DB::table('vm_pyg_valores as v')
+            ->whereRaw('EXTRACT(year FROM v.periodo) = ?', [$anio])
+            ->where('v.periodo', '<', $periodo)
+            ->whereIn('v.periodo', function ($sub) {
+                $sub->select('periodo')->from('vm_pyg')->where('deleted', 0);
+            })
+            ->selectRaw('v.id_cuenta, v.id_propiedades, v.ceco, SUM(v.importe) as acumulado')
+            ->groupBy('v.id_cuenta', 'v.id_propiedades', 'v.ceco')
+            ->get();
+
+        $mapa = [];
+        foreach ($filas as $f) {
+            $clave = $f->id_cuenta . '|' . ($f->id_propiedades !== null ? 'p' . $f->id_propiedades : 'c' . $f->ceco);
+            $mapa[$clave] = (float) $f->acumulado;
+        }
+
+        return $mapa;
     }
 
     // Guarda el fichero de forma permanente y calcula/actualiza el resumen del periodo en vm_pyg.
@@ -400,23 +435,35 @@ class PygController extends Controller
         return [$cuentaId, false];
     }
 
-    // Inserta los valores de una fila de cuenta para las columnas resueltas. Devuelve cuantos valores inserto
-    private function insertarValores(string $periodo, int $cuentaId, array $row, array $resolved): int
+    // Inserta los valores de una fila de cuenta para las columnas resueltas. El fichero trae el
+    // acumulado desde enero; aquí se resta lo ya guardado en meses anteriores del mismo año (mapa
+    // precalculado en mapaAcumuladoPrevio()) para obtener el delta aislado de ESTE mes, que es lo
+    // que se guarda en `importe` (el acumulado bruto del fichero se guarda aparte, en
+    // `importe_acumulado`, solo a efectos de auditoría). Devuelve cuantos valores insertó.
+    //
+    // Una celda en blanco cuenta como acumulado 0 (no como "sin dato"): así se detecta correctamente
+    // una reversión, p.ej. una cuenta con 500€ acumulados hasta mayo que en el fichero de junio
+    // aparece vacía -> delta de junio = -500.
+    private function insertarValores(string $periodo, int $cuentaId, array $row, array $resolved, array $acumuladoPrevio): int
     {
         $insertados = 0;
         foreach ($resolved as $colIdx => $ref) {
             $val = $row[$colIdx] ?? null;
-            if ($val === null || $val === '') continue;
-            $importe = (float) $val;
+            $acumuladoActual = ($val === null || $val === '') ? 0.0 : (float) $val;
+
+            $clave  = $cuentaId . '|' . (isset($ref['id_propiedades']) ? 'p' . $ref['id_propiedades'] : 'c' . $ref['ceco']);
+            $previo = $acumuladoPrevio[$clave] ?? 0.0;
+            $importe = round($acumuladoActual - $previo, 2);
             if ($importe === 0.0) continue;
 
             DB::table('vm_pyg_valores')->insert([
-                'periodo'        => $periodo,
-                'id_cuenta'      => $cuentaId,
-                'id_propiedades' => $ref['id_propiedades'] ?? null,
-                'ceco'           => $ref['ceco'] ?? null,
-                'importe'        => $importe,
-                'createdat'      => now(),
+                'periodo'           => $periodo,
+                'id_cuenta'         => $cuentaId,
+                'id_propiedades'    => $ref['id_propiedades'] ?? null,
+                'ceco'              => $ref['ceco'] ?? null,
+                'importe'           => $importe,
+                'importe_acumulado' => $acumuladoActual,
+                'createdat'         => now(),
             ]);
             $insertados++;
         }

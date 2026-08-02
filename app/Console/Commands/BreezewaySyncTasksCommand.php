@@ -69,6 +69,7 @@ class BreezewaySyncTasksCommand extends Command
         $actualizadas = 0;
         $omitidas = 0;
         $imputacionesCreadas = 0;
+        $fotosDescargadas = 0;
         $pendientesVistos = []; // breezeway_id => ['nombre'=>..., 'count'=>n]
         $errores = 0;
 
@@ -178,6 +179,14 @@ class BreezewaySyncTasksCommand extends Command
                     $creadas++;
                 }
 
+                // Fotos: solo de tareas de mantenimiento (housekeeping queda fuera, decisión
+                // explícita). Breezeway las trae ya en el propio listado de tareas (no hace
+                // falta una llamada aparte por tarea). Se descargan solo las que no se hayan
+                // importado ya (dedupe por breezeway_photo_id) -- idempotente entre syncs.
+                if ($tableName === 'vm_tareas_mantenimiento') {
+                    $fotosDescargadas += $this->descargarFotosTarea($task['photos'] ?? [], $tableName, $tareaId);
+                }
+
                 // Imputaciones: solo si Breezeway ya trae tiempo total registrado. Null (no
                 // total_time en absoluto) distinto de 0 (total_time real pero redondea a menos
                 // de 1 minuto) -- antes duracionMin=0 se descartaba igual que "sin dato", y las
@@ -282,8 +291,8 @@ class BreezewaySyncTasksCommand extends Command
             'errores'     => $errores,
         ]);
 
-        $this->info("Resultado: {$creadas} creadas, {$actualizadas} actualizadas, {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones, {$descartadas} descartadas, {$ocultadas} ocultadas, {$errores} errores de propiedad.");
-        Log::info("BreezewaySyncTasks: {$creadas} creadas, {$actualizadas} actualizadas, {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones, {$descartadas} descartadas, {$ocultadas} ocultadas, {$errores} errores.");
+        $this->info("Resultado: {$creadas} creadas, {$actualizadas} actualizadas, {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones, {$fotosDescargadas} fotos, {$descartadas} descartadas, {$ocultadas} ocultadas, {$errores} errores de propiedad.");
+        Log::info("BreezewaySyncTasks: {$creadas} creadas, {$actualizadas} actualizadas, {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones, {$fotosDescargadas} fotos, {$descartadas} descartadas, {$ocultadas} ocultadas, {$errores} errores.");
     }
 
     // Tareas que quedaron con control_user vacío por asignados sin mapear en su momento (marcadas en
@@ -478,6 +487,74 @@ class BreezewaySyncTasksCommand extends Command
         }
 
         return $descartadas;
+    }
+
+    // Descarga a vm_fotos las fotos de Breezeway que aun no se hayan importado para esta tarea
+    // (dedupe por breezeway_photo_id, indice unico parcial en BD). $tableName es
+    // 'vm_tareas_limpieza' o 'vm_tareas_mantenimiento' -- decide que columna FK rellenar.
+    private function descargarFotosTarea(array $photos, string $tableName, int $tareaId): int
+    {
+        if (empty($photos)) return 0;
+
+        $columnaFk = $tableName === 'vm_tareas_limpieza' ? 'id_tareas_limpieza' : 'id_tareas_mantenimiento';
+        $idsBreezeway = array_column($photos, 'id');
+        $yaImportadas = DB::table('vm_fotos')->whereIn('breezeway_photo_id', $idsBreezeway)->pluck('breezeway_photo_id')->all();
+
+        $destDir = storage_path('app/public/vm/fotos');
+        if (!is_dir($destDir)) {
+            mkdir($destDir, 0755, true);
+        }
+
+        $descargadas = 0;
+        foreach ($photos as $photo) {
+            $photoId = $photo['id'] ?? null;
+            $url     = $photo['url'] ?? null;
+            if (!$photoId || !$url || in_array($photoId, $yaImportadas)) continue;
+
+            try {
+                $contenido = $this->curlBinary($url);
+            } catch (\Throwable $e) {
+                Log::warning("BreezewaySyncTasks: error descargando foto {$photoId} de tarea {$tareaId}: " . $e->getMessage());
+                continue;
+            }
+            if ($contenido === null) continue;
+
+            $filename = uniqid('brzw_') . '.jpg';
+            file_put_contents($destDir . '/' . $filename, $contenido);
+
+            DB::table('vm_fotos')->insert([
+                'nombre'             => 'Foto Breezeway',
+                'file_foto'          => 'vm/fotos/' . $filename,
+                $columnaFk           => $tareaId,
+                'breezeway_photo_id' => $photoId,
+                'createuser'         => 1,
+                'deleted'            => 0,
+                'hidden'             => 0,
+                'blocked'            => 0,
+                'createdat'          => now(),
+                'updatedat'          => now(),
+            ]);
+            $descargadas++;
+        }
+
+        return $descargadas;
+    }
+
+    private function curlBinary(string $url): ?string
+    {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 20,
+            CURLOPT_FOLLOWLOCATION => true,
+        ]);
+        $data = curl_exec($ch);
+        $err  = curl_error($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($err || $code !== 200 || $data === false) return null;
+        return $data;
     }
 
     // Breezeway devuelve total_time como string "H:MM:SS" (ej. "9:06:58"), no como numero de minutos
