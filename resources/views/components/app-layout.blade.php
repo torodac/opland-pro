@@ -205,7 +205,7 @@
             </button>
 
             {{-- Menú contextual --}}
-            <div x-show="menuUsuario" x-transition
+            <div x-show="menuUsuario" x-cloak x-transition
                  :style="pos"
                  class="bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-[100] text-sm">
 

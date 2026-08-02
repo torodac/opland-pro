@@ -14,6 +14,11 @@
       · <span id="rv-sin-clasificar">{{ $sinClasificar }}</span> sin procesar todavía
     @endif
   </p>
+  @if($sinFiltrosEnUrl && $anyo !== '')
+    <p style="color:#9ca3af;font-size:11.5px;margin:4px 0 0">
+      Mostrando solo el último mes con movimientos pendientes, para que la página cargue rápido — usa los filtros para ver otros periodos.
+    </p>
+  @endif
 </div>
 
 <form method="GET" action="{{ route('rodcar.movs-validacion', $project->slug) }}" class="rv-filtros">
@@ -35,30 +40,53 @@
       <option value="{{ $c->id }}" @selected($cuenta == $c->id)>{{ $c->nombre }}</option>
     @endforeach
   </select>
+  <select name="anyo" class="rv-select" style="max-width:130px">
+    <option value="">Todos los años</option>
+    @foreach($anyos as $a)
+      <option value="{{ $a->id }}" @selected($anyo == $a->id)>{{ $a->nombre }}</option>
+    @endforeach
+  </select>
+  <select name="mes" class="rv-select" style="max-width:150px">
+    <option value="">Todos los meses</option>
+    @foreach($meses as $m)
+      <option value="{{ $m->id }}" @selected($mes == $m->id)>{{ $m->nombre }}</option>
+    @endforeach
+  </select>
   <button type="submit" class="rv-btn" style="background:#16232b">Filtrar</button>
-  @if($q !== '' || $fase !== '' || $confianzaMin !== '' || $cuenta !== '')
-    <a href="{{ route('rodcar.movs-validacion', $project->slug) }}" class="rv-filtros-limpiar">Limpiar</a>
+  @if($q !== '' || $fase !== '' || $confianzaMin !== '' || $cuenta !== '' || $anyo !== '' || $mes !== '')
+    <a href="{{ route('rodcar.movs-validacion', $project->slug) }}?q=&fase=&confianza_min=&cuenta=&anyo=&mes=" class="rv-filtros-limpiar">Ver todos (sin filtro)</a>
   @endif
 </form>
 
 <div class="rv-card">
+  <div style="overflow-x:auto">
   <table class="rv-table">
     <thead>
       <tr>
         <th style="width:90px">Fecha</th>
-        <th>Concepto</th>
+        <th style="width:168px">Concepto</th>
         <th style="width:100px" class="num">Importe</th>
         <th style="width:140px">Cuenta</th>
-        <th style="width:170px">Origen</th>
+        <th style="width:170px">Clasificador</th>
         <th style="width:200px">Tipo</th>
         <th style="width:200px">Subtipo</th>
-        <th style="width:90px"></th>
+        <th style="width:64px"></th>
       </tr>
     </thead>
     <tbody id="rv-tbody">
       @forelse($pendientes as $p)
-        <tr id="rv-row-{{ $p->id }}">
-          <td>{{ \Illuminate\Support\Carbon::parse($p->fecha_operacion)->format('d/m/y') }}</td>
+        @php $rid = $p->origen . '-' . $p->id; @endphp
+        <tr id="rv-row-{{ $rid }}">
+          <td>
+            {{ \Illuminate\Support\Carbon::parse($p->fecha_operacion)->format('d/m/y') }}
+            <div>
+              @if($p->origen === 'detalle')
+                <span class="rv-tag-origen rv-tag-detalle" title="Línea de detalle de un cargo de tarjeta">DET</span>
+              @else
+                <span class="rv-tag-origen rv-tag-movimiento" title="Movimiento de cuenta/tarjeta">MOV</span>
+              @endif
+            </div>
+          </td>
           <td>
             <div class="rv-nombre">{{ $p->nombre }}</div>
             @if($p->justificacion_ia)
@@ -68,12 +96,16 @@
           <td class="num">{{ number_format($p->importe ?? 0, 2, ',', '.') }} €</td>
           <td>{{ $p->cuenta_nombre ?? '—' }}</td>
           <td>
-            <span class="rv-chip rv-chip-{{ $p->fase_clasificacion == 2 ? 'similitud' : 'ia' }}">
-              {{ $p->fase_clasificacion == 2 ? 'Similitud' : 'IA' }} · {{ $p->confianza_ia }}%
-            </span>
+            @if($p->fase_clasificacion)
+              <span class="rv-chip rv-chip-{{ $p->fase_clasificacion == 2 ? 'similitud' : 'ia' }}">
+                {{ $p->fase_clasificacion == 2 ? 'Similitud' : 'IA' }} · {{ $p->confianza_ia }}%
+              </span>
+            @else
+              <span style="color:#c2c9ce">—</span>
+            @endif
           </td>
           <td>
-            <select class="rv-select" id="rv-tipo1-{{ $p->id }}">
+            <select class="rv-select" id="rv-tipo1-{{ $rid }}">
               <option value="">— Selecciona —</option>
               @foreach($tipos1 as $t)
                 <option value="{{ $t->id }}" @selected($t->id == $p->id_movs_tipo1_propuesto)>{{ $t->nombre }}</option>
@@ -81,7 +113,7 @@
             </select>
           </td>
           <td>
-            <select class="rv-select" id="rv-tipo2-{{ $p->id }}">
+            <select class="rv-select" id="rv-tipo2-{{ $rid }}">
               <option value="">— Ninguno —</option>
               @foreach($tipos2 as $t)
                 <option value="{{ $t->id }}" @selected($t->id == $p->id_movs_tipo2_propuesto)>{{ $t->nombre }}</option>
@@ -89,7 +121,15 @@
             </select>
           </td>
           <td>
-            <button class="rv-btn" onclick="confirmarFila({{ $p->id }})">Confirmar</button>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <button class="rv-btn" onclick="confirmarFila('{{ $p->origen }}', {{ $p->id }}, false, this)" title="Confirmar solo esta fila" style="display:inline-flex;align-items:center;justify-content:center">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+              <button class="rv-btn rv-btn-mapeo" onclick="confirmarFila('{{ $p->origen }}', {{ $p->id }}, true, this)" title="Confirmar y recordar este concepto como mapeo" style="display:inline-flex;align-items:center;justify-content:center;gap:3px">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 017 7h2M15 7h2a5 5 0 010 10h-2M8 12h8"/></svg>
+              </button>
+            </div>
           </td>
         </tr>
       @empty
@@ -97,31 +137,40 @@
       @endforelse
     </tbody>
   </table>
+  </div>
 </div>
 
 <style>
 .rv-card{background:#fff;border:1px solid #dce6ee;border-radius:10px;box-shadow:0 1px 2px rgba(18,63,79,.06);overflow:hidden}
 .rv-table{width:100%;border-collapse:collapse;font-size:12.5px}
 .rv-table th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#7e93a1;padding:10px 12px;border-bottom:1px solid #dce6ee;background:#f7fafc}
-.rv-table td{padding:8px 12px;border-bottom:1px solid #eaf1f6;vertical-align:middle}
+.rv-table td{padding:8px 12px;border-bottom:1px solid #eaf1f6;vertical-align:top}
 .rv-table td.num, .rv-table th.num{text-align:right}
 .rv-nombre{font-weight:600;color:#16232b}
+.rv-tag-origen{display:inline-flex;align-items:center;font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:99px;margin-top:3px;letter-spacing:.03em}
+.rv-tag-movimiento{color:#1b5d73;background:#eaf1f6}
+.rv-tag-detalle{color:#9a3412;background:#fff1e0}
 .rv-justificacion{font-size:10.5px;color:#7e93a1;margin-top:2px;cursor:help}
 .rv-chip{display:inline-flex;align-items:center;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:99px;white-space:nowrap}
 .rv-chip-similitud{background:#eaf1f6;color:#1b5d73}
 .rv-chip-ia{background:#fff1e0;color:#c2570a}
 .rv-select{width:100%;font-size:12px;padding:5px 6px;border:1px solid #dce6ee;border-radius:6px;background:#fff}
-.rv-btn{padding:6px 12px;font-size:11.5px;font-weight:600;background:#f97316;color:#fff;border:none;border-radius:6px;cursor:pointer;transition:background .15s}
+.rv-btn{padding:6px 10px;font-size:11.5px;font-weight:600;background:#f97316;color:#fff;border:none;border-radius:6px;cursor:pointer;transition:background .15s}
 .rv-btn:hover{background:#ea580c}
 .rv-btn:disabled{background:#dce6ee;cursor:default}
+.rv-btn-mapeo{background:#2563eb}
+.rv-btn-mapeo:hover{background:#1d4ed8}
 .rv-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;padding:0 5px;margin-left:4px;font-size:10.5px;font-weight:700;background:rgba(255,255,255,.25);border-radius:99px}
 .rv-filtros{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
 .rv-filtros-limpiar{font-size:11.5px;color:#7e93a1;text-decoration:underline;cursor:pointer}
 </style>
 
+@php
+  $rutaValidarTpl = route('rodcar.movs-validacion.validar', [$project->slug, '__ORIGEN__', '__ID__']);
+@endphp
 <script>
 const CSRF = @json(csrf_token());
-const ROUTE_TPL = @json(route('rodcar.movs-validacion.validar', [$project->slug, '__ID__']));
+const ROUTE_TPL = @json($rutaValidarTpl);
 const ROUTE_CLASIFICAR = @json(route('rodcar.movs-validacion.clasificar', $project->slug));
 
 async function lanzarClasificacion() {
@@ -145,30 +194,38 @@ async function lanzarClasificacion() {
   btn.textContent = 'En marcha — recarga en unos minutos';
 }
 
-async function confirmarFila(id) {
-  const tipo1 = document.getElementById('rv-tipo1-' + id).value;
-  const tipo2 = document.getElementById('rv-tipo2-' + id).value;
+async function confirmarFila(origen, id, crearMapeo, btn) {
+  const rid = origen + '-' + id;
+  const tipo1 = document.getElementById('rv-tipo1-' + rid).value;
+  const tipo2 = document.getElementById('rv-tipo2-' + rid).value;
   if (!tipo1) { alert('Selecciona un tipo antes de confirmar.'); return; }
 
-  const btn = document.querySelector(`#rv-row-${id} .rv-btn`);
-  btn.disabled = true;
+  const fila = document.getElementById('rv-row-' + rid);
+  fila.querySelectorAll('.rv-btn').forEach(b => b.disabled = true);
+  const iconoOriginal = btn.innerHTML;
   btn.textContent = 'Guardando…';
 
-  const res = await fetch(ROUTE_TPL.replace('__ID__', id), {
+  const res = await fetch(ROUTE_TPL.replace('__ORIGEN__', origen).replace('__ID__', id), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' },
-    body: JSON.stringify({ id_movs_tipo1: parseInt(tipo1), id_movs_tipo2: tipo2 ? parseInt(tipo2) : null }),
+    body: JSON.stringify({ id_movs_tipo1: parseInt(tipo1), id_movs_tipo2: tipo2 ? parseInt(tipo2) : null, crear_mapeo: crearMapeo }),
   });
 
   if (!res.ok) {
     alert('Error al guardar.');
-    btn.disabled = false;
-    btn.textContent = 'Confirmar';
+    fila.querySelectorAll('.rv-btn').forEach(b => b.disabled = false);
+    btn.innerHTML = iconoOriginal;
     return;
   }
 
-  const row = document.getElementById('rv-row-' + id);
-  row.remove();
+  const data = await res.json();
+  if (data.extra_clasificados > 0) {
+    alert(`Además de esta fila, se han clasificado automáticamente ${data.extra_clasificados} movimiento(s) más con el mismo concepto (mapeo aplicado). Se recarga la página para reflejarlo.`);
+    window.location.reload();
+    return;
+  }
+
+  fila.remove();
   const contador = document.getElementById('rv-contador');
   contador.textContent = Math.max(0, parseInt(contador.textContent) - 1);
   if (!document.querySelector('#rv-tbody tr')) {
