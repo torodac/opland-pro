@@ -291,7 +291,7 @@ class InformeFinancieroController extends Controller
             $rows = DB::table('vm_pyg')
                 ->where('deleted', 0)
                 ->orderBy('periodo')
-                ->get(['periodo', 'importe_ingresos as ingresos', 'importe_gastos as gastos']);
+                ->get(['periodo', 'importe_ingresos as ingresos', 'importe_gastos as gastos', 'num_propiedades']);
         } elseif (empty($idsPropiedades)) {
             $rows = collect();
         } else {
@@ -306,16 +306,18 @@ class InformeFinancieroController extends Controller
                 ->selectRaw("
                     v.periodo,
                     COALESCE(SUM(v.importe) FILTER (WHERE c.codigo LIKE '7%'), 0) as ingresos,
-                    COALESCE(SUM(v.importe) FILTER (WHERE c.codigo LIKE '6%'), 0) as gastos
+                    COALESCE(SUM(v.importe) FILTER (WHERE c.codigo LIKE '6%'), 0) as gastos,
+                    COUNT(DISTINCT v.id_propiedades) as num_propiedades
                 ")
                 ->get();
         }
 
         return $rows->map(fn($r) => (object) [
-            'anio'     => (int) substr($r->periodo, 0, 4),
-            'mes'      => (int) substr($r->periodo, 5, 2),
-            'ingresos' => (float) $r->ingresos,
-            'gastos'   => (float) $r->gastos,
+            'anio'        => (int) substr($r->periodo, 0, 4),
+            'mes'         => (int) substr($r->periodo, 5, 2),
+            'ingresos'    => (float) $r->ingresos,
+            'gastos'      => (float) $r->gastos,
+            'propiedades' => (int) $r->num_propiedades,
         ]);
     }
 
@@ -332,8 +334,8 @@ class InformeFinancieroController extends Controller
         $grupos = [];
         foreach (range(1, 12) as $m) {
             $grupos[] = [
-                'anterior' => $anterior->has($m) ? ['ingresos' => $anterior[$m]->ingresos, 'gastos' => $anterior[$m]->gastos] : null,
-                'actual'   => $actual->has($m)   ? ['ingresos' => $actual[$m]->ingresos,     'gastos' => $actual[$m]->gastos]   : null,
+                'anterior' => $anterior->has($m) ? ['ingresos' => $anterior[$m]->ingresos, 'gastos' => $anterior[$m]->gastos, 'propiedades' => $anterior[$m]->propiedades] : null,
+                'actual'   => $actual->has($m)   ? ['ingresos' => $actual[$m]->ingresos,     'gastos' => $actual[$m]->gastos,   'propiedades' => $actual[$m]->propiedades]   : null,
             ];
         }
 
@@ -415,8 +417,8 @@ class InformeFinancieroController extends Controller
             $categorias[] = self::MESES[$v['mes'] - 1] . $sufijo;
 
             $grupos[] = [
-                'anterior' => $anteriorP ? ['ingresos' => $anteriorP->ingresos, 'gastos' => $anteriorP->gastos] : null,
-                'actual'   => $actualP   ? ['ingresos' => $actualP->ingresos,   'gastos' => $actualP->gastos]   : null,
+                'anterior' => $anteriorP ? ['ingresos' => $anteriorP->ingresos, 'gastos' => $anteriorP->gastos, 'propiedades' => $anteriorP->propiedades] : null,
+                'actual'   => $actualP   ? ['ingresos' => $actualP->ingresos,   'gastos' => $actualP->gastos,   'propiedades' => $actualP->propiedades]   : null,
             ];
 
             if ($actualP) {
@@ -498,6 +500,12 @@ class InformeFinancieroController extends Controller
                 'actualGastos'     => $serie('actual', 'gastos'),
                 'anteriorIngresos' => $serie('anterior', 'ingresos'),
                 'anteriorGastos'   => $serie('anterior', 'gastos'),
+            ],
+            // No es una serie del gráfico (no se dibuja barra ni línea) — solo viaja con los datos
+            // para que el tooltip pueda mostrar "Propiedades activas: N" junto a Ingresos/Gastos.
+            'propiedades' => [
+                'actual'   => array_map(fn($g) => $g['actual']['propiedades'] ?? null, $grupos),
+                'anterior' => array_map(fn($g) => $g['anterior']['propiedades'] ?? null, $grupos),
             ],
             // array_values() defensivo: si $lineas llega con huecos en sus claves (p.ej. tras un
             // array_filter en el llamador), json_encode() lo serializaría como objeto en vez de

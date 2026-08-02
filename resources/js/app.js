@@ -51,28 +51,85 @@ function getOrCreateTooltip(chart) {
     return el;
 }
 
-function tooltipHtml(tooltip) {
+// Extrae {color, nombre, valor} de un dataPoint del tooltip de Chart.js.
+function filaDe(tooltip, dp, i) {
+    // dp.element.options.backgroundColor es el color YA RESUELTO para esta barra en concreto
+    // (necesario cuando el dataset define backgroundColor como array, un color por barra, como
+    // en el waterfall) — dp.dataset.* solo vale cuando el color es un unico string para todo el dataset.
+    const color = (dp.element && dp.element.options && dp.element.options.backgroundColor)
+        || dp.dataset.borderColor
+        || dp.dataset.backgroundColor;
+    const linea = tooltip.body[i].lines[0];
+    const sep = linea.indexOf(':');
+    const nombre = sep === -1 ? linea : linea.slice(0, sep);
+    const valor  = sep === -1 ? ''   : linea.slice(sep + 1).trim();
+    return { color, nombre, valor };
+}
+
+function filaHtml({ color, nombre, valor }) {
+    return `<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;">
+        <span style="width:8px;height:8px;border-radius:2px;flex-shrink:0;background:${color};"></span>
+        <span style="color:#6b7280;">${nombre}:</span>
+        <span style="font-weight:600;margin-left:auto;padding-left:10px;">${valor}</span>
+    </div>`;
+}
+
+// Fila sin swatch de color (no es una serie del gráfico) para el nº de propiedades activas ese mes.
+function filaPropiedadesHtml(n) {
+    if (n === null || n === undefined) return '';
+    return `<div style="display:flex;align-items:center;gap:7px;margin-top:6px;padding-top:5px;border-top:1px solid #f3f4f6;color:#9ca3af;">
+        <span>Propiedades activas:</span>
+        <span style="font-weight:600;margin-left:auto;padding-left:10px;color:#374151;">${n}</span>
+    </div>`;
+}
+
+function tooltipHtml(tooltip, chart) {
     let html = '';
     (tooltip.title || []).forEach((t) => {
         html += `<div style="font-weight:700;color:#111827;margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid #e5e7eb;">${t}</div>`;
     });
+
+    const dataIndex = tooltip.dataPoints[0] ? tooltip.dataPoints[0].dataIndex : null;
+    const propiedades = chart && chart.opPropiedades;
+
+    // Gráfico "por ejercicio": dos columnas lado a lado, una por año (dataset.columna: 0=anterior,
+    // 1=actual, asignado en renderInformeFinancieroChart) — más fácil de comparar que una lista
+    // vertical mezclando ambos años. El resto de gráficos (interanual, waterfall, operativo) siguen
+    // con la lista de siempre.
+    const esPorEjercicio = chart && chart.canvas && chart.canvas.id === 'chart-ejercicio'
+        && tooltip.dataPoints.every((dp) => dp.dataset.columna !== undefined);
+
+    if (esPorEjercicio) {
+        const columnas = [[], []];
+        tooltip.dataPoints.forEach((dp, i) => columnas[dp.dataset.columna].push(filaDe(tooltip, dp, i)));
+
+        const anioDe = (filas) => {
+            const m = (filas[0] && filas[0].nombre || '').match(/(\d{4})/);
+            return m ? m[1] : '';
+        };
+        const columnaHtml = (filas, numPropiedades) => {
+            if (!filas.length) return '';
+            const anio = anioDe(filas);
+            const sinAnio = (nombre) => nombre.replace(/\s*\d{4}\s*→?\s*$/, '');
+            return `<div style="flex:1;min-width:110px;">
+                <div style="font-weight:600;color:#374151;margin-bottom:5px;">${anio}</div>
+                ${filas.map((f) => filaHtml({ ...f, nombre: sinAnio(f.nombre) })).join('')}
+                ${filaPropiedadesHtml(numPropiedades)}
+            </div>`;
+        };
+
+        const propAnterior = propiedades && dataIndex !== null ? propiedades.anterior[dataIndex] : null;
+        const propActual   = propiedades && dataIndex !== null ? propiedades.actual[dataIndex]   : null;
+        html += `<div style="display:flex;gap:16px;">${columnaHtml(columnas[0], propAnterior)}${columnaHtml(columnas[1], propActual)}</div>`;
+        return html;
+    }
+
     tooltip.dataPoints.forEach((dp, i) => {
-        // dp.element.options.backgroundColor es el color YA RESUELTO para esta barra en concreto
-        // (necesario cuando el dataset define backgroundColor como array, un color por barra, como
-        // en el waterfall) — dp.dataset.* solo vale cuando el color es un unico string para todo el dataset.
-        const color = (dp.element && dp.element.options && dp.element.options.backgroundColor)
-            || dp.dataset.borderColor
-            || dp.dataset.backgroundColor;
-        const linea = tooltip.body[i].lines[0];
-        const sep = linea.indexOf(':');
-        const nombre = sep === -1 ? linea : linea.slice(0, sep);
-        const valor  = sep === -1 ? ''   : linea.slice(sep + 1).trim();
-        html += `<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;">
-            <span style="width:8px;height:8px;border-radius:2px;flex-shrink:0;background:${color};"></span>
-            <span style="color:#6b7280;">${nombre}:</span>
-            <span style="font-weight:600;margin-left:auto;padding-left:10px;">${valor}</span>
-        </div>`;
+        html += filaHtml(filaDe(tooltip, dp, i));
     });
+    if (propiedades && dataIndex !== null) {
+        html += filaPropiedadesHtml(propiedades.actual[dataIndex]);
+    }
     return html;
 }
 
@@ -85,7 +142,7 @@ function tooltipExterno(context) {
         return;
     }
 
-    if (tooltip.body) el.innerHTML = tooltipHtml(tooltip);
+    if (tooltip.body) el.innerHTML = tooltipHtml(tooltip, chart);
 
     el.style.opacity = 1;
     el.style.left = tooltip.caretX + 'px';
@@ -100,11 +157,13 @@ window.renderInformeFinancieroChart = function (canvasId, g, labels) {
         opCharts[canvasId].destroy();
     }
 
+    // columna: 0=año anterior, 1=año actual — solo la usa el tooltip de "chart-ejercicio" para
+    // agrupar en dos columnas lado a lado (ver tooltipHtml en la sección de tooltip, arriba).
     const datasets = [
-        { type: 'bar', label: labels.ingresosAnterior, data: g.barras.anteriorIngresos, backgroundColor: 'rgba(249,115,22,0.35)', yAxisID: 'y', order: 2 },
-        { type: 'bar', label: labels.gastosAnterior,   data: g.barras.anteriorGastos,   backgroundColor: 'rgba(55,65,81,0.35)',  yAxisID: 'y', order: 2 },
-        { type: 'bar', label: labels.ingresosActual,   data: g.barras.actualIngresos,   backgroundColor: '#f97316', yAxisID: 'y', order: 2 },
-        { type: 'bar', label: labels.gastosActual,     data: g.barras.actualGastos,     backgroundColor: '#374151', yAxisID: 'y', order: 2 },
+        { type: 'bar', label: labels.ingresosAnterior, data: g.barras.anteriorIngresos, backgroundColor: 'rgba(249,115,22,0.35)', yAxisID: 'y', order: 2, columna: 0 },
+        { type: 'bar', label: labels.gastosAnterior,   data: g.barras.anteriorGastos,   backgroundColor: 'rgba(55,65,81,0.35)',  yAxisID: 'y', order: 2, columna: 0 },
+        { type: 'bar', label: labels.ingresosActual,   data: g.barras.actualIngresos,   backgroundColor: '#f97316', yAxisID: 'y', order: 2, columna: 1 },
+        { type: 'bar', label: labels.gastosActual,     data: g.barras.actualGastos,     backgroundColor: '#374151', yAxisID: 'y', order: 2, columna: 1 },
     ];
 
     g.lineas.forEach((l) => {
@@ -124,6 +183,7 @@ window.renderInformeFinancieroChart = function (canvasId, g, labels) {
             tension: 0.15,
             yAxisID: 'y1',
             order: 1,
+            columna: l.dashed ? 0 : 1,
         });
     });
 
@@ -173,6 +233,10 @@ window.renderInformeFinancieroChart = function (canvasId, g, labels) {
             },
         },
     });
+
+    // No es una opción de Chart.js — se lee desde tooltipHtml() para mostrar "Propiedades activas"
+    // sin tener que crear un dataset/eje falso solo para transportar este dato.
+    chart.opPropiedades = g.propiedades || null;
 
     opCharts[canvasId] = chart;
     return chart;

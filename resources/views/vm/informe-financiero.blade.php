@@ -6,15 +6,7 @@
     <p style="font-size:12.5px;color:#9ca3af;margin:0 0 20px;">Generado a partir de la contabilidad importada de A3 (P&amp;G) y los datos de propiedades de Opland.</p>
 
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:22px;flex-wrap:wrap;">
-        <div id="selector-ejercicio" style="display:inline-flex;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
-            @foreach($anios as $a)
-            <a href="{{ request()->fullUrlWithQuery(['anio' => $a]) }}"
-               style="font-size:12.5px;font-weight:500;padding:6px 14px;text-decoration:none;{{ $a == $anioActual ? 'background:#f97316;color:#fff;' : 'background:#fff;color:#6b7280;' }}">
-                Ejercicio {{ $a }}
-            </a>
-            @endforeach
-        </div>
-        <div style="display:inline-flex;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-left:8px;">
+        <div style="display:inline-flex;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
             <button type="button" id="btn-anual" onclick="setModoGrafico('anual')"
                     style="font-size:12.5px;font-weight:500;padding:6px 14px;border:none;background:#f97316;color:#fff;cursor:pointer;font-family:inherit;">
                 Anual
@@ -23,6 +15,14 @@
                     style="font-size:12.5px;font-weight:500;padding:6px 14px;border:none;background:#fff;color:#6b7280;cursor:pointer;font-family:inherit;">
                 Interanual
             </button>
+        </div>
+        <div id="selector-ejercicio" style="display:inline-flex;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-left:8px;">
+            @foreach($anios as $a)
+            <a href="{{ request()->fullUrlWithQuery(['anio' => $a]) }}"
+               style="font-size:12.5px;font-weight:500;padding:6px 14px;text-decoration:none;{{ $a == $anioActual ? 'background:#f97316;color:#fff;' : 'background:#fff;color:#6b7280;' }}">
+                Ejercicio {{ $a }}
+            </a>
+            @endforeach
         </div>
 
         <span style="font-size:11px;color:#9ca3af;margin:0 2px 0 14px;">Propiedades — aplica a los KPIs y al gráfico</span>
