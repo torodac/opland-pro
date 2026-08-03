@@ -107,6 +107,10 @@ td{padding:8px;font-size:13px;}
 .icon-btn.danger:hover{background:#FCEBEB;color:#A32D2D;}
 .stat-pill{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;border:0.5px solid rgba(0,0,0,.1);cursor:pointer;font-size:12px;color:#888;background:#fff;transition:opacity .15s;}
 .dark .stat-pill{background:#1a1a1a;border-color:rgba(255,255,255,.1);}
+.cal-month{padding:0 12px 12px 0;border-right:1px solid rgba(0,0,0,.08);border-bottom:1px solid rgba(0,0,0,.08);}
+.cal-month:nth-child(4n){border-right:none;padding-right:0;}
+.cal-month:nth-child(n+9){border-bottom:none;padding-bottom:0;}
+.dark .cal-month{border-color:rgba(255,255,255,.08);}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;}
 .cd{height:14px;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#888;}
 .cd.Vacaciones{background:#e8b800;color:#fff;}
@@ -356,7 +360,7 @@ td{padding:8px;font-size:13px;}
       <span style="font-size:11px;color:#ccc;margin-left:8px;">— el año aplica también al horario anual</span>
       <span style="font-size:10px;color:#ccc;margin-left:6px;">· Los días excluyen festivos{{ !in_array($usuario->cargo, ['Mantenimiento','Limpiadora']) ? ' y fines de semana' : '' }}</span>
     </div>
-    <div id="cal-container" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;"></div>
+    <div id="cal-container" style="display:grid;grid-template-columns:repeat(4,1fr);"></div>
   </div>
 
   {{-- Horario anual --}}
@@ -967,7 +971,7 @@ function renderCal(year) {
     for (let m = 0; m < 12; m++) {
         const firstDay = new Date(year, m, 1), lastDay = new Date(year, m + 1, 0);
         let dow = firstDay.getDay(); dow = dow === 0 ? 6 : dow - 1;
-        let html = `<div><p style="font-size:10px;font-weight:500;color:#aaa;margin:0 0 3px;">${MESES_CAL[m]}</p><div class="cal-grid">`;
+        let html = `<div class="cal-month"><p style="font-size:10px;font-weight:500;color:#aaa;margin:0 0 3px;">${MESES_CAL[m]}</p><div class="cal-grid">`;
         for (let i = 0; i < dow; i++) html += `<div class="cd empty"></div>`;
         for (let d = 1; d <= lastDay.getDate(); d++) {
             const aus = ausenciaTipo(new Date(year, m, d));

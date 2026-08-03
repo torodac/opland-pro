@@ -12,6 +12,7 @@ use App\Http\Controllers\Vm\InformeImputacionesController;
 use App\Http\Controllers\Vm\HorarioController;
 use App\Http\Controllers\Vm\TareaController;
 use App\Http\Controllers\Vm\VmUsuarioController;
+use App\Http\Controllers\Vm\AusenciaController;
 use App\Http\Controllers\Vm\DashboardController;
 use App\Http\Controllers\Vm\PropiedadesController;
 use App\Http\Controllers\Vm\PygController;
@@ -191,6 +192,13 @@ Route::middleware('auth')->group(function () {
             Route::patch('vm_usuarios/{id}/ausencias/{ausId}', [VmUsuarioController::class, 'updateAusencia'])->where('project', 'vm')->name('vm.ausencia.update');
             Route::delete('vm_usuarios/{id}/ausencias/{ausId}', [VmUsuarioController::class, 'deleteAusencia'])->where('project', 'vm')->name('vm.ausencia.delete');
             Route::post('vm_usuarios/{id}/nominas', [VmUsuarioController::class, 'storeNomina'])->where('project', 'vm')->name('vm.nomina.store');
+        });
+
+        Route::middleware('table.access:ausencias')->group(function () {
+            Route::get('ausencias_form', [AusenciaController::class, 'index'])->where('project', 'vm')->name('vm.ausencias_form');
+            Route::post('ausencias_form', [AusenciaController::class, 'store'])->where('project', 'vm')->name('vm.ausencias_form.store');
+            Route::patch('ausencias_form/{ausId}', [AusenciaController::class, 'update'])->where('project', 'vm')->name('vm.ausencias_form.update');
+            Route::delete('ausencias_form/{ausId}', [AusenciaController::class, 'destroy'])->where('project', 'vm')->name('vm.ausencias_form.delete');
         });
 
         Route::get('fotos_list', [\App\Http\Controllers\Vm\FotosGaleriaController::class, 'index'])->where('project', 'vm')->name('vm.fotos-list');
