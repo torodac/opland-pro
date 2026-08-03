@@ -240,6 +240,13 @@
     </div>
     @endif
 
+    @if(($breezewayPendientesHeader ?? null) && $breezewayPendientesHeader->isNotEmpty())
+    <div class="text-xs text-gray-400 mb-3">
+        Usuarios de Breezeway sin cuenta en Opland ({{ $breezewayPendientesHeader->count() }}):
+        {{ $breezewayPendientesHeader->map(fn($p) => $p->nombre . ($p->email ? " ({$p->email})" : ' (sin email)'))->implode(', ') }}
+    </div>
+    @endif
+
     {{-- Barra de búsqueda --}}
     <form method="GET" id="form-listado" class="flex gap-2 mb-4" x-data="{ modalFiltros: false }">
 

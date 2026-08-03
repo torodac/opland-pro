@@ -229,10 +229,12 @@ class BreezewaySyncTasksCommand extends Command
 
         // Mantener vm_breezeway_pendientes: upsert de lo visto, borrar lo ya mapeado
         foreach ($pendientesVistos as $breezewayId => $info) {
+            $email = $emailPorBreezewayId[$breezewayId] ?? null;
             $existe = DB::table('vm_breezeway_pendientes')->where('breezeway_id', $breezewayId)->first();
             if ($existe) {
                 DB::table('vm_breezeway_pendientes')->where('id', $existe->id)->update([
                     'num_tareas'       => $info['count'],
+                    'email'            => $email,
                     'ultima_deteccion' => now(),
                     'updatedat'        => now(),
                 ]);
@@ -240,6 +242,7 @@ class BreezewaySyncTasksCommand extends Command
                 DB::table('vm_breezeway_pendientes')->insert([
                     'nombre'           => $info['nombre'],
                     'breezeway_id'     => $breezewayId,
+                    'email'            => $email,
                     'fecha_alta'       => now()->toDateString(),
                     'num_tareas'       => $info['count'],
                     'ultima_deteccion' => now(),

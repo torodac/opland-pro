@@ -132,6 +132,14 @@ class ListadoController extends Controller
             $aDemandarTooltip       = $this->aDemandarPorAnio($ejercicioActualDefault);
         }
 
+        $breezewayPendientesHeader = null;
+        if ($fullTable === 'vm_usuarios') {
+            $breezewayPendientesHeader = DB::table('vm_breezeway_pendientes')
+                ->where('deleted', 0)
+                ->orderByDesc('fecha_alta')
+                ->get(['nombre', 'email']);
+        }
+
         $icneaSync = null;
         if ($fullTable === 'vm_propiedades') {
             $ayer = now()->subDay()->toDateString();
@@ -172,6 +180,7 @@ class ListadoController extends Controller
             'sortDir'           => $sortDir,
             'tablStats'         => $tablStats,
             'icneaSync'         => $icneaSync,
+            'breezewayPendientesHeader' => $breezewayPendientesHeader,
             'ejercicioCuotasSel' => $ejercicioCuotasSel,
             'ejercicioActualDefault' => $ejercicioActualDefault,
             'sumSuperficieViviendas' => $sumSuperficieViviendas,
