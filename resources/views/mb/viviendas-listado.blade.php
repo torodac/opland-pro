@@ -112,6 +112,7 @@
       <th class="num"><a href="{{ $sortLink('cuotas_ptes') }}">Cuotas ptes. {!! $arrow('cuotas_ptes') !!}</a></th>
       <th class="num"><a href="{{ $sortLink('cuotas_demandadas') }}">Cuotas demandadas {!! $arrow('cuotas_demandadas') !!}</a></th>
       <th><a href="{{ $sortLink('a_demandar') }}">A demandar {!! $arrow('a_demandar') !!}</a></th>
+      <th class="num"><a href="{{ $sortLink('voto') }}">VOTO {!! $arrow('voto') !!}</a></th>
       <th style="width:36px"></th>
     </tr>
   </thead>
@@ -139,6 +140,7 @@
           <span class="vv-badge vv-badge-no">No</span>
         @endif
       </td>
+      <td class="num">{{ $v->voto ?? '—' }}</td>
       <td style="text-align:right" onclick="event.stopPropagation()">
         <button type="button" class="vv-btn-entrega" title="Registrar entrega a cuenta"
                 onclick="abrirModalEntrega({{ $v->id }}, {{ Illuminate\Support\Js::from($v->nombre) }})">
@@ -147,7 +149,7 @@
       </td>
     </tr>
     <tr class="vv-detail" id="vv-detail-{{ $v->id }}">
-      <td colspan="7">
+      <td colspan="8">
         <div class="vv-detail-inner">
           @if($cuotas->isEmpty() && $entregas->isEmpty())
             <span style="color:#9ca3af;font-size:12px">Sin cuotas pendientes ni demandadas, ni entregas a cuenta con saldo.</span>
@@ -187,7 +189,7 @@
       </td>
     </tr>
     @empty
-    <tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:24px">No hay viviendas que coincidan con la búsqueda.</td></tr>
+    <tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">No hay viviendas que coincidan con la búsqueda.</td></tr>
     @endforelse
   </tbody>
 </table>

@@ -311,6 +311,29 @@ Route::middleware('auth')->group(function () {
             Route::post('viviendas/{vivienda}/entregas-cuenta', [\App\Http\Controllers\Mb\EntregasCuentaController::class, 'store'])->where(['project' => 'mb', 'vivienda' => '[0-9]+'])->name('mb.entregas-cuenta.store');
             Route::post('entregas-cuenta/{entrega}/aplicar', [\App\Http\Controllers\Mb\EntregasCuentaController::class, 'aplicar'])->where(['project' => 'mb', 'entrega' => '[0-9]+'])->name('mb.entregas-cuenta.aplicar');
             Route::get('entregas-cuenta/{entrega}/pendientes', [\App\Http\Controllers\Mb\EntregasCuentaController::class, 'pendientes'])->where(['project' => 'mb', 'entrega' => '[0-9]+'])->name('mb.entregas-cuenta.pendientes');
+
+            Route::get('asamblea/reparto', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'index'])->where('project', 'mb')->name('mb.asamblea.reparto');
+            Route::get('asamblea/reparto/vivienda', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'vivienda'])->where('project', 'mb')->name('mb.asamblea.reparto.vivienda');
+            Route::get('asamblea/reparto/buscar-nombre', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'buscarNombre'])->where('project', 'mb')->name('mb.asamblea.reparto.buscar-nombre');
+            Route::post('asamblea/reparto/hoja', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'registrarHoja'])->where('project', 'mb')->name('mb.asamblea.reparto.hoja');
+            Route::delete('asamblea/reparto/hoja', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'anularHoja'])->where('project', 'mb')->name('mb.asamblea.reparto.hoja.anular');
+            Route::get('asamblea/reparto/historico', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'historico'])->where('project', 'mb')->name('mb.asamblea.reparto.historico');
+
+            Route::get('asamblea/recuento', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'index'])->where('project', 'mb')->name('mb.asamblea.recuento');
+            Route::get('asamblea/recuento/tallies', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'tallyRefresh'])->where('project', 'mb')->name('mb.asamblea.recuento.tallies');
+            Route::post('asamblea/recuento/voto', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'registrarVoto'])->where('project', 'mb')->name('mb.asamblea.recuento.voto');
+
+            Route::get('asamblea_reparto', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'backoffice'])->where('project', 'mb')->name('mb.asamblea_reparto');
+            Route::get('asamblea_recuento', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'backoffice'])->where('project', 'mb')->name('mb.asamblea_recuento');
+            Route::get('asamblea_recuento_listado', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'listado'])->where('project', 'mb')->name('mb.asamblea_recuento_listado');
+            Route::delete('asamblea/recuento/voto', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'eliminarVoto'])->where('project', 'mb')->name('mb.asamblea.recuento.voto.delete');
+
+            Route::get('asamblea_generador', [\App\Http\Controllers\Mb\AsambleaGeneradorController::class, 'index'])->where('project', 'mb')->name('mb.asamblea_generador');
+            Route::get('asamblea_generador/pdf', [\App\Http\Controllers\Mb\AsambleaGeneradorController::class, 'descargarPdf'])->where('project', 'mb')->name('mb.asamblea_generador.pdf');
+            Route::post('asamblea_generador/asamblea', [\App\Http\Controllers\Mb\AsambleaGeneradorController::class, 'crearAsamblea'])->where('project', 'mb')->name('mb.asamblea_generador.asamblea');
+            Route::post('asamblea_generador/preguntas', [\App\Http\Controllers\Mb\AsambleaGeneradorController::class, 'guardarPreguntas'])->where('project', 'mb')->name('mb.asamblea_generador.preguntas');
+            Route::post('asamblea_generador/pregunta', [\App\Http\Controllers\Mb\AsambleaGeneradorController::class, 'agregarPregunta'])->where('project', 'mb')->name('mb.asamblea_generador.pregunta.add');
+            Route::delete('asamblea_generador/pregunta', [\App\Http\Controllers\Mb\AsambleaGeneradorController::class, 'eliminarPregunta'])->where('project', 'mb')->name('mb.asamblea_generador.pregunta.delete');
         }); // fin mb.only
 
         Route::get('{table}', [ListadoController::class, 'index'])->name('listado');

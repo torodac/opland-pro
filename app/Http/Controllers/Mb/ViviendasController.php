@@ -15,9 +15,15 @@ class ViviendasController extends Controller
     // Incobrable/Anulada/Pagada no cuentan como deuda viva.
     private const ESTADOS_DEUDA = ['Pendiente', 'Demandada'];
 
+    private function idAsambleaActual(): ?int
+    {
+        return DB::table('mb_asambleas')->where('deleted', 0)->orderByDesc('fecha')->value('id');
+    }
+
     private function baseQuery(Request $request)
     {
         $q = trim((string) $request->input('q', ''));
+        $idAsamblea = (int) ($this->idAsambleaActual() ?? 0);
 
         $query = DB::table('mb_viviendas as v')
             ->where('v.deleted', 0)
@@ -41,6 +47,9 @@ class ViviendasController extends Controller
                           WHERE c.id_viviendas = v.id AND c.estado = 'Pendiente'), 0) as cuotas_ptes"),
                 DB::raw("COALESCE((SELECT COUNT(*) FROM mb_cuotas c
                           WHERE c.id_viviendas = v.id AND c.estado = 'Demandada'), 0) as cuotas_demandadas"),
+                DB::raw("(SELECT ah.numero_hoja FROM mb_asambleas_hojas ah
+                          WHERE ah.id_viviendas = v.id AND ah.id_asambleas = {$idAsamblea} AND ah.deleted = 0
+                          LIMIT 1) as voto"),
             ]);
 
         if ($request->boolean('stat_a_demandar')) {
@@ -65,7 +74,7 @@ class ViviendasController extends Controller
 
         $sortField = $request->input('sort');
         $sortDir   = $request->input('dir', 'desc') === 'asc' ? 'asc' : 'desc';
-        if ($sortField && in_array($sortField, ['nombre', 'ultimo_propietario', 'deuda_acumulada', 'cuotas_ptes', 'cuotas_demandadas', 'a_demandar'])) {
+        if ($sortField && in_array($sortField, ['nombre', 'ultimo_propietario', 'deuda_acumulada', 'cuotas_ptes', 'cuotas_demandadas', 'a_demandar', 'voto'])) {
             $viviendas = $sortDir === 'asc'
                 ? $viviendas->sortBy($sortField)->values()
                 : $viviendas->sortByDesc($sortField)->values();
