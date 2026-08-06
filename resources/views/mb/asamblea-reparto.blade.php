@@ -113,7 +113,6 @@ button.secundario.naranja:active { background:#ea580c; }
 
 <nav class="bottom-nav">
   <a href="{{ route('mb.asamblea.reparto', $project->slug) }}" class="active">Reparto</a>
-  <a href="{{ route('mb.asamblea.recuento', $project->slug) }}">Recuento</a>
   <a href="{{ route('mb.asamblea.reparto.historico', $project->slug) }}">Histórico</a>
 </nav>
 

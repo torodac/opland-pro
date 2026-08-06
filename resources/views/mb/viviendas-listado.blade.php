@@ -83,6 +83,22 @@
 .ec-modal-card{position:relative;background:#fff;border-radius:12px;box-shadow:0 20px 45px -12px rgba(15,23,42,.35);width:100%}
 .ec-input{width:100%;font-size:13px;border:1px solid #dce6ee;border-radius:8px;padding:8px 10px}
 .ec-label{display:block;font-size:11px;color:#7e93a1;margin-bottom:4px}
+
+.vv-btn-carrito{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:5px;border:1px solid #dce6ee;color:#7e93a1;background:#fff;cursor:pointer;flex-shrink:0;font-size:11px}
+.vv-btn-carrito:hover{background:#eff6ff;border-color:#93c5fd;color:#185fa5}
+.vv-btn-carrito.en-carrito{background:#185fa5;border-color:#185fa5;color:#fff}
+.vv-carrito-flotante{position:fixed;top:70px;right:16px;z-index:40;display:none;align-items:center;gap:8px;background:#185fa5;color:#fff;border:none;border-radius:99px;padding:10px 18px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 8px 20px -6px rgba(24,95,165,.5)}
+.vv-carrito-flotante.show{display:inline-flex}
+.vv-carrito-flotante .num{background:rgba(255,255,255,.25);border-radius:99px;padding:2px 9px;font-size:12px}
+.vc-modal-linea{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eaf1f6;font-size:13px}
+.vc-modal-linea:last-child{border-bottom:none}
+.vc-modal-linea-info{flex:1;min-width:0}
+.vc-modal-linea-vivienda{font-weight:600;color:#16232b}
+.vc-modal-linea-concepto{font-size:11.5px;color:#7e93a1}
+.vc-modal-quitar{border:none;background:none;color:#cbd5e1;cursor:pointer;font-size:16px;line-height:1;flex-shrink:0}
+.vc-modal-quitar:hover{color:#b91c1c}
+.vc-total{font-size:16px;font-weight:700;text-align:right;margin-top:10px}
+#vc-btn-cobrar:disabled{background:#cfd8e3 !important;color:#8a97a8;cursor:default}
 </style>
 
 @php
@@ -164,7 +180,12 @@
                 <td class="{{ $c->estado === 'Demandada' ? 'vv-estado-demandada' : 'vv-estado-pendiente' }}">{{ $c->estado }}</td>
                 <td class="num">{{ number_format($c->importe, 2, ',', '.') }} €</td>
                 <td class="num">{{ number_format($c->pendiente, 2, ',', '.') }} €</td>
-                <td></td>
+                <td style="text-align:right">
+                  <button type="button" class="vv-btn-carrito" id="vv-carrito-btn-{{ $c->id }}" title="Añadir al carrito de cobro"
+                          onclick="toggleCarrito({{ $c->id }}, {{ $v->id }}, {{ Illuminate\Support\Js::from($v->nombre) }}, {{ Illuminate\Support\Js::from($c->ejercicio . ' ' . $c->tipo_cuota) }}, {{ $c->pendiente }})">
+                    <i class="fa-solid fa-cart-shopping"></i>
+                  </button>
+                </td>
               </tr>
               @endforeach
               @foreach($entregas as $e)
@@ -207,6 +228,44 @@ document.querySelectorAll('.vv-row[data-toggle]').forEach(row => {
   });
 });
 </script>
+
+<button type="button" class="vv-carrito-flotante" id="vc-flotante" onclick="abrirModalCarrito()">
+  <i class="fa-solid fa-cart-shopping"></i>
+  <span id="vc-flotante-total">0,00 €</span>
+  <span class="num" id="vc-flotante-count">0</span>
+</button>
+
+<div id="vc-modal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/40" onclick="document.getElementById('vc-modal').classList.add('hidden')"></div>
+  <div class="absolute inset-0 flex items-center justify-center p-4">
+    <div class="ec-modal-card" style="max-width:420px;max-height:85vh;display:flex;flex-direction:column">
+      <div style="padding:16px 20px;border-bottom:1px solid #eaf1f6">
+        <h3 style="font-size:15px;font-weight:600;color:#16232b;margin:0">Confirmar cobro</h3>
+      </div>
+      <div style="padding:12px 20px;overflow-y:auto;flex:1" id="vc-modal-lineas"></div>
+      <div style="padding:0 20px 16px">
+        <div class="vc-total" id="vc-modal-total">0,00 €</div>
+        <div class="vc-row" style="display:flex;gap:10px;margin-top:10px">
+          <div style="flex:1">
+            <label class="ec-label">Efectivo</label>
+            <input type="number" id="vc-importe-efectivo" class="ec-input" step="0.01" min="0" oninput="cambiarImporteEfectivo()">
+          </div>
+          <div style="flex:1">
+            <label class="ec-label">Tarjeta</label>
+            <input type="number" id="vc-importe-tarjeta" class="ec-input" step="0.01" min="0" readonly style="background:#f7fafc;color:#7e93a1">
+          </div>
+        </div>
+        <p style="font-size:11px;color:#9ca3af;margin:6px 0 0">Por defecto, todo en efectivo. Si el pago se reparte, ajusta el importe en efectivo — el de tarjeta se calcula solo.</p>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid #eaf1f6">
+        <button type="button" onclick="document.getElementById('vc-modal').classList.add('hidden')"
+                style="padding:8px 14px;font-size:13px;color:#6b7280;background:#f3f4f6;border:none;border-radius:8px;cursor:pointer">Cancelar</button>
+        <button type="button" id="vc-btn-cobrar" class="ag-btn" disabled onclick="confirmarCobro()"
+                style="height:36px;padding:0 16px;font-size:13px;font-weight:600;border-radius:8px;border:none;background:#f97316;color:#fff;cursor:pointer">Cobrar</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 {{-- Modal 1: registrar entrega a cuenta --}}
 <div id="ec-modal-1" class="fixed inset-0 z-50 hidden">
@@ -445,6 +504,126 @@ async function confirmarCompensacion() {
   }
 
   alert('Compensación aplicada correctamente.');
+  window.location.reload();
+}
+
+// ---- Carrito de cobro ----
+const ROUTE_TICKET_CONFIRMAR = @json(route('mb.viviendas.ticket.confirmar', $project->slug));
+const ROUTE_TICKET_IMPRIMIR_TPL = @json(route('mb.viviendas.ticket.imprimir', [$project->slug, '__TICKET__']));
+const CSRF_VC = @json(csrf_token());
+
+let carrito = []; // { idCuota, idViviendas, vivienda, concepto, importe }
+
+function fmtEuroVC(v) {
+  return v.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+}
+
+function totalCarrito() {
+  return Math.round(carrito.reduce((acc, l) => acc + l.importe, 0) * 100) / 100;
+}
+
+function toggleCarrito(idCuota, idViviendas, vivienda, concepto, importe) {
+  const yaEsta = carrito.some(l => l.idCuota === idCuota);
+  if (yaEsta) { quitarDelCarrito(idCuota); return; }
+
+  const btn = document.getElementById('vv-carrito-btn-' + idCuota);
+  carrito.push({ idCuota, idViviendas, vivienda, concepto, importe });
+  btn.classList.add('en-carrito');
+  renderFlotante();
+}
+
+function quitarDelCarrito(idCuota) {
+  carrito = carrito.filter(l => l.idCuota !== idCuota);
+  const btn = document.getElementById('vv-carrito-btn-' + idCuota);
+  if (btn) btn.classList.remove('en-carrito');
+  renderFlotante();
+  renderModalCarrito();
+}
+
+function renderFlotante() {
+  const flotante = document.getElementById('vc-flotante');
+  document.getElementById('vc-flotante-total').textContent = fmtEuroVC(totalCarrito());
+  document.getElementById('vc-flotante-count').textContent = carrito.length;
+  flotante.classList.toggle('show', carrito.length > 0);
+}
+
+function renderModalCarrito() {
+  const cont = document.getElementById('vc-modal-lineas');
+  if (carrito.length === 0) {
+    cont.innerHTML = '<p style="color:#9ca3af;font-size:12.5px;text-align:center;padding:12px 0">El carrito está vacío.</p>';
+  } else {
+    cont.innerHTML = carrito.map(l => `
+      <div class="vc-modal-linea">
+        <div class="vc-modal-linea-info">
+          <div class="vc-modal-linea-vivienda">${l.vivienda}</div>
+          <div class="vc-modal-linea-concepto">${l.concepto}</div>
+        </div>
+        <div>${fmtEuroVC(l.importe)}</div>
+        <button type="button" class="vc-modal-quitar" onclick="quitarDelCarrito(${l.idCuota})">&times;</button>
+      </div>
+    `).join('');
+  }
+  document.getElementById('vc-modal-total').textContent = fmtEuroVC(totalCarrito());
+  // Por defecto, todo en efectivo; si el total cambia (líneas añadidas/quitadas), se
+  // reinicia el desglose para no dejar un remanente inconsistente con el nuevo total.
+  document.getElementById('vc-importe-efectivo').value = totalCarrito().toFixed(2);
+  document.getElementById('vc-importe-efectivo').max = totalCarrito();
+  cambiarImporteEfectivo();
+}
+
+function cambiarImporteEfectivo() {
+  const total = totalCarrito();
+  const inputEfectivo = document.getElementById('vc-importe-efectivo');
+  let efectivo = parseFloat(inputEfectivo.value);
+  if (isNaN(efectivo) || efectivo < 0) efectivo = 0;
+  if (efectivo > total) efectivo = total;
+  // Corrige el propio campo si el usuario ha tecleado (o pegado) algo fuera de rango —
+  // si no, el campo seguiría mostrando el valor inválido aunque el total ya esté recortado.
+  if (parseFloat(inputEfectivo.value) !== efectivo) inputEfectivo.value = efectivo.toFixed(2);
+  const tarjeta = Math.round((total - efectivo) * 100) / 100;
+  document.getElementById('vc-importe-tarjeta').value = tarjeta.toFixed(2);
+  actualizarBotonCobrar();
+}
+
+function actualizarBotonCobrar() {
+  document.getElementById('vc-btn-cobrar').disabled = carrito.length === 0;
+}
+
+function abrirModalCarrito() {
+  renderModalCarrito();
+  document.getElementById('vc-modal').classList.remove('hidden');
+}
+
+async function confirmarCobro() {
+  const btn = document.getElementById('vc-btn-cobrar');
+  btn.disabled = true;
+
+  const importeEfectivo = parseFloat(document.getElementById('vc-importe-efectivo').value) || 0;
+  const importeTarjeta  = parseFloat(document.getElementById('vc-importe-tarjeta').value) || 0;
+
+  const res = await fetch(ROUTE_TICKET_CONFIRMAR, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_VC, 'Accept': 'application/json' },
+    body: JSON.stringify({
+      cuotas: carrito.map(l => ({ id_cuota: l.idCuota })),
+      importe_efectivo: importeEfectivo,
+      importe_tarjeta: importeTarjeta,
+    }),
+  });
+  const data = await res.json();
+
+  if (!res.ok) {
+    alert(data.message || 'No se pudo confirmar el cobro.');
+    btn.disabled = false;
+    return;
+  }
+
+  window.open(ROUTE_TICKET_IMPRIMIR_TPL.replace('__TICKET__', data.ticket_id), '_blank');
+
+  carrito = [];
+  document.querySelectorAll('.vv-btn-carrito.en-carrito').forEach(b => b.classList.remove('en-carrito'));
+  renderFlotante();
+  document.getElementById('vc-modal').classList.add('hidden');
   window.location.reload();
 }
 </script>

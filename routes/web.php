@@ -172,6 +172,7 @@ Route::middleware('auth')->group(function () {
         Route::get('dashboard', [DashboardController::class, 'index'])->name('vm.dashboard');
         Route::post('dashboard/validar-conciliacion', [DashboardController::class, 'validarConciliacion'])->name('vm.dashboard.validar');
         Route::post('dashboard/validar-fichaje', [DashboardController::class, 'validarFichaje'])->name('vm.dashboard.validar-fichaje');
+        Route::post('dashboard/validar-tarea',   [DashboardController::class, 'validarTarea'])->name('vm.dashboard.validar-tarea');
         Route::get('dashboard/fichaje-hoy',      [DashboardController::class, 'fichajeHoy'])->name('vm.dashboard.fichaje-hoy');
         Route::post('dashboard/fichaje-entrada', [DashboardController::class, 'fichajeEntrada'])->name('vm.dashboard.fichaje-entrada');
         Route::post('dashboard/fichaje-pausa',   [DashboardController::class, 'fichajePausa'])->name('vm.dashboard.fichaje-pausa');
@@ -312,6 +313,9 @@ Route::middleware('auth')->group(function () {
             Route::post('entregas-cuenta/{entrega}/aplicar', [\App\Http\Controllers\Mb\EntregasCuentaController::class, 'aplicar'])->where(['project' => 'mb', 'entrega' => '[0-9]+'])->name('mb.entregas-cuenta.aplicar');
             Route::get('entregas-cuenta/{entrega}/pendientes', [\App\Http\Controllers\Mb\EntregasCuentaController::class, 'pendientes'])->where(['project' => 'mb', 'entrega' => '[0-9]+'])->name('mb.entregas-cuenta.pendientes');
 
+            Route::post('viviendas/ticket', [\App\Http\Controllers\Mb\TicketController::class, 'confirmar'])->where('project', 'mb')->name('mb.viviendas.ticket.confirmar');
+            Route::get('viviendas/ticket/{ticket}', [\App\Http\Controllers\Mb\TicketController::class, 'imprimir'])->where(['project' => 'mb', 'ticket' => '[0-9]+'])->name('mb.viviendas.ticket.imprimir');
+
             Route::get('asamblea/reparto', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'index'])->where('project', 'mb')->name('mb.asamblea.reparto');
             Route::get('asamblea/reparto/vivienda', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'vivienda'])->where('project', 'mb')->name('mb.asamblea.reparto.vivienda');
             Route::get('asamblea/reparto/buscar-nombre', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'buscarNombre'])->where('project', 'mb')->name('mb.asamblea.reparto.buscar-nombre');
@@ -319,13 +323,11 @@ Route::middleware('auth')->group(function () {
             Route::delete('asamblea/reparto/hoja', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'anularHoja'])->where('project', 'mb')->name('mb.asamblea.reparto.hoja.anular');
             Route::get('asamblea/reparto/historico', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'historico'])->where('project', 'mb')->name('mb.asamblea.reparto.historico');
 
-            Route::get('asamblea/recuento', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'index'])->where('project', 'mb')->name('mb.asamblea.recuento');
-            Route::get('asamblea/recuento/tallies', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'tallyRefresh'])->where('project', 'mb')->name('mb.asamblea.recuento.tallies');
+            Route::get('asamblea/recuento/estado', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'estadoRefresh'])->where('project', 'mb')->name('mb.asamblea.recuento.estado');
             Route::post('asamblea/recuento/voto', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'registrarVoto'])->where('project', 'mb')->name('mb.asamblea.recuento.voto');
 
             Route::get('asamblea_reparto', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'backoffice'])->where('project', 'mb')->name('mb.asamblea_reparto');
             Route::get('asamblea_recuento', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'backoffice'])->where('project', 'mb')->name('mb.asamblea_recuento');
-            Route::get('asamblea_recuento_listado', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'listado'])->where('project', 'mb')->name('mb.asamblea_recuento_listado');
             Route::delete('asamblea/recuento/voto', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'eliminarVoto'])->where('project', 'mb')->name('mb.asamblea.recuento.voto.delete');
 
             Route::get('asamblea_generador', [\App\Http\Controllers\Mb\AsambleaGeneradorController::class, 'index'])->where('project', 'mb')->name('mb.asamblea_generador');

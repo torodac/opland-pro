@@ -42,11 +42,15 @@ class BreezewaySyncTasksCommand extends Command
         // Auto-mapeo por email: si un assignee_id no está en vm_usuarios.breezeway, se busca su email
         // real en Breezeway y se compara contra vm_usuarios.mail — evita tener que rellenar el ID a
         // mano cuando el alta en Opland ya se hizo con el mismo email que tiene en Breezeway.
+        // fetchAllPeople() trae tanto activos como inactivos (dos llamadas, el endpoint por
+        // defecto solo devuelve activos) para poder saber el estado real de cada persona.
         $people = $this->fetchAllPeople($token);
         $emailPorBreezewayId = [];
+        $activoPorBreezewayId = [];
         foreach ($people as $p) {
             $email = strtolower(trim($p['emails'][0] ?? ''));
             if ($email !== '') $emailPorBreezewayId[$p['id']] = $email;
+            $activoPorBreezewayId[$p['id']] = !empty($p['active']);
         }
         $vmUsuariosPorEmail = [];
         foreach (DB::table('vm_usuarios')
@@ -55,6 +59,17 @@ class BreezewaySyncTasksCommand extends Command
             ->where(fn($q) => $q->whereNull('deleted')->orWhere('deleted', 0))
             ->get(['id', 'mail']) as $u) {
             $vmUsuariosPorEmail[strtolower(trim($u->mail))] = $u->id;
+        }
+
+        // vm_usuarios.breezeway_status: refleja el estado real (activo/inactivo) de cada
+        // usuario ya vinculado. Solo se toca a los que tienen breezeway_id conocido en la
+        // respuesta de la API -- si un id mapeado no aparece en ninguna de las dos listas
+        // (borrado del todo en Breezeway, caso raro) se deja el valor anterior tal cual.
+        foreach ($usuariosPorBreezeway as $breezewayId => $vmUserId) {
+            if (!array_key_exists($breezewayId, $activoPorBreezewayId)) continue;
+            DB::table('vm_usuarios')->where('id', $vmUserId)->update([
+                'breezeway_status' => $activoPorBreezewayId[$breezewayId] ? 'Activo' : 'Inactivo',
+            ]);
         }
 
         $propiedades = DB::table('vm_propiedades')
@@ -227,8 +242,11 @@ class BreezewaySyncTasksCommand extends Command
         [$huerfanasResueltas, $impHuerfanas] = $this->resolverTareasHuerfanas($token, $usuariosPorBreezeway, $emailPorBreezewayId, $vmUsuariosPorEmail, $pendientesVistos);
         $imputacionesCreadas += $impHuerfanas;
 
-        // Mantener vm_breezeway_pendientes: upsert de lo visto, borrar lo ya mapeado
+        // Mantener vm_breezeway_pendientes: upsert de lo visto, borrar lo ya mapeado. Los que
+        // Breezeway ya marca como inactivos (baja) no se avisan -- son ex-empleados, no huecos
+        // por rellenar en Opland.
         foreach ($pendientesVistos as $breezewayId => $info) {
+            if (($activoPorBreezewayId[$breezewayId] ?? true) === false) continue;
             $email = $emailPorBreezewayId[$breezewayId] ?? null;
             $existe = DB::table('vm_breezeway_pendientes')->where('breezeway_id', $breezewayId)->first();
             if ($existe) {
@@ -258,6 +276,12 @@ class BreezewaySyncTasksCommand extends Command
         DB::table('vm_breezeway_pendientes')
             ->whereIn('breezeway_id', array_keys($usuariosPorBreezeway))
             ->delete();
+        // Y los que ahora aparecen como inactivos en Breezeway (aunque se hubieran detectado
+        // como pendientes en una ejecución anterior, cuando aún estaban de alta).
+        $idsInactivos = array_keys(array_filter($activoPorBreezewayId, fn ($activo) => $activo === false));
+        if (!empty($idsInactivos)) {
+            DB::table('vm_breezeway_pendientes')->whereIn('breezeway_id', $idsInactivos)->delete();
+        }
 
         // Descartada: candidatas por silencio de 15 dias (ni actualizacion ni fecha planificada
         // reciente, sin estado de cierre ya asignado), pero antes de descartarlas de verdad se
@@ -592,11 +616,21 @@ class BreezewaySyncTasksCommand extends Command
         return $vmId;
     }
 
-    // GET /people solo documenta el parámetro "status" — no pagina como /task (page/total_pages),
-    // así que se pide con un limit generoso en una sola llamada (la plantilla de personal es pequeña).
+    // GET /people no pagina como /task (page/total_pages), así que se pide con un limit generoso
+    // en una sola llamada (la plantilla de personal es pequeña). Sin filtro de "status" solo trae
+    // los activos -- para saber también quién está dado de baja hay que pedir explícitamente
+    // status=inactive aparte y juntar ambas listas (comprobado empíricamente 2026-08-06).
     private function fetchAllPeople(string $token): array
     {
-        $url  = 'https://api.breezeway.io/public/inventory/v1/people?' . http_build_query(['limit' => 500, 'offset' => 0]);
+        $activos   = $this->fetchPeopleByStatus($token, 'active');
+        usleep(300000);
+        $inactivos = $this->fetchPeopleByStatus($token, 'inactive');
+        return array_merge($activos, $inactivos);
+    }
+
+    private function fetchPeopleByStatus(string $token, string $status): array
+    {
+        $url  = 'https://api.breezeway.io/public/inventory/v1/people?' . http_build_query(['limit' => 500, 'offset' => 0, 'status' => $status]);
         $resp = $this->curlJson($url, 'GET', ['Authorization: JWT ' . $token]);
         return is_array($resp) && isset($resp[0]) ? $resp : ($resp['results'] ?? []);
     }

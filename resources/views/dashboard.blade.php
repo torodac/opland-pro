@@ -430,7 +430,7 @@
         <p class="empty">Sin pendientes</p>
       @else
       <table class="db-table">
-        <thead><tr><th>Tarea</th><th>Responsables</th><th>Propiedad</th><th>Planificada</th></tr></thead>
+        <thead><tr><th>Tarea</th><th>Responsables</th><th>Propiedad</th><th>Planificada</th><th></th></tr></thead>
         <tbody>
           @foreach($tareasLimpieza as $t)
           <tr>
@@ -444,6 +444,12 @@
             </td>
             <td style="color:#888;">{{ $t->propiedad }}</td>
             <td style="color:#888;">{{ \Carbon\Carbon::parse($t->fecha_planificada)->translatedFormat('d M') }}</td>
+            <td>
+              <button class="badge-sm" style="background:#EAF3DE;color:#27500A;border:none;cursor:pointer;padding:3px 8px;border-radius:4px;"
+                      onclick="validarTarea(this, {{ $t->id }}, 'limpieza')">
+                Validar
+              </button>
+            </td>
           </tr>
           @endforeach
         </tbody>
@@ -463,7 +469,7 @@
       <p class="empty">Sin pendientes</p>
     @else
     <table class="db-table">
-      <thead><tr><th>Tarea</th><th>Responsables</th><th>Propiedad</th><th>Planificada</th></tr></thead>
+      <thead><tr><th>Tarea</th><th>Responsables</th><th>Propiedad</th><th>Planificada</th><th></th></tr></thead>
       <tbody>
         @foreach($tareasMantPisc as $t)
         <tr>
@@ -477,6 +483,12 @@
           </td>
           <td style="color:#888;">{{ $t->propiedad }}</td>
           <td style="color:#888;">{{ \Carbon\Carbon::parse($t->fecha_planificada)->translatedFormat('d M') }}</td>
+          <td>
+            <button class="badge-sm" style="background:#EAF3DE;color:#27500A;border:none;cursor:pointer;padding:3px 8px;border-radius:4px;"
+                    onclick="validarTarea(this, {{ $t->id }}, 'mantenimiento')">
+              Validar
+            </button>
+          </td>
         </tr>
         @endforeach
       </tbody>
@@ -554,6 +566,26 @@ async function validarFichaje(btn, fichajeId) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_DB, 'Accept': 'application/json' },
         body: JSON.stringify({ id: fichajeId }),
+    });
+    const data = await r.json();
+
+    if (data.ok) {
+        btn.closest('tr').remove();
+    } else {
+        btn.disabled = false;
+        btn.textContent = 'Validar';
+        alert('Error al validar');
+    }
+}
+
+async function validarTarea(btn, id, tipo) {
+    btn.disabled = true;
+    btn.textContent = '…';
+
+    const r = await fetch(BASE_DB + '/validar-tarea', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_DB, 'Accept': 'application/json' },
+        body: JSON.stringify({ id, tipo }),
     });
     const data = await r.json();
 

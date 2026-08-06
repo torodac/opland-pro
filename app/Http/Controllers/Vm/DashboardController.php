@@ -86,7 +86,25 @@ class DashboardController extends Controller
     public function validarFichaje(Request $request, Project $project)
     {
         $fichajeId = (int) $request->id;
-        DB::table('vm_fichaje')->where('id', $fichajeId)->update(['validado' => true]);
+        $user = $this->vmUsuarioActual();
+        DB::table('vm_fichaje')->where('id', $fichajeId)->update([
+            'validado'     => true,
+            'validado_por' => $user->id ?? null,
+        ]);
+        return response()->json(['ok' => true]);
+    }
+
+    public function validarTarea(Request $request, Project $project)
+    {
+        $tipo  = $request->tipo === 'mantenimiento' ? 'mantenimiento' : 'limpieza';
+        $tabla = 'vm_tareas_' . $tipo;
+        $id    = (int) $request->id;
+        $user  = $this->vmUsuarioActual();
+
+        DB::table($tabla)->where('id', $id)->update([
+            'validado'     => true,
+            'validado_por' => $user->id ?? null,
+        ]);
         return response()->json(['ok' => true]);
     }
 
@@ -171,6 +189,7 @@ class DashboardController extends Controller
             ->leftJoin('vm_propiedades as p', 'p.id', '=', 't.id_propiedades')
             ->where('t.deleted', 0)
             ->where('t.estado', 'Completada')
+            ->where(fn($q) => $q->whereNull('t.validado')->orWhere('t.validado', false))
             ->whereNotExists($sinImputacion('limpieza'))
             ->orderBy('t.fecha_planificada')
             ->limit(50)
@@ -182,6 +201,7 @@ class DashboardController extends Controller
             ->leftJoin('vm_propiedades as p', 'p.id', '=', 't.id_propiedades')
             ->where('t.deleted', 0)
             ->where('t.estado', 'Completada')
+            ->where(fn($q) => $q->whereNull('t.validado')->orWhere('t.validado', false))
             ->whereNotExists($sinImputacion('mantenimiento'))
             ->orderBy('t.fecha_planificada')
             ->limit(50)
@@ -210,7 +230,9 @@ class DashboardController extends Controller
             ->get(['u.nombre as usuario', 'u.id as id_usuario', 'h.fecha']);
 
         // ── Fichaje vs imputaciones (diff > 30 min) ──────────────────────────
-        $usuarios     = DB::table('vm_usuarios')->where('deleted', 0)->pluck('id', 'nombre');
+        // Solo Limpieza (rol 1) y Mantenimiento (rol 4): son los únicos que imputan tiempo por
+        // tarea, así que comparar fichaje contra imputaciones no tiene sentido para otros roles.
+        $usuarios     = DB::table('vm_usuarios')->where('deleted', 0)->whereIn('id_rol', [1, 4])->pluck('id', 'nombre');
         $imputaciones = DB::table('vm_imputaciones')
             ->where('fecha_imputacion', '<', $hoy)
             ->whereNotNull('duracion')
@@ -320,7 +342,7 @@ class DashboardController extends Controller
         $isAdmin = auth()->user()->isProjectAdmin($project);
         $verReservas    = $isAdmin || in_array($rolId, [3, 10, 5, 2]);   // Dir.gral, Dir.Op, Coord.mant, Coord.limp
         $verRRHH        = $isAdmin || in_array($rolId, [10, 5, 2, 11]);  // Dir.Op, Coord.mant, Coord.limp, Dir.RRHH
-        $verAusenciasSin= $isAdmin || in_array($rolId, [10, 11]);        // Dir.Op, Dir.RRHH
+        $verAusenciasSin= $isAdmin || $rolId === 11;                     // Dir.RRHH
         $verLimpSinImp  = $isAdmin || in_array($rolId, [10, 2]);         // Dir.Op, Coord.limp
         $verMantSinImp  = $isAdmin || in_array($rolId, [10, 5]);         // Dir.Op, Coord.mant
 

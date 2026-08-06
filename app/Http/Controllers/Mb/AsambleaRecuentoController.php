@@ -26,32 +26,64 @@ class AsambleaRecuentoController extends Controller
         return $out;
     }
 
-    public function index(Request $request, Project $project)
+    // Estado completo de la pantalla de recuento: stats, tarjetas por pregunta y el listado
+    // hoja x pregunta ordenado por última actividad (para que la hoja que se está contando
+    // ahora mismo quede siempre arriba).
+    private function estado(int $idAsamblea): array
     {
-        $asamblea = $request->filled('id_asamblea')
-            ? DB::table('mb_asambleas')->where('id', $request->id_asamblea)->where('deleted', 0)->first()
-            : DB::table('mb_asambleas')->where('deleted', 0)->orderByDesc('fecha')->first();
-
-        abort_if(!$asamblea, 404, 'No hay ninguna asamblea creada todavía.');
-
         $preguntas = DB::table('mb_asambleas_preguntas')
-            ->where('id_asambleas', $asamblea->id)
+            ->where('id_asambleas', $idAsamblea)
             ->where('deleted', 0)
             ->orderBy('numero_pregunta')
             ->get(['numero_pregunta', 'texto']);
 
         $totalHojas = DB::table('mb_asambleas_hojas')
-            ->where('id_asambleas', $asamblea->id)
+            ->where('id_asambleas', $idAsamblea)
             ->where('deleted', 0)
             ->count();
 
-        return view('mb.asamblea-recuento', [
-            'project'    => $project,
-            'asamblea'   => $asamblea,
-            'preguntas'  => $preguntas,
-            'totalHojas' => $totalHojas,
-            'tallies'    => $this->tallies($asamblea->id),
-        ]);
+        $hojasRecontadas = DB::table('mb_asambleas_votos')
+            ->where('id_asambleas', $idAsamblea)
+            ->distinct()
+            ->count('numero_hoja');
+
+        $ultimaActividad = DB::table('mb_asambleas_votos')
+            ->where('id_asambleas', $idAsamblea)
+            ->select('numero_hoja', DB::raw('MAX(fecha) as ultima'))
+            ->groupBy('numero_hoja')
+            ->pluck('ultima', 'numero_hoja');
+
+        $hojas = DB::table('mb_asambleas_hojas as ah')
+            ->join('mb_viviendas as v', 'v.id', '=', 'ah.id_viviendas')
+            ->where('ah.id_asambleas', $idAsamblea)
+            ->where('ah.deleted', 0)
+            ->get(['ah.numero_hoja', 'v.nombre'])
+            ->map(function ($h) use ($ultimaActividad) {
+                $h->ultima_actividad = $ultimaActividad[$h->numero_hoja] ?? null;
+                return $h;
+            });
+
+        $conActividad = $hojas->filter(fn($h) => $h->ultima_actividad !== null)->sortByDesc('ultima_actividad')->values();
+        $sinActividad = $hojas->filter(fn($h) => $h->ultima_actividad === null)->sortBy('numero_hoja')->values();
+        $hojasOrdenadas = $conActividad->concat($sinActividad)->values();
+
+        $votos = DB::table('mb_asambleas_votos')
+            ->where('id_asambleas', $idAsamblea)
+            ->get(['numero_hoja', 'numero_pregunta', 'voto']);
+
+        $votosPorHoja = [];
+        foreach ($votos as $v) {
+            $votosPorHoja[$v->numero_hoja][$v->numero_pregunta] = $v->voto;
+        }
+
+        return [
+            'preguntas'       => $preguntas,
+            'totalHojas'      => $totalHojas,
+            'hojasRecontadas' => $hojasRecontadas,
+            'tallies'         => $this->tallies($idAsamblea),
+            'hojas'           => $hojasOrdenadas,
+            'votosPorHoja'    => $votosPorHoja,
+        ];
     }
 
     public function backoffice(Request $request, Project $project)
@@ -62,71 +94,24 @@ class AsambleaRecuentoController extends Controller
 
         abort_if(!$asamblea, 404, 'No hay ninguna asamblea creada todavía.');
 
-        $preguntas = DB::table('mb_asambleas_preguntas')
-            ->where('id_asambleas', $asamblea->id)
-            ->where('deleted', 0)
-            ->orderBy('numero_pregunta')
-            ->get(['numero_pregunta', 'texto']);
-
-        $totalHojas = DB::table('mb_asambleas_hojas')
-            ->where('id_asambleas', $asamblea->id)
-            ->where('deleted', 0)
-            ->count();
-
-        return view('mb.asamblea-recuento-backoffice', [
-            'project'    => $project,
-            'asamblea'   => $asamblea,
-            'preguntas'  => $preguntas,
-            'totalHojas' => $totalHojas,
-            'tallies'    => $this->tallies($asamblea->id),
-            'breadcrumb' => [
-                ['label' => 'Asambleas', 'url' => route('listado', [$project->slug, 'asambleas'])],
-                ['label' => 'Recuento en directo', 'url' => ''],
-            ],
-        ]);
+        return view('mb.asamblea-recuento-backoffice', array_merge(
+            $this->estado($asamblea->id),
+            [
+                'project'    => $project,
+                'asamblea'   => $asamblea,
+                'breadcrumb' => [
+                    ['label' => 'Asambleas', 'url' => route('listado', [$project->slug, 'asambleas'])],
+                    ['label' => 'Recuento en directo', 'url' => ''],
+                ],
+            ]
+        ));
     }
 
-    public function listado(Request $request, Project $project)
+    public function estadoRefresh(Request $request, Project $project)
     {
-        $asamblea = $request->filled('id_asamblea')
-            ? DB::table('mb_asambleas')->where('id', $request->id_asamblea)->where('deleted', 0)->first()
-            : DB::table('mb_asambleas')->where('deleted', 0)->orderByDesc('fecha')->first();
+        $idAsamblea = (int) $request->id_asamblea;
 
-        abort_if(!$asamblea, 404, 'No hay ninguna asamblea creada todavía.');
-
-        $preguntas = DB::table('mb_asambleas_preguntas')
-            ->where('id_asambleas', $asamblea->id)
-            ->where('deleted', 0)
-            ->orderBy('numero_pregunta')
-            ->get(['numero_pregunta', 'texto']);
-
-        $hojas = DB::table('mb_asambleas_hojas as ah')
-            ->join('mb_viviendas as v', 'v.id', '=', 'ah.id_viviendas')
-            ->where('ah.id_asambleas', $asamblea->id)
-            ->where('ah.deleted', 0)
-            ->orderBy('ah.numero_hoja')
-            ->get(['ah.numero_hoja', 'v.nombre']);
-
-        $votos = DB::table('mb_asambleas_votos')
-            ->where('id_asambleas', $asamblea->id)
-            ->get(['numero_hoja', 'numero_pregunta', 'voto']);
-
-        $votosPorHoja = [];
-        foreach ($votos as $v) {
-            $votosPorHoja[$v->numero_hoja][$v->numero_pregunta] = $v->voto;
-        }
-
-        return view('mb.asamblea-recuento-listado', [
-            'project'      => $project,
-            'asamblea'     => $asamblea,
-            'preguntas'    => $preguntas,
-            'hojas'        => $hojas,
-            'votosPorHoja' => $votosPorHoja,
-            'breadcrumb'   => [
-                ['label' => 'Asambleas', 'url' => route('listado', [$project->slug, 'asambleas'])],
-                ['label' => 'Listado de votos', 'url' => ''],
-            ],
-        ]);
+        return response()->json($this->estado($idAsamblea));
     }
 
     public function eliminarVoto(Request $request, Project $project)
@@ -135,8 +120,10 @@ class AsambleaRecuentoController extends Controller
             return response()->json(['error' => 'Faltan datos.'], 422);
         }
 
+        $idAsamblea = (int) $request->id_asamblea;
+
         $borrados = DB::table('mb_asambleas_votos')
-            ->where('id_asambleas', (int) $request->id_asamblea)
+            ->where('id_asambleas', $idAsamblea)
             ->where('numero_hoja', (int) $request->numero_hoja)
             ->where('numero_pregunta', (int) $request->numero_pregunta)
             ->delete();
@@ -145,14 +132,7 @@ class AsambleaRecuentoController extends Controller
             return response()->json(['error' => 'No se encontró ese voto.'], 404);
         }
 
-        return response()->json(['ok' => true]);
-    }
-
-    public function tallyRefresh(Request $request, Project $project)
-    {
-        $idAsamblea = (int) $request->id_asamblea;
-
-        return response()->json(['tallies' => $this->tallies($idAsamblea)]);
+        return response()->json(array_merge(['ok' => true], $this->estado($idAsamblea)));
     }
 
     public function registrarVoto(Request $request, Project $project)
@@ -182,18 +162,17 @@ class AsambleaRecuentoController extends Controller
             ]);
         } catch (\Illuminate\Database\QueryException $e) {
             if ($e->getCode() === '23505') { // unique_violation (Postgres)
-                return response()->json([
+                return response()->json(array_merge([
                     'ok' => false, 'duplicado' => true,
                     'numero_hoja' => $numeroHoja, 'numero_pregunta' => $numeroPregunta, 'voto' => $voto,
-                ]);
+                ], $this->estado($idAsamblea)));
             }
             throw $e;
         }
 
-        return response()->json([
+        return response()->json(array_merge([
             'ok' => true,
             'numero_hoja' => $numeroHoja, 'numero_pregunta' => $numeroPregunta, 'voto' => $voto,
-            'tallies' => $this->tallies($idAsamblea),
-        ]);
+        ], $this->estado($idAsamblea)));
     }
 }
