@@ -90,7 +90,8 @@ button.secundario.naranja:active { background:#ea580c; }
   <div id="panel-resultado" class="oculto">
     <div class="card">
       <p class="res-nombre" id="res-nombre"></p>
-      <p class="res-nombre" id="res-id" style="margin:-6px 0 12px;"></p>
+      <p class="res-nombre" id="res-id" style="margin:-6px 0 4px;"></p>
+      <p class="hoja-actual" id="res-propietario" style="margin:0 0 12px;"></p>
       <span class="badge" id="res-deuda"></span>
       <p class="hoja-actual" id="res-hoja-actual"></p>
       <p class="res-nombre oculto" id="res-hoja-escaneada" style="text-transform:uppercase;margin:10px 0 0;"></p>
@@ -176,6 +177,7 @@ function mostrarResultado(v) {
   document.getElementById('panel-confirmado').classList.add('oculto');
   document.getElementById('res-nombre').textContent = v.nombre;
   document.getElementById('res-id').textContent = 'ID ' + v.id;
+  document.getElementById('res-propietario').textContent = v.propietario ? 'Propietario: ' + v.propietario : 'Sin propietario registrado';
   document.getElementById('res-nombre').classList.toggle('con-deuda', v.deuda > 0);
   document.getElementById('res-id').classList.toggle('con-deuda', v.deuda > 0);
   const badge = document.getElementById('res-deuda');

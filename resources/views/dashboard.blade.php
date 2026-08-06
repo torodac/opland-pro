@@ -272,7 +272,7 @@
           <tr data-id-usuario="{{ $c->id_usuario }}" data-fecha="{{ $c->fecha }}" data-tipo="{{ $c->tipo }}">
             <td style="font-weight:500;">{{ $c->usuario }}</td>
             <td>
-              <a href="{{ url($project->slug . '/horario') }}?semana={{ $lunes }}"
+              <a href="{{ route('horario', $project->slug) }}?semana={{ $lunes }}"
                  style="color:#185FA5;text-decoration:none;font-size:12px;">
                 {{ \Carbon\Carbon::parse($c->fecha)->translatedFormat('d M Y') }}
               </a>

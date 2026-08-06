@@ -16,6 +16,14 @@ class AsambleaRepartoController extends Controller
                           WHERE c.id_viviendas = v.id AND c.estado NOT IN ('Anulada','Incobrable') AND c.pendiente > 0), 0) as deuda");
     }
 
+    private function propietarioSubquery()
+    {
+        return DB::raw("(SELECT p.nombre FROM mb_propietarios_historico ph
+                          JOIN mb_propietarios p ON p.id = ph.id_propietarios
+                          WHERE ph.id_viviendas = v.id AND ph.deleted = 0
+                          ORDER BY (ph.fecha_hasta IS NULL) DESC, ph.fecha_desde DESC LIMIT 1) as propietario");
+    }
+
     public function index(Request $request, Project $project)
     {
         $asamblea = $request->filled('id_asamblea')
@@ -101,7 +109,7 @@ class AsambleaRepartoController extends Controller
             return response()->json(['error' => 'Falta el código o el id de la vivienda.'], 422);
         }
 
-        $vivienda = $query->select(['v.id', 'v.nombre', $this->deudaSubquery()])->first();
+        $vivienda = $query->select(['v.id', 'v.nombre', $this->deudaSubquery(), $this->propietarioSubquery()])->first();
 
         if (!$vivienda) {
             return response()->json(['error' => 'Tarjeta no reconocida.'], 404);
@@ -117,6 +125,7 @@ class AsambleaRepartoController extends Controller
             'id'          => $vivienda->id,
             'nombre'      => $vivienda->nombre,
             'deuda'       => (float) $vivienda->deuda,
+            'propietario' => $vivienda->propietario,
             'hoja_actual' => $hojaActual,
         ]);
     }

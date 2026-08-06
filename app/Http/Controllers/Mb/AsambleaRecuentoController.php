@@ -150,8 +150,18 @@ class AsambleaRecuentoController extends Controller
         $numeroPregunta = (int) $m[2];
         $voto           = strtoupper($m[3]);
 
-        try {
-            DB::table('mb_asambleas_votos')->insert([
+        $anterior = DB::table('mb_asambleas_votos')
+            ->where('id_asambleas', $idAsamblea)
+            ->where('numero_hoja', $numeroHoja)
+            ->where('numero_pregunta', $numeroPregunta)
+            ->value('voto');
+
+        // Un segundo escaneo de la misma hoja+pregunta corrige el voto anterior (por si se
+        // escaneó la respuesta equivocada), en vez de rechazarse como duplicado. createuser
+        // y createdat no se tocan en la corrección: solo se actualiza voto y fecha (esta
+        // última es la que determina qué hoja aparece arriba del listado por actividad).
+        DB::table('mb_asambleas_votos')->upsert(
+            [
                 'id_asambleas'    => $idAsamblea,
                 'numero_hoja'     => $numeroHoja,
                 'numero_pregunta' => $numeroPregunta,
@@ -159,20 +169,16 @@ class AsambleaRecuentoController extends Controller
                 'fecha'           => now(),
                 'createuser'      => Auth::id(),
                 'createdat'       => now(),
-            ]);
-        } catch (\Illuminate\Database\QueryException $e) {
-            if ($e->getCode() === '23505') { // unique_violation (Postgres)
-                return response()->json(array_merge([
-                    'ok' => false, 'duplicado' => true,
-                    'numero_hoja' => $numeroHoja, 'numero_pregunta' => $numeroPregunta, 'voto' => $voto,
-                ], $this->estado($idAsamblea)));
-            }
-            throw $e;
-        }
+            ],
+            ['id_asambleas', 'numero_hoja', 'numero_pregunta'],
+            ['voto', 'fecha']
+        );
 
         return response()->json(array_merge([
-            'ok' => true,
+            'ok'          => true,
             'numero_hoja' => $numeroHoja, 'numero_pregunta' => $numeroPregunta, 'voto' => $voto,
+            'corregido'   => $anterior !== null && $anterior !== $voto,
+            'anterior'    => $anterior,
         ], $this->estado($idAsamblea)));
     }
 }

@@ -84,6 +84,7 @@ class BreezewaySyncTasksCommand extends Command
         $actualizadas = 0;
         $omitidas = 0;
         $imputacionesCreadas = 0;
+        $imputacionesActualizadas = 0;
         $fotosDescargadas = 0;
         $pendientesVistos = []; // breezeway_id => ['nombre'=>..., 'count'=>n]
         $errores = 0;
@@ -211,13 +212,27 @@ class BreezewaySyncTasksCommand extends Command
                     $tipoImputacion = $dept === 'housekeeping' ? 'limpieza' : 'mantenimiento';
                     $fechaImp = isset($task['finished_at']) ? substr($task['finished_at'], 0, 10) : ($task['scheduled_date'] ?? now()->toDateString());
                     foreach ($controlUserIds as $uid) {
-                        $yaExiste = DB::table('vm_imputaciones')
+                        $existente = DB::table('vm_imputaciones')
                             ->where('tipo', $tipoImputacion)
                             ->where('id_tarea', $tareaId)
                             ->where('id_usuario', $uid)
                             ->where('observacion', 'LIKE', '[Breezeway]%')
-                            ->exists();
-                        if ($yaExiste) continue;
+                            ->first(['id', 'duracion']);
+
+                        // Breezeway permite corregir a posteriori la hora fichada de una tarea ya
+                        // finalizada (total_time cambia sin que cambie el estado); si la duracion
+                        // ya importada no coincide con la actual, se corrige en vez de dejarla
+                        // congelada en el primer valor que se vio.
+                        if ($existente) {
+                            if ((int) $existente->duracion !== $duracionMin) {
+                                DB::table('vm_imputaciones')->where('id', $existente->id)->update([
+                                    'duracion'  => $duracionMin,
+                                    'updatedat' => now(),
+                                ]);
+                                $imputacionesActualizadas++;
+                            }
+                            continue;
+                        }
 
                         DB::table('vm_imputaciones')->insert([
                             'tipo'             => $tipoImputacion,
@@ -239,8 +254,9 @@ class BreezewaySyncTasksCommand extends Command
 
         // Segunda pasada: tareas que quedaron sin control_user por asignados sin mapear en su momento —
         // si ya se han dado de alta en Opland, se resuelven ahora sin esperar a que Breezeway "toque" la tarea de nuevo.
-        [$huerfanasResueltas, $impHuerfanas] = $this->resolverTareasHuerfanas($token, $usuariosPorBreezeway, $emailPorBreezewayId, $vmUsuariosPorEmail, $pendientesVistos);
+        [$huerfanasResueltas, $impHuerfanas, $impHuerfanasActualizadas] = $this->resolverTareasHuerfanas($token, $usuariosPorBreezeway, $emailPorBreezewayId, $vmUsuariosPorEmail, $pendientesVistos);
         $imputacionesCreadas += $impHuerfanas;
+        $imputacionesActualizadas += $impHuerfanasActualizadas;
 
         // Mantener vm_breezeway_pendientes: upsert de lo visto, borrar lo ya mapeado. Los que
         // Breezeway ya marca como inactivos (baja) no se avisan -- son ex-empleados, no huecos
@@ -318,8 +334,8 @@ class BreezewaySyncTasksCommand extends Command
             'errores'     => $errores,
         ]);
 
-        $this->info("Resultado: {$creadas} creadas, {$actualizadas} actualizadas, {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones, {$fotosDescargadas} fotos, {$descartadas} descartadas, {$ocultadas} ocultadas, {$errores} errores de propiedad.");
-        Log::info("BreezewaySyncTasks: {$creadas} creadas, {$actualizadas} actualizadas, {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones, {$fotosDescargadas} fotos, {$descartadas} descartadas, {$ocultadas} ocultadas, {$errores} errores.");
+        $this->info("Resultado: {$creadas} creadas, {$actualizadas} actualizadas, {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$descartadas} descartadas, {$ocultadas} ocultadas, {$errores} errores de propiedad.");
+        Log::info("BreezewaySyncTasks: {$creadas} creadas, {$actualizadas} actualizadas, {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$descartadas} descartadas, {$ocultadas} ocultadas, {$errores} errores.");
     }
 
     // Tareas que quedaron con control_user vacío por asignados sin mapear en su momento (marcadas en
@@ -328,6 +344,7 @@ class BreezewaySyncTasksCommand extends Command
     {
         $actualizadas = 0;
         $impCreadas = 0;
+        $impActualizadas = 0;
         $tablas = ['vm_tareas_limpieza' => 'limpieza', 'vm_tareas_mantenimiento' => 'mantenimiento'];
 
         foreach ($tablas as $tableName => $tipoImputacion) {
@@ -389,13 +406,23 @@ class BreezewaySyncTasksCommand extends Command
                 if ($duracionMin !== null) {
                     $fechaImp = isset($task['finished_at']) ? substr($task['finished_at'], 0, 10) : ($task['scheduled_date'] ?? now()->toDateString());
                     foreach ($controlUserIds as $uid) {
-                        $yaExiste = DB::table('vm_imputaciones')
+                        $existente = DB::table('vm_imputaciones')
                             ->where('tipo', $tipoImputacion)
                             ->where('id_tarea', $t->id)
                             ->where('id_usuario', $uid)
                             ->where('observacion', 'LIKE', '[Breezeway]%')
-                            ->exists();
-                        if ($yaExiste) continue;
+                            ->first(['id', 'duracion']);
+
+                        if ($existente) {
+                            if ((int) $existente->duracion !== $duracionMin) {
+                                DB::table('vm_imputaciones')->where('id', $existente->id)->update([
+                                    'duracion'  => $duracionMin,
+                                    'updatedat' => now(),
+                                ]);
+                                $impActualizadas++;
+                            }
+                            continue;
+                        }
 
                         DB::table('vm_imputaciones')->insert([
                             'tipo'             => $tipoImputacion,
@@ -413,7 +440,7 @@ class BreezewaySyncTasksCommand extends Command
             }
         }
 
-        return [$actualizadas, $impCreadas];
+        return [$actualizadas, $impCreadas, $impActualizadas];
     }
 
     // Candidatas a "Descartada" por silencio de 15 dias (ni actualizacion ni fecha planificada

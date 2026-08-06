@@ -55,6 +55,7 @@
   <div id="rb-seleccion" class="rb-seleccion">
     <span id="rb-sel-nombre"></span>
     <span id="rb-sel-id" style="font-weight:700;margin-left:8px"></span>
+    <span id="rb-sel-propietario" style="color:#7e93a1;margin-left:10px"></span>
     <span id="rb-sel-badge"></span>
     <span id="rb-sel-hoja-actual" style="color:#7e93a1;margin-left:10px"></span>
   </div>
@@ -134,6 +135,7 @@ async function seleccionarVivienda(id) {
   viviendaSeleccionada = data;
   document.getElementById('rb-sel-nombre').textContent = data.nombre;
   document.getElementById('rb-sel-id').textContent = 'ID ' + data.id;
+  document.getElementById('rb-sel-propietario').textContent = data.propietario ? 'Propietario: ' + data.propietario : 'Sin propietario registrado';
   const badge = document.getElementById('rb-sel-badge');
   if (data.deuda > 0) {
     badge.className = 'rb-badge rb-badge-con';
