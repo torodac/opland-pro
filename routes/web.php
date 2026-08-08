@@ -216,6 +216,8 @@ Route::middleware('auth')->group(function () {
             ->name('vm.tarea.update');
 
         Route::middleware('table.access:fichaje')->group(function () {
+            Route::get('fichaje_form/nuevo', [\App\Http\Controllers\Vm\FichajeController::class, 'create'])->name('vm.fichaje_form.nuevo');
+            Route::post('fichaje_form',      [\App\Http\Controllers\Vm\FichajeController::class, 'store'])->name('vm.fichaje_form.store');
             Route::get('fichajes/{id}',      [\App\Http\Controllers\Vm\FichajeController::class, 'show'])->where(['id' => '[0-9]+'])->name('vm.fichaje');
             Route::get('fichaje_form/{id}',  [\App\Http\Controllers\Vm\FichajeController::class, 'show'])->where(['id' => '[0-9]+'])->name('vm.fichaje_form');
             Route::patch('fichajes/{id}',    [\App\Http\Controllers\Vm\FichajeController::class, 'update'])->where(['id' => '[0-9]+'])->name('vm.fichaje.update');

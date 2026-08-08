@@ -10,6 +10,138 @@ use Illuminate\Support\Facades\DB;
 
 class FichajeController extends Controller
 {
+    // Roles con privilegios ampliados sobre fichajes: Dirección general (3) y Director RRHH (11).
+    // Mismo criterio que ya usaba update() para saltarse el límite de 2 días al editar.
+    private const ROLES_SIN_LIMITE = [3, 11];
+
+    // Mismo criterio que FichaController::resolveVisibleUserIds() (visibilidad estándar de
+    // control_user en toda la plataforma, según todos_registros/roles_supervisados del rol).
+    private function resolveVisibleUserIds(Project $project): ?array
+    {
+        $user = auth()->user();
+        if (!$user || $user->isProjectAdmin($project)) return null;
+
+        $projectUserId = $user->projectUserId($project);
+        if (!$projectUserId) return null;
+
+        $role = $user->getProjectRolePublic($project);
+        if (!$role || ($role->todos_registros ?? null) === 'todos') return null;
+
+        if (($role->todos_registros ?? null) === 'supervisados') {
+            return \App\Services\RoleHierarchy::visibleUserIds(
+                $project->slug . '_roles',
+                $project->slug . '_usuarios',
+                (int) $projectUserId,
+                (int) $role->id
+            );
+        }
+
+        return [(string) $projectUserId];
+    }
+
+    public function create(Project $project)
+    {
+        abort_unless(auth()->user()->canViewTable($project, 'fichaje'), 403);
+
+        $authUserId = auth()->user()->projectUserId($project);
+
+        $visibleIds = $this->resolveVisibleUserIds($project);
+        $usuarios = DB::table('vm_usuarios')->where('deleted', 0)
+            ->when($visibleIds !== null, fn($q) => $q->whereIn('id', $visibleIds))
+            ->orderBy('nombre')
+            ->get(['id', 'nombre']);
+
+        return view('vm.fichaje-nuevo', [
+            'project'         => $project,
+            'usuarios'        => $usuarios,
+            'controlUserPorDefecto' => $authUserId,
+            'fechaPorDefecto' => now()->toDateString(),
+            'breadcrumb'      => [
+                ['label' => 'Fichajes', 'url' => route('listado', [$project->slug, 'fichaje'])],
+                ['label' => 'Nuevo', 'url' => ''],
+            ],
+        ]);
+    }
+
+    public function store(Request $request, Project $project)
+    {
+        abort_unless(auth()->user()->canViewTable($project, 'fichaje'), 403);
+
+        $user       = auth()->user();
+        $authUserId = $user->projectUserId($project);
+        $authRol    = $authUserId
+            ? DB::table($project->slug . '_usuarios')->where('id', $authUserId)->value('id_rol')
+            : null;
+        $puedeSinLimiteFecha = $user->isAdmin()
+            || $user->isProjectAdmin($project)
+            || in_array((int) $authRol, self::ROLES_SIN_LIMITE);
+
+        $data = $request->validate([
+            'control_user'   => 'required|integer',
+            'fecha_fichaje'  => 'required|date',
+            'hora_inicio'    => 'nullable|date_format:H:i',
+            'hora_fin'       => 'nullable|date_format:H:i',
+            'pausa_inicio'   => 'nullable|date_format:H:i',
+            'pausa_fin'      => 'nullable|date_format:H:i',
+            'festivo'        => 'nullable|boolean',
+            'fuera_de_turno' => 'nullable|boolean',
+            'observacion'    => 'nullable|string|max:1000',
+        ]);
+
+        // Visibilidad: el control_user elegido tiene que estar dentro de lo que el usuario puede ver/crear.
+        $visibleIds = $this->resolveVisibleUserIds($project);
+        if ($visibleIds !== null && !in_array((string) $data['control_user'], $visibleIds, true)) {
+            return back()->withInput()->withErrors(['control_user' => 'No tienes permiso para fichar por ese empleado.']);
+        }
+
+        if ($data['fecha_fichaje'] > now()->toDateString()) {
+            return back()->withInput()->withErrors(['fecha_fichaje' => 'No se puede crear un fichaje de una fecha futura.']);
+        }
+
+        if (!$puedeSinLimiteFecha && $data['fecha_fichaje'] < now()->subDays(2)->toDateString()) {
+            return back()->withInput()->withErrors(['fecha_fichaje' => 'Solo se pueden crear fichajes de los últimos 2 días.']);
+        }
+
+        $horarioError = \App\Services\FichajeValidator::validarHorario(
+            $data['hora_inicio']  ?? null,
+            $data['hora_fin']     ?? null,
+            $data['pausa_inicio'] ?? null,
+            $data['pausa_fin']    ?? null,
+        );
+        if ($horarioError) {
+            return back()->withInput()->withErrors(['hora_fin' => $horarioError]);
+        }
+
+        $yaExiste = DB::table('vm_fichaje')
+            ->where('control_user', $data['control_user'])
+            ->where('fecha_fichaje', $data['fecha_fichaje'])
+            ->where('deleted', 0)
+            ->exists();
+        if ($yaExiste) {
+            return back()->withInput()->withErrors(['fecha_fichaje' => 'Ese empleado ya tiene un fichaje ese día.']);
+        }
+
+        $nombreUsuario = DB::table('vm_usuarios')->where('id', $data['control_user'])->value('nombre');
+
+        $id = DB::table('vm_fichaje')->insertGetId([
+            'nombre'         => $data['fecha_fichaje'] . '_' . $nombreUsuario,
+            'control_user'   => $data['control_user'],
+            'fecha_fichaje'  => $data['fecha_fichaje'],
+            'hora_inicio'    => $data['hora_inicio']  ?? null,
+            'hora_fin'       => $data['hora_fin']     ?? null,
+            'pausa_inicio'   => $data['pausa_inicio'] ?? null,
+            'pausa_fin'      => $data['pausa_fin']    ?? null,
+            'festivo'        => (int) ($data['festivo'] ?? 0),
+            'fuera_de_turno' => (int) ($data['fuera_de_turno'] ?? 0),
+            'observacion'    => $data['observacion'] ?? null,
+            'deleted'        => 0,
+            'createuser'     => $authUserId,
+            'createdat'      => now(),
+        ]);
+
+        return redirect()->route('vm.fichaje_form', [$project->slug, $id]);
+    }
+
     public function show(Project $project, int $id)
     {
         abort_unless(auth()->user()->canViewTable($project, 'fichaje'), 403);
