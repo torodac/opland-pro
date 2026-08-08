@@ -13,7 +13,8 @@ class AsambleaRepartoController extends Controller
     private function deudaSubquery()
     {
         return DB::raw("COALESCE((SELECT SUM(c.pendiente) FROM mb_cuotas c
-                          WHERE c.id_viviendas = v.id AND c.estado NOT IN ('Anulada','Incobrable') AND c.pendiente > 0), 0) as deuda");
+                          WHERE c.id_viviendas = v.id AND c.estado NOT IN ('Anulada','Incobrable') AND c.pendiente > 0
+                          AND c.tipo_cuota NOT IN ('G.dev.','Dudoso','Entrega a cuenta')), 0) as deuda");
     }
 
     private function propietarioSubquery()

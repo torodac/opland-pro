@@ -301,6 +301,10 @@ Route::middleware('auth')->group(function () {
             Route::get('pyg', [\App\Http\Controllers\Mb\DesgloseContableController::class, 'index'])->where('project', 'mb')->name('mb.pyg');
             Route::get('pyg/movimientos', [\App\Http\Controllers\Mb\DesgloseContableController::class, 'movimientos'])->where('project', 'mb')->name('mb.pyg.movimientos');
 
+            // Prueba: carga del informe de recibos contra mb_cuotas_provisional (no toca mb_cuotas real).
+            Route::get('cuotas_import', [\App\Http\Controllers\Mb\CuotasImportController::class, 'index'])->where('project', 'mb')->name('mb.cuotas_import');
+            Route::post('cuotas_import/import', [\App\Http\Controllers\Mb\CuotasImportController::class, 'import'])->where('project', 'mb')->name('mb.cuotas_import.import');
+
             // Sustituye al listado genérico de "viviendas" (mismo motivo que "pyg" arriba: ->where('project','mb')
             // para que el comodín genérico {table} siga funcionando igual para cualquier otro proyecto).
             Route::get('viviendas', [\App\Http\Controllers\Mb\ViviendasController::class, 'index'])->where('project', 'mb')->name('mb.viviendas');

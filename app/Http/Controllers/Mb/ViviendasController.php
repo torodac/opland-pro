@@ -15,6 +15,10 @@ class ViviendasController extends Controller
     // Incobrable/Anulada/Pagada no cuentan como deuda viva.
     private const ESTADOS_DEUDA = ['Pendiente', 'Demandada'];
 
+    // Movimientos informativos en mb_cuotas: se insertan/visualizan, pero no cuentan como
+    // deuda, emisión ni cobro en ningún cálculo (confirmado por el cliente 2026-08-08).
+    private const TIPOS_CUOTA_INFORMATIVOS = ['G.dev.', 'Dudoso', 'Entrega a cuenta'];
+
     private function idAsambleaActual(): ?int
     {
         return DB::table('mb_asambleas')->where('deleted', 0)->orderByDesc('fecha')->value('id');
@@ -42,11 +46,14 @@ class ViviendasController extends Controller
                           WHERE ph.id_viviendas = v.id AND ph.deleted = 0
                           ORDER BY (ph.fecha_hasta IS NULL) DESC, ph.fecha_desde DESC LIMIT 1) as ultimo_propietario"),
                 DB::raw("COALESCE((SELECT SUM(c.pendiente) FROM mb_cuotas c
-                          WHERE c.id_viviendas = v.id AND c.estado NOT IN ('Anulada','Incobrable') AND c.pendiente > 0), 0) as deuda_acumulada"),
+                          WHERE c.id_viviendas = v.id AND c.estado NOT IN ('Anulada','Incobrable') AND c.pendiente > 0
+                          AND c.tipo_cuota NOT IN ('G.dev.','Dudoso','Entrega a cuenta')), 0) as deuda_acumulada"),
                 DB::raw("COALESCE((SELECT COUNT(*) FROM mb_cuotas c
-                          WHERE c.id_viviendas = v.id AND c.estado = 'Pendiente'), 0) as cuotas_ptes"),
+                          WHERE c.id_viviendas = v.id AND c.estado = 'Pendiente'
+                          AND c.tipo_cuota NOT IN ('G.dev.','Dudoso','Entrega a cuenta')), 0) as cuotas_ptes"),
                 DB::raw("COALESCE((SELECT COUNT(*) FROM mb_cuotas c
-                          WHERE c.id_viviendas = v.id AND c.estado = 'Demandada'), 0) as cuotas_demandadas"),
+                          WHERE c.id_viviendas = v.id AND c.estado = 'Demandada'
+                          AND c.tipo_cuota NOT IN ('G.dev.','Dudoso','Entrega a cuenta')), 0) as cuotas_demandadas"),
                 DB::raw("(SELECT ah.numero_hoja FROM mb_asambleas_hojas ah
                           WHERE ah.id_viviendas = v.id AND ah.id_asambleas = {$idAsamblea} AND ah.deleted = 0
                           LIMIT 1) as voto"),
@@ -83,6 +90,7 @@ class ViviendasController extends Controller
         $cuotasPorVivienda = DB::table('mb_cuotas')
             ->whereIn('id_viviendas', $viviendas->pluck('id'))
             ->whereNotIn('estado', ['Anulada', 'Incobrable'])
+            ->whereNotIn('tipo_cuota', self::TIPOS_CUOTA_INFORMATIVOS)
             ->where('pendiente', '>', 0)
             ->orderByDesc('fecha_emision')
             ->get(['id', 'id_viviendas', 'ejercicio', 'tipo_cuota', 'fecha_emision', 'estado', 'importe', 'pendiente'])
@@ -103,6 +111,7 @@ class ViviendasController extends Controller
         $importeADemandar = (float) DB::table('mb_cuotas')
             ->whereIn('id_viviendas', $viviendasADemandar)
             ->whereIn('estado', self::ESTADOS_DEUDA)
+            ->whereNotIn('tipo_cuota', self::TIPOS_CUOTA_INFORMATIVOS)
             ->sum('pendiente');
 
         $totalAdheridas = DB::table('mb_viviendas')
@@ -136,6 +145,7 @@ class ViviendasController extends Controller
             $cuotasPorVivienda = DB::table('mb_cuotas')
                 ->whereIn('id_viviendas', $viviendas->pluck('id'))
                 ->whereNotIn('estado', ['Anulada', 'Incobrable'])
+                ->whereNotIn('tipo_cuota', self::TIPOS_CUOTA_INFORMATIVOS)
                 ->where('pendiente', '>', 0)
                 ->orderByDesc('fecha_emision')
                 ->get(['id_viviendas', 'ejercicio', 'tipo_cuota', 'fecha_emision', 'estado', 'importe', 'pendiente'])
@@ -160,6 +170,7 @@ class ViviendasController extends Controller
         return DB::table('mb_cuotas')
             ->where('estado', 'Pendiente')
             ->where('pendiente', '>', 0)
+            ->whereNotIn('tipo_cuota', self::TIPOS_CUOTA_INFORMATIVOS)
             ->whereRaw("(fecha_emision + INTERVAL '5 years') BETWEEN ? AND ?", [$nextStart, $nextEnd])
             ->distinct()
             ->pluck('id_viviendas')

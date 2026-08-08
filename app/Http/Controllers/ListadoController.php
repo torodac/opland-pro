@@ -14,6 +14,10 @@ use App\Services\RoleHierarchy;
 
 class ListadoController extends Controller
 {
+    // Movimientos informativos en mb_cuotas: se insertan/visualizan, pero no cuentan como
+    // deuda, emisión ni cobro en ningún cálculo (confirmado por el cliente 2026-08-08).
+    private const TIPOS_CUOTA_INFORMATIVOS = ['G.dev.', 'Dudoso', 'Entrega a cuenta'];
+
     public function index(Request $request, Project $project, string $table)
     {
         $projectTable = $project->tables()
@@ -251,6 +255,7 @@ class ListadoController extends Controller
             $ejercicioSel = $request->input('ejercicio') ?: $this->ejercicioActualCuotas();
             $rangoSel     = $this->ejercicioRango($ejercicioSel);
             $anioSel      = (int) substr($ejercicioSel, 0, 4);
+            $query->whereNotIn('tipo_cuota', self::TIPOS_CUOTA_INFORMATIVOS);
             match ($stat) {
                 'emitido_anio'       => $query->where('ejercicio', $ejercicioSel)->where('estado', '!=', 'Anulada'),
                 'pendiente_anio'     => $query->where('ejercicio', $ejercicioSel)->where('estado', '!=', 'Anulada')->where('pendiente', '>', 0),
@@ -464,6 +469,7 @@ class ListadoController extends Controller
         return DB::table('mb_cuotas')
             ->where('estado', 'Pendiente')
             ->where('pendiente', '>', 0)
+            ->whereNotIn('tipo_cuota', self::TIPOS_CUOTA_INFORMATIVOS)
             ->whereRaw("(fecha_emision + INTERVAL '5 years') BETWEEN ? AND ?", [$nextStart, $nextEnd])
             ->distinct()
             ->pluck('id_viviendas')
@@ -502,6 +508,7 @@ class ListadoController extends Controller
             ->join('mb_viviendas as v', 'v.id', '=', 'c.id_viviendas')
             ->where('c.estado', 'Pendiente')
             ->where('c.pendiente', '>', 0)
+            ->whereNotIn('c.tipo_cuota', self::TIPOS_CUOTA_INFORMATIVOS)
             ->where('v.deleted', 0)
             ->get(['c.id_viviendas', 'v.nombre', 'c.fecha_emision', 'c.pendiente']);
 
@@ -546,17 +553,19 @@ class ListadoController extends Controller
 
     private function cuotasStats(string $ejercicioActual): array
     {
+        $sinInformativos = fn() => DB::table('mb_cuotas')->whereNotIn('tipo_cuota', self::TIPOS_CUOTA_INFORMATIVOS);
+
         // Importe total emitido (suma de importe, sin filtrar por estado de cobro) para el ejercicio.
-        $emitidoAnioSum = (float) DB::table('mb_cuotas')->where('ejercicio', $ejercicioActual)->where('estado', '!=', 'Anulada')->sum('importe');
+        $emitidoAnioSum = (float) $sinInformativos()->where('ejercicio', $ejercicioActual)->where('estado', '!=', 'Anulada')->sum('importe');
 
-        $pendienteAnioSum = (float) DB::table('mb_cuotas')->where('ejercicio', $ejercicioActual)->where('estado', '!=', 'Anulada')->where('pendiente', '>', 0)->sum('pendiente');
+        $pendienteAnioSum = (float) $sinInformativos()->where('ejercicio', $ejercicioActual)->where('estado', '!=', 'Anulada')->where('pendiente', '>', 0)->sum('pendiente');
 
-        $pendienteTotalSum = (float) DB::table('mb_cuotas')->where('estado', '!=', 'Anulada')->where('pendiente', '>', 0)->sum('pendiente');
+        $pendienteTotalSum = (float) $sinInformativos()->where('estado', '!=', 'Anulada')->where('pendiente', '>', 0)->sum('pendiente');
 
-        $demandadoSum = (float) DB::table('mb_cuotas')->where('estado', 'Demandada')->sum('pendiente');
+        $demandadoSum = (float) $sinInformativos()->where('estado', 'Demandada')->sum('pendiente');
 
         $viviendasIds   = $this->viviendasProximasAPrescribir();
-        $aDemandarBase  = fn() => DB::table('mb_cuotas')->whereIn('id_viviendas', $viviendasIds)->where('estado', 'Pendiente')->where('pendiente', '>', 0);
+        $aDemandarBase  = fn() => $sinInformativos()->whereIn('id_viviendas', $viviendasIds)->where('estado', 'Pendiente')->where('pendiente', '>', 0);
         $aDemandarSum   = (float) $aDemandarBase()->sum('pendiente');
 
         // Cobros: cuotas Pagadas con fecha_pago dentro del ejercicio seleccionado, separando
@@ -566,13 +575,13 @@ class ListadoController extends Controller
 
         // importe_cobrado no está fiablemente relleno en los lotes históricos (a menudo 0 aunque la
         // cuota esté Pagada), así que el importe realmente cobrado se calcula como importe - pendiente.
-        $cobradoEjercicioSum = (float) DB::table('mb_cuotas')
+        $cobradoEjercicioSum = (float) $sinInformativos()
             ->where('ejercicio', $ejercicioActual)
             ->where('estado', 'Pagada')
             ->whereBetween('fecha_pago', $rangoActual)
             ->sum(DB::raw('importe - pendiente'));
 
-        $cobradoAnterioresSum = (float) DB::table('mb_cuotas')
+        $cobradoAnterioresSum = (float) $sinInformativos()
             ->whereRaw('CAST(LEFT(ejercicio, 4) AS INTEGER) < ?', [$anioActual])
             ->where('estado', 'Pagada')
             ->whereBetween('fecha_pago', $rangoActual)

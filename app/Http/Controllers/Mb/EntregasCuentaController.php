@@ -10,6 +10,10 @@ use Illuminate\Support\Facades\DB;
 
 class EntregasCuentaController extends Controller
 {
+    // Movimientos informativos en mb_cuotas: se insertan/visualizan, pero no cuentan como
+    // deuda compensable ni en ningún otro cálculo (confirmado por el cliente 2026-08-08).
+    private const TIPOS_CUOTA_INFORMATIVOS = ['G.dev.', 'Dudoso', 'Entrega a cuenta'];
+
     // Registra una entrega a cuenta para una vivienda. Si la vivienda tiene movimientos
     // Pendiente/Demandada con pendiente > 0, devuelve la lista para que el usuario decida
     // manualmente cuáles compensar con el saldo de la entrega (paso 2, ver aplicar()).
@@ -67,6 +71,7 @@ class EntregasCuentaController extends Controller
         $pendientes = DB::table('mb_cuotas')
             ->where('id_viviendas', $vivienda)
             ->whereNotIn('estado', ['Anulada', 'Incobrable'])
+            ->whereNotIn('tipo_cuota', self::TIPOS_CUOTA_INFORMATIVOS)
             ->where('pendiente', '>', 0)
             ->orderBy('fecha_emision')
             ->get(['id', 'fecha_emision', 'concepto', 'ejercicio', 'tipo_cuota', 'estado', 'pendiente']);
@@ -171,6 +176,7 @@ class EntregasCuentaController extends Controller
         return DB::table('mb_cuotas')
             ->where('estado', 'Pendiente')
             ->where('pendiente', '>', 0)
+            ->whereNotIn('tipo_cuota', self::TIPOS_CUOTA_INFORMATIVOS)
             ->whereRaw("(fecha_emision + INTERVAL '5 years') BETWEEN ? AND ?", [$nextStart, $nextEnd])
             ->distinct()
             ->pluck('id_viviendas')
