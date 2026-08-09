@@ -299,10 +299,10 @@ class BreezewaySyncTasksCommand extends Command
             DB::table('vm_breezeway_pendientes')->whereIn('breezeway_id', $idsInactivos)->delete();
         }
 
-        // Descartada: candidatas por silencio de 15 dias (ni actualizacion ni fecha planificada
-        // reciente, sin estado de cierre ya asignado), pero antes de descartarlas de verdad se
-        // confirma contra Breezeway con el endpoint de tarea concreta — si sigue viva, se
-        // autocorrige con su estado real en vez de descartarla por error.
+        // Descartada: candidatas las abiertas con fecha_planificada ya vencida y no comprobadas
+        // hoy todavia, pero antes de descartarlas de verdad se confirma contra Breezeway con el
+        // endpoint de tarea concreta — si sigue viva, se autocorrige con su estado real en vez
+        // de descartarla por error.
         $descartadas = $this->confirmarDescartes($token, $usuariosPorBreezeway, $emailPorBreezewayId, $vmUsuariosPorEmail, $pendientesVistos);
 
         // Ocultar automaticamente: Cancelada y Descartada (siempre), o Completada con al
@@ -443,14 +443,20 @@ class BreezewaySyncTasksCommand extends Command
         return [$actualizadas, $impCreadas, $impActualizadas];
     }
 
-    // Candidatas a "Descartada" por silencio de 15 dias (ni actualizacion ni fecha planificada
-    // reciente). Antes de darlas por perdidas se confirma una a una contra el endpoint de tarea
-    // concreta de Breezeway: si ya no existe o esta marcada como eliminada, se descarta de
-    // verdad; si sigue viva, se autocorrige con su estado real (igual que el bucle principal)
-    // en vez de descartarla por error.
+    // Candidatas a "Descartada": abiertas con fecha_planificada ya vencida (hoy o antes) que no
+    // se hayan comprobado ya hoy mismo -- antes se esperaba a 15 dias de silencio, pero el
+    // listado incremental de Breezeway (--desde, por defecto ultimos 3 dias) deja de traer una
+    // tarea en cuanto se borra o queda parada, asi que esperar 15 dias solo retrasaba la
+    // deteccion sin necesidad (confirmado 2026-08-08: de 219 candidatas vencidas, 114 ya estaban
+    // borradas/terminadas en Breezeway sin que Opland lo supiera). El tope "no comprobada hoy"
+    // evita repetir la llamada individual en cada pasada del cron (corre cada hora, 8-20h).
+    // Antes de darlas por perdidas se confirma una a una contra el endpoint de tarea concreta de
+    // Breezeway: si ya no existe o esta marcada como eliminada, se descarta de verdad; si sigue
+    // viva, se autocorrige con su estado real (igual que el bucle principal) en vez de
+    // descartarla por error.
     private function confirmarDescartes(string $token, array &$usuariosPorBreezeway, array $emailPorBreezewayId, array &$vmUsuariosPorEmail, array &$pendientesAcumulados): int
     {
-        $limiteSilencio = now()->subDays(15);
+        $inicioHoy = now()->startOfDay();
         $descartadas = 0;
 
         foreach (['vm_tareas_limpieza', 'vm_tareas_mantenimiento'] as $tabla) {
@@ -458,8 +464,8 @@ class BreezewaySyncTasksCommand extends Command
                 ->where('deleted', 0)
                 ->whereNotNull('breezeway_task_id')
                 ->whereNotIn('estado', ['Completada', 'Cancelada', 'Descartada'])
-                ->where('updatedat', '<', $limiteSilencio)
-                ->where('fecha_planificada', '<', $limiteSilencio->toDateString())
+                ->where('fecha_planificada', '<=', now()->toDateString())
+                ->where('updatedat', '<', $inicioHoy)
                 ->get(['id', 'breezeway_task_id']);
 
             foreach ($candidatas as $t) {
