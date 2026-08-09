@@ -174,6 +174,7 @@ Route::middleware('auth')->group(function () {
         Route::post('dashboard/validar-fichaje', [DashboardController::class, 'validarFichaje'])->name('vm.dashboard.validar-fichaje');
         Route::post('dashboard/validar-tarea',   [DashboardController::class, 'validarTarea'])->name('vm.dashboard.validar-tarea');
         Route::get('dashboard/fichaje-hoy',      [DashboardController::class, 'fichajeHoy'])->name('vm.dashboard.fichaje-hoy');
+        Route::get('dashboard/carga-semanal',    [DashboardController::class, 'cargaSemanal'])->name('vm.dashboard.carga-semanal');
         Route::post('dashboard/fichaje-entrada', [DashboardController::class, 'fichajeEntrada'])->name('vm.dashboard.fichaje-entrada');
         Route::post('dashboard/fichaje-pausa',   [DashboardController::class, 'fichajePausa'])->name('vm.dashboard.fichaje-pausa');
         Route::post('dashboard/fichaje-salida',  [DashboardController::class, 'fichajeSalida'])->name('vm.dashboard.fichaje-salida');

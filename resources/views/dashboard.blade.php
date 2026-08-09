@@ -20,14 +20,6 @@
 .diff-pos   { color:#28a745; font-weight:500; }
 .diff-neg   { color:#dc3545; font-weight:500; }
 
-/* Tabla 7 días */
-.dias7-table { width:100%; border-collapse:collapse; font-size:12px; }
-.dias7-table th { padding:5px 8px; text-align:center; color:#aaa; font-weight:500; border-bottom:0.5px solid rgba(0,0,0,.06); white-space:nowrap; }
-.dias7-table td { padding:6px 8px; text-align:center; border-bottom:none; }
-.dias7-table .lbl-row td { font-size:11px; color:#aaa; padding-top:4px; }
-.count-cell { font-size:18px; font-weight:600; }
-.count-cell.zero { color:#ddd; }
-.count-cell a { color:inherit; text-decoration:none; }
 [title] { cursor:default; }
 
 /* Fichaje widget */
@@ -69,14 +61,6 @@
   @if($verReservas)
   <div class="db-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:12px;">
     <div class="db-card">
-      <p class="db-title"><i class="ti ti-login-2"></i> Check-ins hoy <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Reservas con fecha de check-in hoy.</span></span></p>
-      <p class="db-count" style="color:#185FA5;">{{ $checkinHoy->count() }}</p>
-    </div>
-    <div class="db-card">
-      <p class="db-title"><i class="ti ti-logout-2"></i> Check-outs hoy <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Reservas con fecha de check-out hoy, ordenadas por tiempo de limpieza descendente.</span></span></p>
-      <p class="db-count" style="color:#0F6E56;">{{ $checkoutHoy->count() }}</p>
-    </div>
-    <div class="db-card">
       <p class="db-title"><i class="ti ti-wash"></i> Limpieza completada sin imputar <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Tareas de limpieza marcadas como Completada que no tienen ninguna imputación de tiempo registrada.</span></span></p>
       <p class="db-count" style="color:#854F0B;">{{ $tareasLimpieza->count() }}</p>
     </div>
@@ -87,126 +71,10 @@
   </div>
   @endif
 
-  {{-- Fila 2: checkins y checkouts hoy -------------------------------------}}
+  {{-- Flujo semanal y carga de limpieza (navegable) ---------------------------}}
   @if($verReservas)
-  <div class="db-grid">
-
-    <div class="db-card">
-      <p class="db-title"><i class="ti ti-login-2"></i> Check-ins hoy <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Reservas con fecha de check-in hoy.</span></span></p>
-      @if($checkinHoy->isEmpty())
-        <p class="empty">Sin check-ins hoy</p>
-      @else
-      <table class="db-table">
-        <thead><tr><th>Propiedad</th></tr></thead>
-        <tbody>
-          @foreach($checkinHoy as $r)
-          <tr><td>{{ $r->vm_propiedades_nombre }}</td></tr>
-          @endforeach
-        </tbody>
-      </table>
-      @endif
-    </div>
-
-    <div class="db-card">
-      <p class="db-title"><i class="ti ti-logout-2"></i> Check-outs hoy <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Reservas con fecha de check-out hoy, ordenadas por tiempo de limpieza descendente.</span></span></p>
-      @if($checkoutHoy->isEmpty())
-        <p class="empty">Sin check-outs hoy</p>
-      @else
-      <table class="db-table">
-        <thead><tr><th>Propiedad</th></tr></thead>
-        <tbody>
-          @foreach($checkoutHoy as $r)
-          <tr><td>{{ $r->vm_propiedades_nombre }}</td></tr>
-          @endforeach
-        </tbody>
-      </table>
-      @endif
-    </div>
-
-  </div>
-  @endif
-
-  {{-- Próximos 7 días — tabla columnas -------------------------------------}}
-  @if($verReservas)
-  <div class="db-grid">
-
-    {{-- Check-ins próximos --}}
-    <div class="db-card">
-      <p class="db-title"><i class="ti ti-login-2"></i> Check-ins próximos 7 días <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Reservas con fecha de check-in en los próximos 7 días, agrupadas por día.</span></span></p>
-      @php $dayLetters = [0=>'D',1=>'L',2=>'M',3=>'X',4=>'J',5=>'V',6=>'S']; @endphp
-      <table class="dias7-table">
-        <thead>
-          <tr>
-            @foreach($dias7 as $dia)
-            @php $c = \Carbon\Carbon::parse($dia); @endphp
-            <th>{{ $dayLetters[$c->dayOfWeek] }}{{ $c->format('j') }}</th>
-            @endforeach
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            @foreach($dias7 as $dia)
-            @php
-              $reservasDia = $checkinProximos[$dia] ?? collect();
-              $tooltip     = $reservasDia->pluck('vm_propiedades_nombre')->implode("\n");
-              $cnt         = $reservasDia->count();
-            @endphp
-            <td class="count-cell {{ $cnt === 0 ? 'zero' : '' }}">
-              @if($tooltip)
-                <span class="app-tooltip">{{ $cnt ?: '·' }}<span class="app-tooltip-box">{{ $tooltip }}</span></span>
-              @else
-                {{ $cnt ?: '·' }}
-              @endif
-            </td>
-            @endforeach
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    {{-- Check-outs próximos --}}
-    <div class="db-card">
-      <p class="db-title"><i class="ti ti-logout-2"></i> Check-outs próximos 7 días <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Reservas con fecha de check-out en los próximos 7 días, agrupadas por día y ordenadas por tiempo de limpieza.</span></span></p>
-      @php $dayLetters = [0=>'D',1=>'L',2=>'M',3=>'X',4=>'J',5=>'V',6=>'S']; @endphp
-      <table class="dias7-table">
-        <thead>
-          <tr>
-            @foreach($dias7 as $dia)
-            @php $c = \Carbon\Carbon::parse($dia); @endphp
-            <th>{{ $dayLetters[$c->dayOfWeek] }}{{ $c->format('j') }}</th>
-            @endforeach
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            @foreach($dias7 as $dia)
-            @php
-              $reservasDia  = $checkoutProximos[$dia] ?? collect();
-              $cnt          = $reservasDia->count();
-              $tooltipLines = $reservasDia->map(fn($r) =>
-                $r->vm_propiedades_nombre . ($r->tiempo_limpieza ? ' (' . $r->tiempo_limpieza . 'h)' : '')
-              )->implode("\n");
-            @endphp
-            <td class="count-cell {{ $cnt === 0 ? 'zero' : '' }}">
-              @if($tooltipLines)
-                <span class="app-tooltip">{{ $cnt ?: '·' }}<span class="app-tooltip-box">{{ $tooltipLines }}</span></span>
-              @else
-                {{ $cnt ?: '·' }}
-              @endif
-            </td>
-            @endforeach
-          </tr>
-          {{-- Fila de horas totales de limpieza --}}
-          <tr class="lbl-row">
-            @foreach($dias7 as $dia)
-            @php $sumH = ($checkoutProximos[$dia] ?? collect())->whereNotNull('tiempo_limpieza')->sum('tiempo_limpieza'); @endphp
-            <td style="color:#0F6E56;font-size:11px;">{{ $sumH ? $sumH . 'h' : '' }}</td>
-            @endforeach
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
+  <div style="margin-bottom:12px;">
+    @include('partials.vm-carga-semanal')
   </div>
   @endif
 

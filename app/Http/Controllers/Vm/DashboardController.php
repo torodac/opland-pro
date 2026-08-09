@@ -22,6 +22,8 @@ class DashboardController extends Controller
         'absentismo'  => 'Absentismo',
     ];
 
+    private const BOOKING_STATUS_CANCELADO = ['cancelled', 'canceled'];
+
     public function validarConciliacion(Request $request, Project $project)
     {
         $idUsuario = (int) $request->id_usuario;
@@ -111,49 +113,6 @@ class DashboardController extends Controller
     public function index(Request $request, Project $project)
     {
         $hoy    = Carbon::today()->toDateString();
-        $en7    = Carbon::today()->addDays(7)->toDateString();
-        $manana = Carbon::today()->addDay()->toDateString();
-
-        // ── Reservas hoy ────────────────────────────────────────────────────
-        $checkinHoy = DB::table('vm_reservas')
-            ->whereDate('check_in_date', $hoy)
-            ->whereNotIn('booking_status', ['cancelled'])
-            ->orderBy('check_in_date')
-            ->get(['id', 'guest_name', 'vm_propiedades_nombre', 'check_in_date', 'checkin_status', 'booking_status']);
-
-        $checkoutHoy = DB::table('vm_reservas')
-            ->whereDate('check_out_date', $hoy)
-            ->whereNotIn('booking_status', ['cancelled'])
-            ->orderBy('check_out_date')
-            ->get(['id', 'guest_name', 'vm_propiedades_nombre', 'check_out_date', 'checkin_status', 'booking_status']);
-
-        // ── Próximos 7 días — tabla columnas por día ─────────────────────────
-        // Checkins: count + nombres por día
-        $checkinRaw = DB::table('vm_reservas')
-            ->whereBetween('check_in_date', [$manana, $en7])
-            ->whereNotIn('booking_status', ['cancelled'])
-            ->orderBy('check_in_date')
-            ->get(['check_in_date', 'vm_propiedades_nombre'])
-            ->groupBy(fn($r) => Carbon::parse($r->check_in_date)->toDateString());
-
-        // Checkouts: count + nombres + tiempo_limpieza por día (orden desc tiempo)
-        $checkoutRaw = DB::table('vm_reservas as r')
-            ->leftJoin('vm_propiedades as p', 'p.nombre', '=', 'r.vm_propiedades_nombre')
-            ->whereBetween('r.check_out_date', [$manana, $en7])
-            ->whereNotIn('r.booking_status', ['cancelled'])
-            ->orderByDesc('p.tiempo_limpieza')
-            ->orderBy('r.check_out_date')
-            ->get(['r.check_out_date', 'r.vm_propiedades_nombre', 'p.tiempo_limpieza'])
-            ->groupBy(fn($r) => Carbon::parse($r->check_out_date)->toDateString());
-
-        // Construir array de 7 días
-        $dias7 = [];
-        for ($i = 1; $i <= 7; $i++) {
-            $dias7[] = Carbon::today()->addDays($i)->toDateString();
-        }
-
-        $checkinProximos  = $checkinRaw;
-        $checkoutProximos = $checkoutRaw;
 
         // ── Conciliaciones horario ↔ ausencias ──────────────────────────────
         $conciliaciones = DB::table('vm_horarios as h')
@@ -359,8 +318,6 @@ class DashboardController extends Controller
 
         return view('dashboard', compact(
             'project',
-            'checkinHoy', 'checkoutHoy',
-            'checkinProximos', 'checkoutProximos', 'dias7',
             'conciliaciones',
             'tareasLimpieza', 'tareasMantPisc', 'breezewayPendientes',
             'turnoSinFichaje', 'desviaciones',
@@ -370,6 +327,99 @@ class DashboardController extends Controller
         ));
 
     }
+
+    // ── Widget "Flujo semanal y carga de limpieza" ───────────────────────────
+
+    private function puedeVerCargaSemanal(Project $project): bool
+    {
+        $rolId = (int) (DB::table('vm_usuarios')->where('admin_user_id', auth()->id())->value('id_rol') ?? 0);
+        return auth()->user()->isProjectAdmin($project) || in_array($rolId, [3, 10, 5, 2]);
+    }
+
+    public function cargaSemanal(Request $request, Project $project)
+    {
+        abort_unless($this->puedeVerCargaSemanal($project), 403);
+
+        $offset    = (int) $request->input('offset', 0);
+        $weekStart = Carbon::now()->startOfWeek(Carbon::MONDAY)->addWeeks($offset);
+        $desde     = $weekStart->toDateString();
+        $hasta     = $weekStart->copy()->addDays(6)->toDateString();
+
+        $checkins = DB::table('vm_reservas')
+            ->whereBetween('check_in_date', [$desde, $hasta])
+            ->whereNotIn('booking_status', self::BOOKING_STATUS_CANCELADO)
+            ->get(['id', 'id_propiedades', 'check_in_date']);
+
+        $checkouts = DB::table('vm_reservas')
+            ->whereBetween('check_out_date', [$desde, $hasta])
+            ->whereNotIn('booking_status', self::BOOKING_STATUS_CANCELADO)
+            ->get(['id', 'id_propiedades', 'check_out_date']);
+
+        $idsPropiedades = $checkins->pluck('id_propiedades')
+            ->concat($checkouts->pluck('id_propiedades'))
+            ->filter()->unique()->values();
+
+        $propiedades = DB::table('vm_propiedades')
+            ->whereIn('id', $idsPropiedades)
+            ->get(['id', 'nombre', 'tiempo_limpieza'])
+            ->keyBy('id');
+
+        // La tarea de limpieza "oficial" del checkout es la que Breezeway enlaza vía id_reservas.
+        // Se excluyen las Canceladas: una reserva puede tener una tarea cancelada + una activa
+        // a la vez (ver VmGenerateCheckoutTasksCommand), y solo la activa cuenta aquí.
+        $tareasPorReserva = DB::table('vm_tareas_limpieza')
+            ->whereIn('id_reservas', $checkouts->pluck('id'))
+            ->where('deleted', 0)
+            ->where('estado', '!=', 'Cancelada')
+            ->get(['id', 'id_reservas', 'control_user'])
+            ->keyBy('id_reservas');
+
+        $tieneAsignado = function (?string $controlUser): bool {
+            if (!$controlUser) return false;
+            $decoded = json_decode($controlUser, true);
+            return is_array($decoded) && count($decoded) > 0;
+        };
+
+        $dias = [];
+        for ($i = 0; $i < 7; $i++) {
+            $fecha = $weekStart->copy()->addDays($i)->toDateString();
+
+            $arrivalProps = $checkins->filter(fn($r) => $r->check_in_date === $fecha)
+                ->map(function ($r) use ($propiedades) {
+                    $p = $propiedades[$r->id_propiedades] ?? null;
+                    return [
+                        'property' => $p->nombre ?? 'Propiedad desconocida',
+                        'hours'    => (float) ($p->tiempo_limpieza ?? 0),
+                    ];
+                })->values();
+
+            $tasks = $checkouts->filter(fn($r) => $r->check_out_date === $fecha)
+                ->map(function ($r) use ($propiedades, $tareasPorReserva, $tieneAsignado) {
+                    $p     = $propiedades[$r->id_propiedades] ?? null;
+                    $tarea = $tareasPorReserva[$r->id] ?? null;
+                    return [
+                        'property' => $p->nombre ?? 'Propiedad desconocida',
+                        'hours'    => (float) ($p->tiempo_limpieza ?? 0),
+                        'assigned' => $tarea ? $tieneAsignado($tarea->control_user) : false,
+                        'has_task' => (bool) $tarea,
+                        'task_id'  => $tarea->id ?? null,
+                    ];
+                })->values();
+
+            $dias[] = [
+                'date'           => $fecha,
+                'arrivals'       => $arrivalProps->count(),
+                'arrival_props'  => $arrivalProps,
+                'departures'     => $tasks->count(),
+                'tasks'          => $tasks,
+                'assigned_hours' => round($tasks->where('assigned', true)->sum('hours'), 1),
+                'pending_hours'  => round($tasks->where('assigned', false)->sum('hours'), 1),
+            ];
+        }
+
+        return response()->json(['ok' => true, 'days' => $dias]);
+    }
+
     // ── Widget de fichaje (dashboard web) ────────────────────────────────────
 
     private function vmUsuarioActual(): ?object
