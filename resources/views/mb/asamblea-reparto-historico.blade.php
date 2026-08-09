@@ -67,6 +67,7 @@ body { margin:0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Rob
 
 <nav class="bottom-nav">
   <a href="{{ route('mb.asamblea.reparto', $project->slug) }}">Reparto</a>
+  <a href="{{ route('mb.asamblea.reparto.sin-camara', $project->slug) }}">Sin cámara</a>
   <a href="{{ route('mb.asamblea.reparto.historico', $project->slug) }}" class="active">Histórico</a>
 </nav>
 

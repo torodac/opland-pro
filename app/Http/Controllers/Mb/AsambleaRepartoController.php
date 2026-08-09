@@ -27,6 +27,19 @@ class AsambleaRepartoController extends Controller
 
     public function index(Request $request, Project $project)
     {
+        return $this->renderReparto($request, $project, sinCamara: false);
+    }
+
+    // Misma pantalla y lógica que index(), pero sin lectores de código QR (para dispositivos
+    // sin cámara o cuando se prefiere identificar todo a mano): solo quedan disponibles los
+    // dos campos de búsqueda manual (nombre/código de vivienda y número de hoja).
+    public function indexSinCamara(Request $request, Project $project)
+    {
+        return $this->renderReparto($request, $project, sinCamara: true);
+    }
+
+    private function renderReparto(Request $request, Project $project, bool $sinCamara)
+    {
         $asamblea = $request->filled('id_asamblea')
             ? DB::table('mb_asambleas')->where('id', $request->id_asamblea)->where('deleted', 0)->first()
             : DB::table('mb_asambleas')->where('deleted', 0)->orderByDesc('fecha')->first();
@@ -34,8 +47,9 @@ class AsambleaRepartoController extends Controller
         abort_if(!$asamblea, 404, 'No hay ninguna asamblea creada todavía.');
 
         return view('mb.asamblea-reparto', [
-            'project'  => $project,
-            'asamblea' => $asamblea,
+            'project'   => $project,
+            'asamblea'  => $asamblea,
+            'sinCamara' => $sinCamara,
         ]);
     }
 
@@ -139,12 +153,29 @@ class AsambleaRepartoController extends Controller
             return response()->json(['resultados' => []]);
         }
 
+        // Los códigos de tarjeta son siempre de 4 dígitos exactos (ver normalización 2026-08-08).
+        // Con menos de 4 dígitos no hay forma fiable de saber a qué código apunta -- una
+        // coincidencia parcial (ILIKE) generaría muchos falsos positivos por los ceros a la
+        // izquierda (ej. "0" o "00" ya casarían con decenas de viviendas) -- así que no se
+        // devuelve nada hasta que el código esté completo, y entonces se exige coincidencia exacta.
+        if (ctype_digit($q)) {
+            if (strlen($q) !== 4) {
+                return response()->json(['resultados' => []]);
+            }
+
+            $resultados = DB::table('mb_viviendas')
+                ->where('deleted', 0)
+                ->whereRaw("? = ANY(string_to_array(REPLACE(qr_codigo, ' ', ''), ','))", [$q])
+                ->orderBy('nombre')
+                ->limit(40)
+                ->get(['id', 'nombre']);
+
+            return response()->json(['resultados' => $resultados]);
+        }
+
         $resultados = DB::table('mb_viviendas')
             ->where('deleted', 0)
-            ->where(function ($qq) use ($q) {
-                $qq->where('nombre', 'ilike', '%' . $q . '%')
-                   ->orWhere('qr_codigo', 'ilike', '%' . $q . '%');
-            })
+            ->where('nombre', 'ilike', '%' . $q . '%')
             ->orderBy('nombre')
             ->limit(40)
             ->get(['id', 'nombre']);

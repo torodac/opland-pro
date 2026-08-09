@@ -62,7 +62,7 @@ button.secundario.naranja:active { background:#ea580c; }
   <div class="top">
     <div>
       <h1>{{ $asamblea->nombre }}</h1>
-      <p>Reparto de hojas de votación</p>
+      <p>Reparto de hojas de votación{{ ($sinCamara ?? false) ? ' (sin cámara)' : '' }}</p>
     </div>
   </div>
 
@@ -72,14 +72,18 @@ button.secundario.naranja:active { background:#ea580c; }
       <button class="secundario naranja" id="btn-reiniciar" style="width:auto;height:34px;margin-top:0;padding:0 12px;font-size:12px;">Reiniciar</button>
     </div>
     <div id="slot-buscando">
-      <div id="reader-group">
+      <div id="reader-group" @if($sinCamara ?? false) style="display:none" @endif>
         <div id="reader"></div>
         <p class="hint" id="reader-hint">Apunta la cámara al QR de la tarjeta del socio</p>
         <div id="debug-scan" class="debug-scan oculto"></div>
       </div>
     </div>
     <div id="bloque-buscar-nombre">
+      @if($sinCamara ?? false)
+      <p class="hint" style="margin:0 0 10px;">Busca por nombre de la vivienda o código de la tarjeta</p>
+      @else
       <div class="divider"><div></div><span>o busca por nombre o código</span><div></div></div>
+      @endif
       <div class="sugerencias">
         <input type="text" id="buscar-nombre" placeholder="Nombre de la vivienda o código de la tarjeta...">
         <div id="lista-sugerencias" class="sugerencias-lista oculto"></div>
@@ -113,11 +117,14 @@ button.secundario.naranja:active { background:#ea580c; }
 </div>
 
 <nav class="bottom-nav">
-  <a href="{{ route('mb.asamblea.reparto', $project->slug) }}" class="active">Reparto</a>
+  <a href="{{ route('mb.asamblea.reparto', $project->slug) }}" class="{{ ($sinCamara ?? false) ? '' : 'active' }}">Reparto</a>
+  <a href="{{ route('mb.asamblea.reparto.sin-camara', $project->slug) }}" class="{{ ($sinCamara ?? false) ? 'active' : '' }}">Sin cámara</a>
   <a href="{{ route('mb.asamblea.reparto.historico', $project->slug) }}">Histórico</a>
 </nav>
 
+@unless($sinCamara ?? false)
 <script src="{{ asset('vendor/html5-qrcode.min.js') }}"></script>
+@endunless
 <script>
 const ID_ASAMBLEA = {{ $asamblea->id }};
 const CSRF = document.querySelector('meta[name="csrf-token"]').content;
@@ -284,6 +291,9 @@ document.getElementById('buscar-nombre').addEventListener('input', function () {
   const q = this.value.trim();
   const lista = document.getElementById('lista-sugerencias');
   if (q.length < 2) { lista.classList.add('oculto'); return; }
+  // Los códigos de tarjeta son de 4 dígitos exactos: con un número incompleto no hay
+  // nada fiable que mostrar todavía.
+  if (/^\d+$/.test(q) && q.length !== 4) { lista.classList.add('oculto'); return; }
   debounceTimer = setTimeout(async () => {
     const res = await fetch(`${BASE}/buscar-nombre?q=${encodeURIComponent(q)}`, { headers: headers() });
     const data = await res.json();
@@ -334,6 +344,7 @@ document.getElementById('btn-siguiente').addEventListener('click', function () {
   document.getElementById('panel-confirmado').classList.add('oculto');
 });
 
+@unless($sinCamara ?? false)
 // Cámara: un único lector continuo, cambia de propósito según "paso"
 const lector = new Html5Qrcode('reader');
 lector.start(
@@ -344,6 +355,7 @@ lector.start(
 ).catch((err) => {
   document.getElementById('reader').outerHTML = '<p class="hint">No se pudo acceder a la cámara. Usa la búsqueda por nombre.</p>';
 });
+@endunless
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('{{ asset("mb/sw.js") }}', { scope: '{{ url("mb") }}/' });

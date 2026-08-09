@@ -324,6 +324,7 @@ Route::middleware('auth')->group(function () {
             Route::get('viviendas/ticket/{ticket}', [\App\Http\Controllers\Mb\TicketController::class, 'imprimir'])->where(['project' => 'mb', 'ticket' => '[0-9]+'])->name('mb.viviendas.ticket.imprimir');
 
             Route::get('asamblea/reparto', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'index'])->where('project', 'mb')->name('mb.asamblea.reparto');
+            Route::get('asamblea/reparto-sin-camara', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'indexSinCamara'])->where('project', 'mb')->name('mb.asamblea.reparto.sin-camara');
             Route::get('asamblea/reparto/vivienda', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'vivienda'])->where('project', 'mb')->name('mb.asamblea.reparto.vivienda');
             Route::get('asamblea/reparto/buscar-nombre', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'buscarNombre'])->where('project', 'mb')->name('mb.asamblea.reparto.buscar-nombre');
             Route::post('asamblea/reparto/hoja', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'registrarHoja'])->where('project', 'mb')->name('mb.asamblea.reparto.hoja');
