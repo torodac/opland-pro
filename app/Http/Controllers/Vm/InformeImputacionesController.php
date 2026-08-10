@@ -459,7 +459,7 @@ class InformeImputacionesController extends Controller
                 ->whereIn('tipo', $compTipos)
                 ->where('fecha_fin', '<=', $hasta)
                 ->where(function ($q) { $q->where('deleted', 0)->orWhereNull('deleted'); })
-                ->get(['fecha_inicio', 'fecha_fin']);
+                ->get(['fecha_inicio', 'fecha_fin', 'tipo']);
 
             foreach ($compAus as $a) {
                 $cur = $a->fecha_inicio;
@@ -471,10 +471,14 @@ class InformeImputacionesController extends Controller
                             break;
                         }
                     }
+                    // Un día de "Comp. festivo" consume (descuenta) un día festivo trabajado del
+                    // desglose -- ya se ha compensado, no debe seguir contando como pendiente.
+                    if ($a->tipo === 'Comp. festivo') $diasFest--;
                     $cur = date('Y-m-d', strtotime('+1 day', strtotime($cur)));
                 }
             }
         }
+        $diasFest = max(0, $diasFest);
 
         return [
             'total'       => $total / 60,
