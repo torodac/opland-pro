@@ -32,13 +32,19 @@ class TablaImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
         $this->buildRefCache();
     }
 
-    // Convierte valores de fecha/timestamp de Excel a formato BD
-    // Soporta: serial numérico de Excel, dd/mm/aaaa [hh:MM[:ss]], aaaa-mm-dd
+    // Convierte valores de fecha/timestamp/hora de Excel a formato BD
+    // Soporta: serial numérico de Excel, dd/mm/aaaa [hh:MM[:ss]], aaaa-mm-dd, hh:MM[:ss] suelto
     private function normalizeDateValue(string $val, string $type): string
     {
         // Serial numérico de Excel (entero o decimal en rango de fechas plausible)
         if (is_numeric($val)) {
             $serial = (float) $val;
+            if ($type === 'time') {
+                // Solo la parte horaria (fracción de día): 0.3333... = 08:00:00
+                $frac = $serial - floor($serial);
+                $dt = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($frac);
+                return $dt->format('H:i:s');
+            }
             if ($serial > 1 && $serial < 109574) { // 1900-01-01 → 2199-12-31
                 $dt = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($serial);
                 return $type === 'fecha'
@@ -55,6 +61,10 @@ class TablaImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
         // Formato dd/mm/aaaa
         if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $val, $m)) {
             return sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]);
+        }
+        // Formato hh:MM[:ss] suelto (hora ya en texto, sin fecha)
+        if ($type === 'time' && preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/', $val, $m)) {
+            return sprintf('%02d:%02d:%02d', $m[1], $m[2], $m[3] ?? 0);
         }
         return $val;
     }
@@ -97,8 +107,8 @@ class TablaImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
                     $valor = $this->refCache[$name][trim((string) $valor)] ?? null;
                 }
 
-                // Normalizar fechas y timestamps en formato dd/mm/aaaa [hh:MM]
-                if ($valor !== null && in_array($fieldTypes[$name] ?? '', ['fecha', 'timestamp'])) {
+                // Normalizar fechas, timestamps y horas en formato dd/mm/aaaa [hh:MM] / hh:MM
+                if ($valor !== null && in_array($fieldTypes[$name] ?? '', ['fecha', 'timestamp', 'time'])) {
                     $valor = $this->normalizeDateValue((string) $valor, $fieldTypes[$name]);
                 }
 
