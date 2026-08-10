@@ -8,6 +8,7 @@ use App\Models\Project;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use App\Services\RoleHierarchy;
 use App\Services\VmHorasService;
 use Illuminate\Support\Facades\DB;
 
@@ -20,7 +21,7 @@ class InformeImputacionesController extends Controller
         $user    = auth()->user();
         $isAdmin = $user->isProjectAdmin($project);
 
-        [$year, $month, $userId, $allUsuarios, $canSelect] = $this->resolveParams($request, $project, $user, $isAdmin);
+        [$year, $month, $userId, $allUsuarios, $canSelect, $canSelectTodos] = $this->resolveParams($request, $project, $user, $isAdmin);
 
         $data = $this->getInformeData($userId, $year, $month);
 
@@ -48,6 +49,7 @@ class InformeImputacionesController extends Controller
             'user_id'            => $userId,
             'usuarios'           => $usuarios,
             'can_select'         => $canSelect,
+            'can_select_todos'   => $canSelectTodos,
             'sin_contrato'       => $sinContrato,
             'fecha_fin_contrato' => $fechaFinContrato,
             'breadcrumb' => [
@@ -152,17 +154,38 @@ class InformeImputacionesController extends Controller
 
     private function resolveParams(Request $request, Project $project, $user, bool $isAdmin): array
     {
-        $allUsuarios = DB::table('vm_usuarios')
-            ->where('deleted', 0)
-            ->orderBy('nombre')
-            ->get(['id', 'nombre', 'id_rol']);
-
         $currentVmUserId = $user->projectUserId($project);
         $authRol         = $currentVmUserId ? DB::table('vm_usuarios')->where('id', $currentVmUserId)->value('id_rol') : null;
-        $canSelect       = $isAdmin || in_array((int) $authRol, [3, 11]); // Dirección general, Director RRHH
+
+        // Selección sin restricción: ven y pueden generar el PDF de todos.
+        $canSelectTodos = $isAdmin || in_array((int) $authRol, [3, 11]); // Dirección general, Director RRHH
+        // Selección limitada a su equipo (vm_roles.roles_supervisados), mismo mecanismo que
+        // fichajes/listados (RoleHierarchy) — sin PDF de todos, solo su equipo.
+        $canSelectEquipo = !$canSelectTodos && in_array((int) $authRol, [10, 5, 2]); // Dir. Operaciones, Coord. mantenimiento, Coord. limpieza
+        $canSelect       = $canSelectTodos || $canSelectEquipo;
+
+        if ($canSelectTodos) {
+            $allUsuarios = DB::table('vm_usuarios')->where('deleted', 0)->orderBy('nombre')->get(['id', 'nombre', 'id_rol']);
+        } elseif ($canSelectEquipo) {
+            $visibleIds = RoleHierarchy::visibleUserIds(
+                $project->slug . '_roles', $project->slug . '_usuarios',
+                (int) $currentVmUserId, (int) $authRol
+            );
+            $allUsuarios = DB::table('vm_usuarios')
+                ->where('deleted', 0)
+                ->whereIn('id', array_map('intval', $visibleIds))
+                ->orderBy('nombre')
+                ->get(['id', 'nombre', 'id_rol']);
+        } else {
+            $allUsuarios = collect();
+        }
 
         if ($canSelect) {
             $userId = (int) $request->input('user_id', $currentVmUserId ?? ($allUsuarios->first()->id ?? 0));
+            // Si pide un user_id fuera de su equipo (manipulando el parámetro), se cae a su propio informe.
+            if ($canSelectEquipo && !$allUsuarios->contains('id', $userId)) {
+                $userId = (int) $currentVmUserId;
+            }
         } else {
             $userId = $currentVmUserId ?? 0;
         }
@@ -170,7 +193,7 @@ class InformeImputacionesController extends Controller
         $year  = max(2020, min(2040, (int) $request->input('year',  now()->year)));
         $month = max(1,    min(12,   (int) $request->input('month', now()->month)));
 
-        return [$year, $month, $userId, $allUsuarios, $canSelect];
+        return [$year, $month, $userId, $allUsuarios, $canSelect, $canSelectTodos];
     }
 
 
@@ -381,9 +404,9 @@ class InformeImputacionesController extends Controller
                 $ded   = VmHorasService::pausaDeducible($pMin, (float) $contratoDia->horas_semana);
                 $total += $isFest ? $tf - $ded : $tf - $esperadoMin - $ded;
             }
-            // El bono es para festivos SIN trabajar o sin fichaje (bloque de descanso, más
-            // abajo) -- si ya se trabajó el festivo, todo lo trabajado ya cuenta como extra en la
-            // rama de arriba, y sumar el bono aquí lo contaría dos veces. El bono son las horas de
+            // El bono es para festivos SIN trabajar o sin fichaje (bloque de descanso, más abajo)
+            // -- si ya se trabajó el festivo, todo lo trabajado ya cuenta como extra en la rama de
+            // arriba, y sumar el bono aquí lo contaría dos veces. El bono son las horas de
             // contrato del día, no un fijo de 8h para todos.
             if ($isFestivo && !$isFest && !$isRot) $total += $esperadoMin;
             $total += (int) ($f->ajuste_he ?? 0);

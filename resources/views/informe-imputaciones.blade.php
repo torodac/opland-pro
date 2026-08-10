@@ -123,7 +123,7 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
         Descargar PDF
     </button>
 
-    @if($can_select)
+    @if($can_select_todos)
     <button type="button" class="btn-pdf btn-pdf-total"
         onclick="descargarPdf('{{ route('informe-imputaciones.pdf-todos', $project->slug) }}?year={{ $year }}&month={{ $month }}', 'informes_{{ $year }}_{{ $month }}.pdf')">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
