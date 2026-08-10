@@ -381,11 +381,16 @@ class InformeImputacionesController extends Controller
                 $ded   = VmHorasService::pausaDeducible($pMin, (float) $contratoDia->horas_semana);
                 $total += $isFest ? $tf - $ded : $tf - $esperadoMin - $ded;
             }
-            if ($isFestivo) $total += 480;
+            // El bono es para festivos SIN trabajar o sin fichaje (bloque de descanso, más
+            // abajo) -- si ya se trabajó el festivo, todo lo trabajado ya cuenta como extra en la
+            // rama de arriba, y sumar el bono aquí lo contaría dos veces. El bono son las horas de
+            // contrato del día, no un fijo de 8h para todos.
+            if ($isFestivo && !$isFest && !$isRot) $total += $esperadoMin;
             $total += (int) ($f->ajuste_he ?? 0);
         }
 
-        // Bono festivo por días de descanso en festivo (sin fichaje)
+        // Bono festivo por días de descanso en festivo (sin fichaje) -- las horas de contrato del
+        // día, no un fijo de 8h (relevante para contratos con jornada diaria distinta de 8h).
         foreach ($festivosHist as $fDate => $_) {
             if (!isset($descansosDias[$fDate])) continue;
             // Comprobar que no hay fichaje ese día (ya contado arriba)
@@ -393,7 +398,7 @@ class InformeImputacionesController extends Controller
             if ($tieneF) continue;
             foreach ($contratos as $c) {
                 if ($c->fecha_alta <= $fDate && (is_null($c->fecha_baja) || $c->fecha_baja >= $fDate)) {
-                    $total += 480;
+                    $total += (int) round(($c->horas_semana / 5) * 60);
                     break;
                 }
             }

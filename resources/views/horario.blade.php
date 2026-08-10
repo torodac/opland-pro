@@ -69,14 +69,14 @@ function ausenciaCellHtml(string $tipo): string {
 .dept-block { margin-bottom:1.75rem; }
 .dept-title { font-size:13px; font-weight:600; color:#374151; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
 
-.hor-table { width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
+.hor-table { width:100%; border-collapse:collapse; font-size:12px; table-layout:auto; }
 .hor-table th { padding:5px 4px; text-align:center; font-size:11px; font-weight:600; color:#6b7280; background:#f9fafb; border:1px solid #e5e7eb; }
-.hor-table th.col-user { text-align:left; padding-left:8px; width:140px; }
+.hor-table th.col-user { text-align:left; padding-left:8px; white-space:nowrap; width:1%; }
 .hor-table th.th-fest { background:#ffe0e0; color:#cc0000; }
 .hor-table th.th-wk { color:#d1d5db; }
 .hor-table th .fest-badge { font-size:9px; font-weight:400; display:block; }
 .hor-table td { border:1px solid #e5e7eb; padding:3px 4px; text-align:center; height:34px; vertical-align:middle; }
-.hor-table td.col-user { text-align:left; padding-left:8px; font-weight:500; background:#f9fafb; border-right:1px solid #d1d5db; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.hor-table td.col-user { text-align:left; padding-left:8px; font-weight:500; background:#f9fafb; border-right:1px solid #d1d5db; white-space:nowrap; }
 .hor-table td.cell-wk { background:#fafafa; }
 .hor-table td.cell-fest { background:#fff5f5; }
 .hor-table td.cell-edit { cursor:pointer; }
@@ -178,7 +178,12 @@ $deptLabel = $dept->nombre ?: 'Sin departamento';
         <tbody>
             @foreach($usuarios as $u)
             <tr>
-                <td class="col-user"><span class="app-tooltip">{{ $u->nombre }}<span class="app-tooltip-box">{{ $u->nombre }}</span></span></td>
+                @php
+                    $horasAcum    = $horasAcumuladasMap[$u->id] ?? 0;
+                    $festivosAcum = $festivosTrabajadosMap[$u->id] ?? 0;
+                    $nombreConAcumulado = "{$u->nombre} ({$horasAcum}h/{$festivosAcum}d)";
+                @endphp
+                <td class="col-user"><span class="app-tooltip">{{ $nombreConAcumulado }}<span class="app-tooltip-box">{{ $nombreConAcumulado }}</span></span></td>
                 @foreach($dates as $di => $d)
                 @php
                     $ds     = $d->toDateString();

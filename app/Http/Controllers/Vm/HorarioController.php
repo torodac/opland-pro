@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Vm;
 use App\Http\Controllers\Controller;
 
 use App\Models\Project;
+use App\Services\VmHorasService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -93,6 +94,16 @@ class HorarioController extends Controller
             ->pluck('nombre', 'fecha_fecha')
             ->toArray();
 
+        // Horas extra acumuladas (saldo histórico hasta hoy) y días festivos trabajados
+        // acumulados, para mostrar junto al nombre en la celda de usuario.
+        $hoy = now()->toDateString();
+        $horasAcumuladasMap = [];
+        $festivosTrabajadosMap = [];
+        foreach ($usuariosFiltrados as $u) {
+            $horasAcumuladasMap[$u->id]    = (int) round(VmHorasService::saldoAcumuladoHoras($u->id, $hoy));
+            $festivosTrabajadosMap[$u->id] = VmHorasService::festivosTrabajadosCount($u->id);
+        }
+
         return view('horario', [
             'project'        => $project,
             'isAdmin'        => $isAdmin,
@@ -105,6 +116,8 @@ class HorarioController extends Controller
             'horariosMap'    => $horariosMap,
             'ausenciasMap'   => $ausenciasMap,
             'festivosMap'    => $festivosMap,
+            'horasAcumuladasMap'    => $horasAcumuladasMap,
+            'festivosTrabajadosMap' => $festivosTrabajadosMap,
             'prevWeek'       => $weekStart->copy()->subWeek()->toDateString(),
             'nextWeek'       => $weekStart->copy()->addWeek()->toDateString(),
             'breadcrumb'     => [['label' => 'Horarios', 'url' => '']],
