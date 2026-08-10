@@ -329,12 +329,15 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                 <tbody>
                 @foreach($dias as $dia)
                 @php
+                    // Se trabajó siendo festivo o día de descanso -> misma pill que festivo trabajado
+                    // (se sustituye por completo la pareja "Trabajo"+"Descanso", no se apilan las dos).
+                    $trabajaFestivoODescanso = $dia['entrada'] && ($dia['is_festivo'] || $dia['horario_tipo'] === 'descanso');
                     $badges = [];
                     if ($dia['is_rotatorio'])       $badges[] = ['Desc. Fest.','#6f42c1'];
-                    elseif ($dia['is_fest_trab'])   $badges[] = ['Trab. fest.','#0d6efd'];
+                    elseif ($dia['is_fest_trab'] || $trabajaFestivoODescanso) $badges[] = ['Trab. fest.','#0d6efd'];
                     elseif ($dia['tipo'])            $badges[] = [$dia['tipo']->nombre, tipoColor($dia['tipo']->nombre, $tipo_color)];
                     elseif ($dia['entrada'])         $badges[] = ['Trabajo', $color_trabajo];
-                    if ($dia['horario_tipo'] === 'descanso') $badges[] = ['Descanso', '#F3F4F6', '#6B7280'];
+                    if ($dia['horario_tipo'] === 'descanso' && !$trabajaFestivoODescanso) $badges[] = ['Descanso', '#F3F4F6', '#6B7280'];
                     $conflicto = count($badges) > 1;
                 @endphp
                 <tr class="{{ $dia['weekend'] ? 'weekend' : '' }}" @if($conflicto) style="background:#ffff00;" @endif>

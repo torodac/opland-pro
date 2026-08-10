@@ -227,10 +227,13 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                     <td>{{ $dia['ht_min'] > 0 ? IC::fmtMin($dia['ht_min']) : '' }}</td>
                     <td>{{ $dia['km'] !== null && $dia['km'] > 0 ? number_format($dia['km'],1,',','') : ($dia['entrada'] ? '0,0' : '') }}</td>
                     <td>
-                        @php $ini_map2 = ['Trab. fest.'=>'TF','Asuntos propios'=>'AP','Vacaciones'=>'V','Baja'=>'B','Compensación'=>'C','Absentismo'=>'Ab','Revisar'=>'Re','Desc. Fest.'=>'DF','Trabajo'=>'T','Descanso'=>'D']; @endphp
+                        @php
+                            $ini_map2 = ['Trab. fest.'=>'TF','Asuntos propios'=>'AP','Vacaciones'=>'V','Baja'=>'B','Compensación'=>'C','Absentismo'=>'Ab','Revisar'=>'Re','Desc. Fest.'=>'DF','Trabajo'=>'T','Descanso'=>'D'];
+                            $trabajaFestivoODescanso = $dia['entrada'] && ($dia['is_festivo'] || $dia['horario_tipo'] === 'descanso');
+                        @endphp
                         @if($dia['is_rotatorio'])
                             <span class="tipo-badge" style="background:#6f42c1;color:#fff" title="Desc. Fest.">DF</span>
-                        @elseif($dia['is_fest_trab'])
+                        @elseif($dia['is_fest_trab'] || $trabajaFestivoODescanso)
                             <span class="tipo-badge" style="background:#0d6efd;color:#fff" title="Trab. fest.">TF</span>
                         @elseif($dia['tipo'])
                             <span class="tipo-badge" style="background:{{ tcTotal($dia['tipo']->nombre, $pdf_tipo_color) }};color:#fff" title="{{ $dia['tipo']->nombre }}">{{ $ini_map2[$dia['tipo']->nombre] ?? mb_strtoupper(mb_substr($dia['tipo']->nombre,0,2)) }}</span>
