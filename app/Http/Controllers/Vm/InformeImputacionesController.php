@@ -302,7 +302,7 @@ class InformeImputacionesController extends Controller
 
             $heMin = VmHorasService::calcularHeDia(
                 $tfMin, $pMin, $tipoObj?->nombre ?? null, $contratoDia,
-                $isFestivo, $isRotatorio, $isFestTrab, (bool) $f,
+                $isFestivo, $isFestTrab, (bool) $f,
                 $hor && $hor->tipo === 'descanso',
                 (int) ($f?->ajuste_he ?? 0)
             );
@@ -365,7 +365,7 @@ class InformeImputacionesController extends Controller
             ->whereNotNull('hora_inicio')
             ->where('fecha_fichaje', '<=', $hasta)
             ->get(['fecha_fichaje', 'hora_inicio', 'hora_fin',
-                   'pausa_inicio', 'pausa_fin', 'fuera_de_turno', 'festivo', 'ajuste_he']);
+                   'pausa_inicio', 'pausa_fin', 'festivo', 'ajuste_he']);
 
         // Festivos hasta la fecha para bono +8h
         $festivosHist = VmHorasService::festivosSet($sede, '2000-01-01', $hasta);
@@ -379,7 +379,6 @@ class InformeImputacionesController extends Controller
 
         $total = 0.0;
         foreach ($fichajes as $f) {
-            $isRot  = ($f->fuera_de_turno ?? 0) == 1;
             $isFest = ($f->festivo ?? 0) == 1;
             $hasFin = !empty($f->hora_fin);
             $isFestivo = isset($festivosHist[$f->fecha_fichaje]);
@@ -394,9 +393,7 @@ class InformeImputacionesController extends Controller
             if (!$contratoDia || !$contratoDia->horas_semana) continue;
 
             $esperadoMin = (int) round(($contratoDia->horas_semana / 5) * 60);
-            if ($isRot) {
-                $total += $esperadoMin;
-            } elseif ($hasFin) {
+            if ($hasFin) {
                 $tf   = VmHorasService::hmsToMinutes($f->hora_fin) - VmHorasService::hmsToMinutes($f->hora_inicio);
                 $pMin = (($f->pausa_inicio ?? null) && ($f->pausa_fin ?? null))
                     ? VmHorasService::hmsToMinutes($f->pausa_fin) - VmHorasService::hmsToMinutes($f->pausa_inicio)
@@ -408,7 +405,7 @@ class InformeImputacionesController extends Controller
             // -- si ya se trabajó el festivo, todo lo trabajado ya cuenta como extra en la rama de
             // arriba, y sumar el bono aquí lo contaría dos veces. El bono son las horas de
             // contrato del día, no un fijo de 8h para todos.
-            if ($isFestivo && !$isFest && !$isRot) $total += $esperadoMin;
+            if ($isFestivo && !$isFest) $total += $esperadoMin;
             $total += (int) ($f->ajuste_he ?? 0);
         }
 
@@ -467,7 +464,7 @@ class InformeImputacionesController extends Controller
             ->whereNotNull('hora_inicio')
             ->whereBetween('fecha_fichaje', ["{$year}-01-01", "{$year}-12-31"])
             ->get(['fecha_fichaje', 'hora_inicio', 'hora_fin',
-                   'pausa_inicio', 'pausa_fin', 'fuera_de_turno', 'festivo', 'ajuste_he'])
+                   'pausa_inicio', 'pausa_fin', 'festivo', 'ajuste_he'])
             ->groupBy(fn($f) => (int) substr($f->fecha_fichaje, 5, 2));
 
         $festivosYear = VmHorasService::festivosSet($sede, "{$year}-01-01", "{$year}-12-31");
@@ -490,7 +487,6 @@ class InformeImputacionesController extends Controller
             $fichajesFechas = [];
 
             foreach (($fichajesYear[$m] ?? []) as $f) {
-                $isRot  = ($f->fuera_de_turno ?? 0) == 1;
                 $isFest = ($f->festivo ?? 0) == 1;
                 $hasFin = !empty($f->hora_fin);
                 $isFestivo = isset($festivosYear[$f->fecha_fichaje]);
@@ -508,9 +504,7 @@ class InformeImputacionesController extends Controller
 
                 if ($contratoDia && $contratoDia->horas_semana) {
                     $esperadoMin = (int) round(($contratoDia->horas_semana / 5) * 60);
-                    if ($isRot) {
-                        $he = $esperadoMin;
-                    } elseif ($hasFin) {
+                    if ($hasFin) {
                         $tf   = VmHorasService::hmsToMinutes($f->hora_fin) - VmHorasService::hmsToMinutes($f->hora_inicio);
                         $pMin = (($f->pausa_inicio ?? null) && ($f->pausa_fin ?? null))
                             ? VmHorasService::hmsToMinutes($f->pausa_fin) - VmHorasService::hmsToMinutes($f->pausa_inicio)
@@ -520,7 +514,9 @@ class InformeImputacionesController extends Controller
                     } else {
                         continue;
                     }
-                    if ($isFestivo) $he += 480;
+                    // Bono solo si el festivo no se ha trabajado ya (si no, ya cuenta arriba) --
+                    // y las horas de contrato del día, no un fijo de 8h para todos.
+                    if ($isFestivo && !$isFest) $he += $esperadoMin;
                     $ajMin = (int) ($f->ajuste_he ?? 0);
                     $he += $ajMin;
                     if ($he > 0) $ep += $he;
@@ -535,7 +531,7 @@ class InformeImputacionesController extends Controller
                 if (!isset($descansosDias[$fDate])) continue;
                 foreach ($contratos as $c) {
                     if ($c->fecha_alta <= $fDate && (is_null($c->fecha_baja) || $c->fecha_baja >= $fDate)) {
-                        $ep += 480;
+                        $ep += (int) round(($c->horas_semana / 5) * 60);
                         break;
                     }
                 }

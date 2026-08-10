@@ -221,7 +221,6 @@ class FichajeController extends Controller
         $heMin = VmHorasService::calcularHeDia(
             $tfMin, $pMin, null, $contrato,
             $isFestivo,
-            (bool) ($fichaje->fuera_de_turno ?? 0),
             (bool) ($fichaje->festivo ?? 0),
             $tfMin !== null,
             $horario && $horario->tipo === 'descanso',

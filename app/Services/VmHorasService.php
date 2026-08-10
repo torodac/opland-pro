@@ -55,7 +55,6 @@ class VmHorasService
         ?string $tipoAusencia,
         ?object $contrato,
         bool $isFestivo,
-        bool $isRotatorio,
         bool $isFestTrab,
         bool $hasFichaje,
         bool $isDescanso,
@@ -68,9 +67,7 @@ class VmHorasService
             $esperadoMin = (int) round(($contrato->horas_semana / 5) * 60);
             $dedPausa    = self::pausaDeducible($pMin, (float) $contrato->horas_semana);
 
-            if ($isRotatorio) {
-                $heMin = $esperadoMin;
-            } elseif ($isFestTrab && $tfMin !== null) {
+            if ($isFestTrab && $tfMin !== null) {
                 $heMin = $tfMin - $dedPausa;
             } elseif ($isCompensacion) {
                 $heMin = -$esperadoMin;
@@ -78,7 +75,10 @@ class VmHorasService
                 $heMin = $tfMin - $esperadoMin - $dedPausa;
             }
 
-            if ($isFestivo && !$isFestTrab && !$isRotatorio && ($hasFichaje || $isDescanso)) {
+            // "Fuera de turno" (recuperar un festivo que cae en descanso) no necesita rama propia:
+            // la resta de esperado en la rama normal + este bono ya dan el resultado correcto
+            // (todo lo fichado como extra) por cancelación algebraica.
+            if ($isFestivo && !$isFestTrab && ($hasFichaje || $isDescanso)) {
                 $heMin = ($heMin ?? 0) + $esperadoMin;
             }
         }
@@ -177,7 +177,6 @@ class VmHorasService
                 $aus->tipo ?? null,
                 $contratoDia,
                 isset($festivosDia[$fecha]),
-                $f && ($f->fuera_de_turno ?? 0) == 1,
                 $f && ($f->festivo ?? 0) == 1,
                 (bool) $f,
                 $hor && $hor->tipo === 'descanso',
@@ -214,7 +213,7 @@ class VmHorasService
             ->whereNotNull('hora_inicio')
             ->where('fecha_fichaje', '<=', $hasta)
             ->get(['fecha_fichaje', 'hora_inicio', 'hora_fin',
-                   'pausa_inicio', 'pausa_fin', 'fuera_de_turno', 'festivo', 'ajuste_he']);
+                   'pausa_inicio', 'pausa_fin', 'festivo', 'ajuste_he']);
 
         $festivosHist = self::festivosSet($sede, '2000-01-01', $hasta);
 
@@ -226,7 +225,6 @@ class VmHorasService
 
         $total = 0.0;
         foreach ($fichajes as $f) {
-            $isRot  = ($f->fuera_de_turno ?? 0) == 1;
             $isFest = ($f->festivo ?? 0) == 1;
             $hasFin = !empty($f->hora_fin);
             $isFestivo = isset($festivosHist[$f->fecha_fichaje]);
@@ -241,9 +239,7 @@ class VmHorasService
             if (!$contratoDia || !$contratoDia->horas_semana) continue;
 
             $esperadoMin = (int) round(($contratoDia->horas_semana / 5) * 60);
-            if ($isRot) {
-                $total += $esperadoMin;
-            } elseif ($hasFin) {
+            if ($hasFin) {
                 $tf   = self::hmsToMinutes($f->hora_fin) - self::hmsToMinutes($f->hora_inicio);
                 $pMin = (($f->pausa_inicio ?? null) && ($f->pausa_fin ?? null))
                     ? self::hmsToMinutes($f->pausa_fin) - self::hmsToMinutes($f->pausa_inicio)
@@ -255,7 +251,7 @@ class VmHorasService
             // (bloque de descanso, más abajo) -- si ya se trabajó el festivo, todo lo trabajado
             // cuenta como extra en la rama de arriba, y sumar el bono aquí sería contarlo dos veces.
             // El bono son las horas de contrato del día, no un fijo de 8h para todos.
-            if ($isFestivo && !$isFest && !$isRot) $total += $esperadoMin;
+            if ($isFestivo && !$isFest) $total += $esperadoMin;
             $total += (int) ($f->ajuste_he ?? 0);
         }
 

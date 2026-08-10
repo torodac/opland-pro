@@ -494,7 +494,6 @@ class DashboardController extends Controller
                 tipoAusencia: $tipoAusencia,
                 contrato:     $contrato,
                 isFestivo:    $esFestivo,
-                isRotatorio:  (bool) ($fichaje->fuera_de_turno ?? false),
                 isFestTrab:   (bool) ($fichaje->festivo ?? false),
                 hasFichaje:   true,
                 isDescanso:   $horario === 'descanso',
