@@ -229,7 +229,7 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                     <td>
                         @php
                             $ini_map2 = ['Trab. fest.'=>'TF','Asuntos propios'=>'AP','Vacaciones'=>'V','Baja'=>'B','Compensación'=>'C','Absentismo'=>'Ab','Revisar'=>'Re','Desc. Fest.'=>'DF','Trabajo'=>'T','Descanso'=>'D'];
-                            $trabajaFestivoODescanso = $dia['entrada'] && ($dia['is_festivo'] || $dia['horario_tipo'] === 'descanso');
+                            $trabajaFestivoODescanso = $dia['entrada'] && ($dia['is_festivo'] || $dia['es_descanso_efectivo']);
                         @endphp
                         @if($dia['is_rotatorio'])
                             <span class="tipo-badge" style="background:#6f42c1;color:#fff" title="Desc. Fest.">DF</span>

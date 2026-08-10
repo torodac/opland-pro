@@ -201,6 +201,7 @@ class InformeImputacionesController extends Controller
     {
         $usuario = DB::table('vm_usuarios')->where('id', $userId)->first();
         $sede    = $usuario->sede ?? '';
+        $esTurno = VmHorasService::esDeptoTurno($userId);
 
         $mp  = str_pad($month, 2, '0', STR_PAD_LEFT);
         $ms  = "{$year}-{$mp}-01";
@@ -299,11 +300,12 @@ class InformeImputacionesController extends Controller
             $isFestivo   = isset($festivosDia[$fecha]);
 
             $isCompensacion = $tipoObj && VmHorasService::categoriaAusencia($tipoObj->nombre) === 'C';
+            $isDescansoEf   = VmHorasService::esDescansoEfectivo($fecha, $hor->tipo ?? null, $esTurno);
 
             $heMin = VmHorasService::calcularHeDia(
                 $tfMin, $pMin, $tipoObj?->nombre ?? null, $contratoDia,
                 $isFestivo, $isFestTrab, (bool) $f,
-                $hor && $hor->tipo === 'descanso',
+                $isDescansoEf,
                 (int) ($f?->ajuste_he ?? 0)
             );
             $pausaResaltada = $contratoDia && $pMin !== null
@@ -329,6 +331,7 @@ class InformeImputacionesController extends Controller
                 'is_festivo'      => $isFestivo,
                 'pausa_resaltada' => $pausaResaltada,
                 'horario_tipo'    => $hor ? $hor->tipo : null,
+                'es_descanso_efectivo' => $isDescansoEf,
             ];
         }
 
@@ -359,6 +362,8 @@ class InformeImputacionesController extends Controller
 
     private function calcularSaldoHistorico(int $userId, $contratos, string $hasta, $tipos, string $sede = ''): float
     {
+        $esTurno = VmHorasService::esDeptoTurno($userId);
+
         $fichajes = DB::table('vm_fichaje')
             ->where('control_user', $userId)
             ->where('deleted', 0)
@@ -377,11 +382,16 @@ class InformeImputacionesController extends Controller
             ->where('fecha', '<=', $hasta)
             ->pluck('fecha')->flip()->all();
 
+        $esDescanso = fn(string $fecha) => $esTurno
+            ? isset($descansosDias[$fecha])
+            : ((int) date('N', strtotime($fecha)) >= 6); // 6=sábado, 7=domingo
+
         $total = 0.0;
         foreach ($fichajes as $f) {
             $isFest = ($f->festivo ?? 0) == 1;
             $hasFin = !empty($f->hora_fin);
-            $isFestivo = isset($festivosHist[$f->fecha_fichaje]);
+            $isFestivo    = isset($festivosHist[$f->fecha_fichaje]);
+            $isDescansoEf = $esDescanso($f->fecha_fichaje);
 
             $contratoDia = null;
             foreach ($contratos as $c) {
@@ -401,18 +411,18 @@ class InformeImputacionesController extends Controller
                 $ded   = VmHorasService::pausaDeducible($pMin, (float) $contratoDia->horas_semana);
                 $total += $isFest ? $tf - $ded : $tf - $esperadoMin - $ded;
             }
-            // El bono es para festivos SIN trabajar o sin fichaje (bloque de descanso, más abajo)
-            // -- si ya se trabajó el festivo, todo lo trabajado ya cuenta como extra en la rama de
-            // arriba, y sumar el bono aquí lo contaría dos veces. El bono son las horas de
-            // contrato del día, no un fijo de 8h para todos.
-            if ($isFestivo && !$isFest) $total += $esperadoMin;
+            // El bono es para festivos/descansos SIN trabajar o sin fichaje (bloque de más abajo)
+            // -- si ya se trabajó, todo lo trabajado ya cuenta como extra en la rama de arriba, y
+            // sumar el bono aquí lo contaría dos veces. El bono son las horas de contrato del día,
+            // no un fijo de 8h para todos.
+            if (($isFestivo || $isDescansoEf) && !$isFest) $total += $esperadoMin;
             $total += (int) ($f->ajuste_he ?? 0);
         }
 
         // Bono festivo por días de descanso en festivo (sin fichaje) -- las horas de contrato del
         // día, no un fijo de 8h (relevante para contratos con jornada diaria distinta de 8h).
         foreach ($festivosHist as $fDate => $_) {
-            if (!isset($descansosDias[$fDate])) continue;
+            if (!$esDescanso($fDate)) continue;
             // Comprobar que no hay fichaje ese día (ya contado arriba)
             $tieneF = $fichajes->contains('fecha_fichaje', $fDate);
             if ($tieneF) continue;
@@ -457,6 +467,7 @@ class InformeImputacionesController extends Controller
     private function getYearStats(int $userId, int $year, int $hastaMs, $tipos, $contratos, string $sede = ''): array
     {
         $labels = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+        $esTurno = VmHorasService::esDeptoTurno($userId);
 
         $fichajesYear = DB::table('vm_fichaje')
             ->where('control_user', $userId)
@@ -475,6 +486,10 @@ class InformeImputacionesController extends Controller
             ->whereBetween('fecha', ["{$year}-01-01", "{$year}-12-31"])
             ->pluck('fecha')->flip()->all();
 
+        $esDescanso = fn(string $fecha) => $esTurno
+            ? isset($descansosDias[$fecha])
+            : ((int) date('N', strtotime($fecha)) >= 6); // 6=sábado, 7=domingo
+
         $stats = [];
         for ($m = 1; $m <= $hastaMs; $m++) {
             $mp = str_pad($m, 2, '0', STR_PAD_LEFT);
@@ -489,7 +504,8 @@ class InformeImputacionesController extends Controller
             foreach (($fichajesYear[$m] ?? []) as $f) {
                 $isFest = ($f->festivo ?? 0) == 1;
                 $hasFin = !empty($f->hora_fin);
-                $isFestivo = isset($festivosYear[$f->fecha_fichaje]);
+                $isFestivo    = isset($festivosYear[$f->fecha_fichaje]);
+                $isDescansoEf = $esDescanso($f->fecha_fichaje);
                 $fichajesFechas[$f->fecha_fichaje] = true;
 
                 $contratoDia = null;
@@ -514,9 +530,9 @@ class InformeImputacionesController extends Controller
                     } else {
                         continue;
                     }
-                    // Bono solo si el festivo no se ha trabajado ya (si no, ya cuenta arriba) --
-                    // y las horas de contrato del día, no un fijo de 8h para todos.
-                    if ($isFestivo && !$isFest) $he += $esperadoMin;
+                    // Bono solo si el festivo/descanso no se ha trabajado ya (si no, ya cuenta
+                    // arriba) -- y las horas de contrato del día, no un fijo de 8h para todos.
+                    if (($isFestivo || $isDescansoEf) && !$isFest) $he += $esperadoMin;
                     $ajMin = (int) ($f->ajuste_he ?? 0);
                     $he += $ajMin;
                     if ($he > 0) $ep += $he;
@@ -528,7 +544,7 @@ class InformeImputacionesController extends Controller
             foreach ($festivosYear as $fDate => $_) {
                 if ($fDate < $ms || $fDate > $me) continue;
                 if (isset($fichajesFechas[$fDate])) continue; // ya contado
-                if (!isset($descansosDias[$fDate])) continue;
+                if (!$esDescanso($fDate)) continue;
                 foreach ($contratos as $c) {
                     if ($c->fecha_alta <= $fDate && (is_null($c->fecha_baja) || $c->fecha_baja >= $fDate)) {
                         $ep += (int) round(($c->horas_semana / 5) * 60);

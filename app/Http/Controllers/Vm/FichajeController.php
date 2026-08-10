@@ -218,12 +218,14 @@ class FichajeController extends Controller
             ->where('fecha', $fichaje->fecha_fichaje)
             ->first(['tipo']);
 
+        $esTurno = VmHorasService::esDeptoTurno($fichaje->control_user);
+
         $heMin = VmHorasService::calcularHeDia(
             $tfMin, $pMin, null, $contrato,
             $isFestivo,
             (bool) ($fichaje->festivo ?? 0),
             $tfMin !== null,
-            $horario && $horario->tipo === 'descanso',
+            VmHorasService::esDescansoEfectivo($fichaje->fecha_fichaje, $horario->tipo ?? null, $esTurno),
             (int) ($fichaje->ajuste_he ?? 0)
         );
 

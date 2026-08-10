@@ -42,6 +42,28 @@ class VmHorasService
         return $q->pluck('fecha_fecha')->map(fn($d) => (string) $d)->flip()->all();
     }
 
+    // Departamento "de turnos" (vm_departamentos.visible_horarios): determina si los descansos
+    // vienen del horario (vm_horarios) o son sábado/domingo por defecto (sin id_departamento o
+    // departamento sin visible_horarios, se asume NO de turnos).
+    public static function esDeptoTurno(int $userId): bool
+    {
+        return (bool) DB::table('vm_usuarios')
+            ->join('vm_departamentos', 'vm_departamentos.id', '=', 'vm_usuarios.id_departamento')
+            ->where('vm_usuarios.id', $userId)
+            ->value('vm_departamentos.visible_horarios');
+    }
+
+    // Descanso real de un día concreto: para personal de turnos, el que marque su horario
+    // (vm_horarios.tipo = 'descanso'); para el resto, sábado y domingo por defecto (no tienen
+    // horario, su semana laboral son los días entre semana).
+    public static function esDescansoEfectivo(string $fecha, ?string $horarioTipo, bool $esTurno): bool
+    {
+        if ($esTurno) {
+            return $horarioTipo === 'descanso';
+        }
+        return (int) date('N', strtotime($fecha)) >= 6; // 6=sábado, 7=domingo (ISO-8601)
+    }
+
     // ── Cálculo HE diario (lógica compartida) ────────────────────────────────
 
     /**
@@ -75,10 +97,15 @@ class VmHorasService
                 $heMin = $tfMin - $esperadoMin - $dedPausa;
             }
 
-            // "Fuera de turno" (recuperar un festivo que cae en descanso) no necesita rama propia:
-            // la resta de esperado en la rama normal + este bono ya dan el resultado correcto
-            // (todo lo fichado como extra) por cancelación algebraica.
-            if ($isFestivo && !$isFestTrab && ($hasFichaje || $isDescanso)) {
+            // Bono: trabajar un festivo o un día de descanso (real horario si es de turnos, o
+            // sábado/domingo si no) cuenta siempre como extra completo -- la resta de esperado en
+            // la rama normal + este bono dan el resultado correcto por cancelación algebraica, sin
+            // necesitar una rama propia. Sin fichaje, solo si coinciden festivo Y descanso a la vez
+            // (recuperar un festivo que cae en tu día libre).
+            $bono = $hasFichaje
+                ? ($isFestivo || $isDescanso) && !$isFestTrab
+                : ($isFestivo && $isDescanso);
+            if ($bono) {
                 $heMin = ($heMin ?? 0) + $esperadoMin;
             }
         }
@@ -102,6 +129,7 @@ class VmHorasService
     {
         $usuario = DB::table('vm_usuarios')->where('id', $userId)->first();
         $sede    = $usuario->sede ?? '';
+        $esTurno = self::esDeptoTurno($userId);
 
         $ms = "{$year}-01-01";
         $me = "{$year}-12-31";
@@ -179,7 +207,7 @@ class VmHorasService
                 isset($festivosDia[$fecha]),
                 $f && ($f->festivo ?? 0) == 1,
                 (bool) $f,
-                $hor && $hor->tipo === 'descanso',
+                self::esDescansoEfectivo($fecha, $hor->tipo ?? null, $esTurno),
                 (int) ($f->ajuste_he ?? 0)
             );
 
@@ -200,6 +228,7 @@ class VmHorasService
     {
         $usuario = DB::table('vm_usuarios')->where('id', $userId)->first();
         $sede    = $usuario->sede ?? '';
+        $esTurno = self::esDeptoTurno($userId);
 
         $contratos = DB::table('vm_contratos')
             ->where('id_usuarios', $userId)
@@ -223,11 +252,16 @@ class VmHorasService
             ->where('fecha', '<=', $hasta)
             ->pluck('fecha')->flip()->all();
 
+        $esDescanso = fn(string $fecha) => $esTurno
+            ? isset($descansosDias[$fecha])
+            : ((int) date('N', strtotime($fecha)) >= 6); // 6=sábado, 7=domingo
+
         $total = 0.0;
         foreach ($fichajes as $f) {
             $isFest = ($f->festivo ?? 0) == 1;
             $hasFin = !empty($f->hora_fin);
-            $isFestivo = isset($festivosHist[$f->fecha_fichaje]);
+            $isFestivo   = isset($festivosHist[$f->fecha_fichaje]);
+            $isDescansoEf = $esDescanso($f->fecha_fichaje);
 
             $contratoDia = null;
             foreach ($contratos as $c) {
@@ -247,18 +281,18 @@ class VmHorasService
                 $ded   = self::pausaDeducible($pMin, (float) $contratoDia->horas_semana);
                 $total += $isFest ? $tf - $ded : $tf - $esperadoMin - $ded;
             }
-            // El bono es para festivos SIN trabajar (fichaje.festivo=false) o sin fichaje
-            // (bloque de descanso, más abajo) -- si ya se trabajó el festivo, todo lo trabajado
-            // cuenta como extra en la rama de arriba, y sumar el bono aquí sería contarlo dos veces.
-            // El bono son las horas de contrato del día, no un fijo de 8h para todos.
-            if ($isFestivo && !$isFest) $total += $esperadoMin;
+            // El bono es para festivos o descansos SIN trabajar (fichaje.festivo=false) o sin
+            // fichaje (bloque de más abajo) -- si ya se trabajó, todo lo trabajado cuenta como
+            // extra en la rama de arriba, y sumar el bono aquí sería contarlo dos veces. El bono
+            // son las horas de contrato del día, no un fijo de 8h para todos.
+            if (($isFestivo || $isDescansoEf) && !$isFest) $total += $esperadoMin;
             $total += (int) ($f->ajuste_he ?? 0);
         }
 
         // Bono festivo por días de descanso en festivo (sin fichaje) -- las horas de contrato del
         // día, no un fijo de 8h (relevante para contratos con jornada diaria distinta de 8h).
         foreach ($festivosHist as $fDate => $_) {
-            if (!isset($descansosDias[$fDate])) continue;
+            if (!$esDescanso($fDate)) continue;
             $tieneF = $fichajes->contains('fecha_fichaje', $fDate);
             if ($tieneF) continue;
             foreach ($contratos as $c) {

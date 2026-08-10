@@ -496,7 +496,7 @@ class DashboardController extends Controller
                 isFestivo:    $esFestivo,
                 isFestTrab:   (bool) ($fichaje->festivo ?? false),
                 hasFichaje:   true,
-                isDescanso:   $horario === 'descanso',
+                isDescanso:   VmHorasService::esDescansoEfectivo($hoy, $horario, VmHorasService::esDeptoTurno($user->id)),
             );
         }
 
