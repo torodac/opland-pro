@@ -70,6 +70,9 @@
                                             $dt = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($s);
                                             $val = $ftype === 'fecha' ? $dt->format('d/m/Y') : $dt->format('d/m/Y H:i');
                                         }
+                                    } elseif ($val !== null && $ftype === 'time' && is_numeric($val)) {
+                                        $frac = (float) $val - floor((float) $val);
+                                        $val  = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($frac)->format('H:i');
                                     }
                                 @endphp
                                 <td class="px-3 py-2 text-gray-600 truncate max-w-[180px]">{{ $val ?? '—' }}</td>
