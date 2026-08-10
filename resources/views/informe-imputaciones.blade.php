@@ -237,6 +237,7 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
             </table>
             <div class="saldo-box mt-2">
                 Saldo histórico: <strong>{{ IC::fmtHoras($hist_extras, true) ?: '0h 00m' }}</strong>
+                <br><span style="color:#999;font-size:11px;">({{ $hist_extras_dias_fest }}d fest / {{ number_format($hist_extras_horas_resto, 1, ',', '') }}h ext)</span>
             </div>
             @if(!empty($sin_contrato) && $sin_contrato)
             <p style="font-size:11px;color:#374151;margin:6px 0 0;">Horas extras compensadas en la liquidación.</p>
@@ -329,17 +330,19 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                 <tbody>
                 @foreach($dias as $dia)
                 @php
-                    // Se trabajó siendo festivo o día de descanso (real horario si es de turnos,
-                    // o sábado/domingo si no -- ver es_descanso_efectivo) -> misma pill que festivo
-                    // trabajado (se sustituye por completo la pareja "Trabajo"+"Descanso", no se
-                    // apilan las dos).
-                    $trabajaFestivoODescanso = $dia['entrada'] && ($dia['is_festivo'] || $dia['es_descanso_efectivo']);
+                    // Se trabajó siendo festivo -> "Trab. fest."; se trabajó siendo día de descanso
+                    // (real horario si es de turnos, o sábado/domingo si no -- ver
+                    // es_descanso_efectivo) sin ser festivo -> "Trab. desc." Sustituyen por completo
+                    // la pareja "Trabajo"+"Descanso", no se apilan las dos.
+                    $trabajaFestivo  = $dia['entrada'] && $dia['is_festivo'];
+                    $trabajaDescanso = $dia['entrada'] && $dia['es_descanso_efectivo'] && !$dia['is_festivo'];
                     $badges = [];
                     if ($dia['is_rotatorio'])       $badges[] = ['Desc. Fest.','#6f42c1'];
-                    elseif ($dia['is_fest_trab'] || $trabajaFestivoODescanso) $badges[] = ['Trab. fest.','#0d6efd'];
+                    elseif ($dia['is_fest_trab'] || $trabajaFestivo) $badges[] = ['Trab. fest.','#0d6efd'];
+                    elseif ($trabajaDescanso)         $badges[] = ['Trab. desc.','#0d6efd'];
                     elseif ($dia['tipo'])            $badges[] = [$dia['tipo']->nombre, tipoColor($dia['tipo']->nombre, $tipo_color)];
                     elseif ($dia['entrada'])         $badges[] = ['Trabajo', $color_trabajo];
-                    if ($dia['es_descanso_efectivo'] && !$trabajaFestivoODescanso) $badges[] = ['Descanso', '#F3F4F6', '#6B7280'];
+                    if ($dia['es_descanso_efectivo'] && !$trabajaFestivo && !$trabajaDescanso) $badges[] = ['Descanso', '#F3F4F6', '#6B7280'];
                     $conflicto = count($badges) > 1;
                 @endphp
                 <tr class="{{ $dia['weekend'] ? 'weekend' : '' }}" @if($conflicto) style="background:#ffff00;" @endif>

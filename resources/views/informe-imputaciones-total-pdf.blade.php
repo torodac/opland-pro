@@ -95,6 +95,8 @@ $dias             = $ud['dias'];
 $tipos            = $ud['tipos'];
 $year_stats       = $ud['year_stats'];
 $hist_extras      = $ud['hist_extras'];
+$hist_extras_dias_fest   = $ud['hist_extras_dias_fest'];
+$hist_extras_horas_resto = $ud['hist_extras_horas_resto'];
 $is_liquidado     = $ud['is_liquidado'];
 $liquidado_fecha  = $ud['liquidado_fecha'];
 $sum_ep = array_sum(array_column($year_stats, 'ep'));
@@ -158,7 +160,7 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                         <td style="color:{{ $sum_et >= 0 ? '#1a7a34' : '#cc2200' }}">{{ number_format($sum_et,1,',','') }}</td>
                     </tr></tfoot>
                 </table>
-                <div class="saldo-box">Saldo historico: <strong>{{ IC::fmtHoras($hist_extras, true) ?: '0h 00m' }}</strong></div>
+                <div class="saldo-box">Saldo historico: <strong>{{ IC::fmtHoras($hist_extras, true) ?: '0h 00m' }}</strong><br><span style="color:#999;font-size:8pt;">({{ $hist_extras_dias_fest }}d fest / {{ number_format($hist_extras_horas_resto, 1, ',', '') }}h ext)</span></div>
             </div>
             @endif
 
@@ -228,13 +230,16 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                     <td>{{ $dia['km'] !== null && $dia['km'] > 0 ? number_format($dia['km'],1,',','') : ($dia['entrada'] ? '0,0' : '') }}</td>
                     <td>
                         @php
-                            $ini_map2 = ['Trab. fest.'=>'TF','Asuntos propios'=>'AP','Vacaciones'=>'V','Baja'=>'B','Compensación'=>'C','Absentismo'=>'Ab','Revisar'=>'Re','Desc. Fest.'=>'DF','Trabajo'=>'T','Descanso'=>'D'];
-                            $trabajaFestivoODescanso = $dia['entrada'] && ($dia['is_festivo'] || $dia['es_descanso_efectivo']);
+                            $ini_map2 = ['Trab. fest.'=>'TF','Trab. desc.'=>'TD','Asuntos propios'=>'AP','Vacaciones'=>'V','Baja'=>'B','Compensación'=>'C','Absentismo'=>'Ab','Revisar'=>'Re','Desc. Fest.'=>'DF','Trabajo'=>'T','Descanso'=>'D'];
+                            $trabajaFestivo  = $dia['entrada'] && $dia['is_festivo'];
+                            $trabajaDescanso = $dia['entrada'] && $dia['es_descanso_efectivo'] && !$dia['is_festivo'];
                         @endphp
                         @if($dia['is_rotatorio'])
                             <span class="tipo-badge" style="background:#6f42c1;color:#fff" title="Desc. Fest.">DF</span>
-                        @elseif($dia['is_fest_trab'] || $trabajaFestivoODescanso)
+                        @elseif($dia['is_fest_trab'] || $trabajaFestivo)
                             <span class="tipo-badge" style="background:#0d6efd;color:#fff" title="Trab. fest.">TF</span>
+                        @elseif($trabajaDescanso)
+                            <span class="tipo-badge" style="background:#0d6efd;color:#fff" title="Trab. desc.">TD</span>
                         @elseif($dia['tipo'])
                             <span class="tipo-badge" style="background:{{ tcTotal($dia['tipo']->nombre, $pdf_tipo_color) }};color:#fff" title="{{ $dia['tipo']->nombre }}">{{ $ini_map2[$dia['tipo']->nombre] ?? mb_strtoupper(mb_substr($dia['tipo']->nombre,0,2)) }}</span>
                         @elseif($dia['entrada'])

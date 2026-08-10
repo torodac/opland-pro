@@ -156,6 +156,7 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
             </table>
             <div class="saldo-box">
                 Saldo historico: <strong>{{ IC::fmtHoras($hist_extras, true) ?: '0h 00m' }}</strong>
+                <br><span style="color:#999;font-size:8pt;">({{ $hist_extras_dias_fest }}d fest / {{ number_format($hist_extras_horas_resto, 1, ',', '') }}h ext)</span>
             </div>
             @if(!empty($sin_contrato) && $sin_contrato)
             <div style="margin-top:6pt;font-size:8pt;color:#374151;">Horas extras compensadas en la liquidación.</div>
@@ -235,13 +236,15 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
             <tbody>
             @foreach($dias as $dia)
             @php
-                $trabajaFestivoODescanso = $dia['entrada'] && ($dia['is_festivo'] || $dia['es_descanso_efectivo']);
+                $trabajaFestivo  = $dia['entrada'] && $dia['is_festivo'];
+                $trabajaDescanso = $dia['entrada'] && $dia['es_descanso_efectivo'] && !$dia['is_festivo'];
                 $badges = [];
                 if ($dia['is_rotatorio'])       $badges[] = ['Desc. Fest.','#6f42c1'];
-                elseif ($dia['is_fest_trab'] || $trabajaFestivoODescanso) $badges[] = ['Trab. fest.','#0d6efd'];
+                elseif ($dia['is_fest_trab'] || $trabajaFestivo) $badges[] = ['Trab. fest.','#0d6efd'];
+                elseif ($trabajaDescanso)         $badges[] = ['Trab. desc.','#0d6efd'];
                 elseif ($dia['tipo'])            $badges[] = [$dia['tipo']->nombre, tc($dia['tipo']->nombre, $tipo_color)];
                 elseif ($dia['entrada'])         $badges[] = ['Trabajo', $color_trabajo];
-                if ($dia['es_descanso_efectivo'] && !$trabajaFestivoODescanso) $badges[] = ['Descanso', '#F3F4F6', '#6B7280'];
+                if ($dia['es_descanso_efectivo'] && !$trabajaFestivo && !$trabajaDescanso) $badges[] = ['Descanso', '#F3F4F6', '#6B7280'];
                 $conflicto = count($badges) > 1;
             @endphp
             <tr class="{{ $dia['weekend'] ? 'wk' : '' }}" @if($conflicto) style="background:#ffff00;" @endif>
