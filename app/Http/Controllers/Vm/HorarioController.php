@@ -104,6 +104,14 @@ class HorarioController extends Controller
             $festivosTrabajadosMap[$u->id] = VmHorasService::festivosTrabajadosCount($u->id);
         }
 
+        // Ancho de la columna Usuario: el contenido más largo de TODOS los departamentos, para que
+        // mida igual en todas las tablas de la página (cada tabla es independiente y si no se fuerza
+        // se adapta cada una a su propio contenido).
+        $colUserMaxLen = $usuariosFiltrados->reduce(function ($max, $u) use ($horasAcumuladasMap, $festivosTrabajadosMap) {
+            $nombreConAcumulado = "{$u->nombre} ({$horasAcumuladasMap[$u->id]}h/{$festivosTrabajadosMap[$u->id]}d)";
+            return max($max, mb_strlen($nombreConAcumulado));
+        }, mb_strlen('Usuario'));
+
         return view('horario', [
             'project'        => $project,
             'isAdmin'        => $isAdmin,
@@ -118,6 +126,7 @@ class HorarioController extends Controller
             'festivosMap'    => $festivosMap,
             'horasAcumuladasMap'    => $horasAcumuladasMap,
             'festivosTrabajadosMap' => $festivosTrabajadosMap,
+            'colUserMaxLen'  => $colUserMaxLen,
             'prevWeek'       => $weekStart->copy()->subWeek()->toDateString(),
             'nextWeek'       => $weekStart->copy()->addWeek()->toDateString(),
             'breadcrumb'     => [['label' => 'Horarios', 'url' => '']],
