@@ -12,6 +12,14 @@ use Illuminate\Support\Facades\DB;
 
 class VmUsuarioController extends Controller
 {
+    // Horas de convenio para un contrato a 40h/semana; se prorratea linealmente por horas_semana
+    // y por los días naturales que el contrato estuvo activo dentro de cada año.
+    private const HORAS_CONVENIO_ANUAL_40H = 1772;
+    // Días de vacaciones para un año completo -- a diferencia de las horas, NO se prorratea por
+    // horas_semana (un contrato a tiempo parcial no reduce los días, solo las horas por día),
+    // solo por el tiempo que el contrato estuvo activo dentro del año.
+    private const DIAS_VACACIONES_ANUAL = 22;
+
     private function authorize(Project $project): void
     {
         if (!auth()->user()->canViewTable($project, 'usuarios')) {
@@ -156,11 +164,72 @@ class VmUsuarioController extends Controller
             ->orderBy('fecha_fichaje', 'desc')
             ->get(['id', 'fecha_fichaje', 'ajuste_he', 'ajuste_he_motivo']);
 
+        [$horasConvenioAnio, $horasConvenioHoyAnio, $diasVacacionesCorrespondenAnio] =
+            $this->calcularConvenioPorAnio($contratosOrdenados, $distinctYears);
+
         return view('vm.usuario', compact(
             'project','usuario','contratos','ausencias','nominas',
             'bonus','ausenciasPorTipo','roles','departamentos','cargos','horarios','fichajes','tiposAusencia','festivos',
-            'pushInactivo','diasHe','imputacionesPorFecha','fichadosPorFecha','ajustesHe'
+            'pushInactivo','diasHe','imputacionesPorFecha','fichadosPorFecha','ajustesHe',
+            'horasConvenioAnio','horasConvenioHoyAnio','diasVacacionesCorrespondenAnio'
         ));
+    }
+
+    // Horas de convenio y días de vacaciones que corresponden a cada año, prorrateados por
+    // los contratos del usuario. Devuelve 3 mapas [año => valor]:
+    // - horasConvenioAnio: objetivo del año completo.
+    // - horasConvenioHoyAnio: mismo objetivo pero recortado a "hasta hoy" (para años pasados
+    //   coincide con el anterior; para el año en curso es menor; para años futuros da 0).
+    // - diasVacacionesCorrespondenAnio: días de vacaciones del año completo (sin recorte a hoy).
+    private function calcularConvenioPorAnio($contratos, array $aniosConFichaje): array
+    {
+        $hoy = now()->toDateString();
+
+        $anios = $aniosConFichaje;
+        foreach ($contratos as $c) {
+            $anioIni = (int) substr($c->fecha_alta, 0, 4);
+            $anioFin = $c->fecha_baja ? (int) substr($c->fecha_baja, 0, 4) : (int) now()->year;
+            for ($y = $anioIni; $y <= $anioFin; $y++) $anios[] = $y;
+        }
+        $anios = array_unique(array_merge($anios, [(int) now()->year]));
+
+        $horasConvenioAnio = [];
+        $horasConvenioHoyAnio = [];
+        $diasVacacionesCorrespondenAnio = [];
+
+        foreach ($anios as $y) {
+            $inicioAnio = "{$y}-01-01";
+            $finAnio    = "{$y}-12-31";
+            $diasAnio   = Carbon::parse($inicioAnio)->isLeapYear() ? 366 : 365;
+
+            $horas = 0.0;
+            $horasHoy = 0.0;
+            $diasVac = 0.0;
+
+            foreach ($contratos as $c) {
+                $desde = max($c->fecha_alta, $inicioAnio);
+                $hasta = min($c->fecha_baja ?? $finAnio, $finAnio);
+                if ($desde > $hasta || !$c->horas_semana) continue;
+
+                $diasSolapados = Carbon::parse($desde)->diffInDays(Carbon::parse($hasta)) + 1;
+                $factorHoras   = ((float) $c->horas_semana) / 40;
+
+                $horas    += self::HORAS_CONVENIO_ANUAL_40H * $factorHoras * ($diasSolapados / $diasAnio);
+                $diasVac  += self::DIAS_VACACIONES_ANUAL * ($diasSolapados / $diasAnio);
+
+                $hastaHoy = min($hasta, $hoy);
+                if ($desde <= $hastaHoy) {
+                    $diasSolapadosHoy = Carbon::parse($desde)->diffInDays(Carbon::parse($hastaHoy)) + 1;
+                    $horasHoy += self::HORAS_CONVENIO_ANUAL_40H * $factorHoras * ($diasSolapadosHoy / $diasAnio);
+                }
+            }
+
+            $horasConvenioAnio[$y]              = round($horas, 1);
+            $horasConvenioHoyAnio[$y]           = round($horasHoy, 1);
+            $diasVacacionesCorrespondenAnio[$y] = round($diasVac, 1);
+        }
+
+        return [$horasConvenioAnio, $horasConvenioHoyAnio, $diasVacacionesCorrespondenAnio];
     }
 
     private function getTiposAusencia(): array

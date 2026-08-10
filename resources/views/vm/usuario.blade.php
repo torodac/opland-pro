@@ -363,6 +363,12 @@ td{padding:8px;font-size:13px;}
     <div id="cal-container" style="display:grid;grid-template-columns:repeat(4,1fr);"></div>
   </div>
 
+  {{-- Cumplimiento de convenio --}}
+  <div class="section-card">
+    <p class="sec-title" style="margin:0 0 12px;"><i class="ti ti-hourglass" style="font-size:16px;"></i>Cumplimiento de convenio</p>
+    <div id="convenio-stats"></div>
+  </div>
+
   {{-- Horario anual --}}
   <div class="section-card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
@@ -1012,6 +1018,7 @@ function cambiarAnyo(d) {
     renderCal(calYear);
     renderPills(calYear);
     renderHorarioGrid(calYear);
+    renderConvenio(calYear);
 }
 renderCal(calYear);
 renderPills(calYear);
@@ -1020,6 +1027,11 @@ renderPills(calYear);
 const DIAS_HE       = {!! json_encode($diasHe) !!};
 const IMPUTACIONES  = {!! json_encode($imputacionesPorFecha) !!};
 const FICHADOS      = {!! json_encode($fichadosPorFecha) !!};
+
+// ── Cumplimiento de convenio ─────────────────────────────────────
+const HORAS_CONVENIO_ANIO     = {!! json_encode($horasConvenioAnio) !!};
+const HORAS_CONVENIO_HOY_ANIO = {!! json_encode($horasConvenioHoyAnio) !!};
+const DIAS_VAC_CORRESPONDEN_ANIO = {!! json_encode($diasVacacionesCorrespondenAnio) !!};
 const FICHAJES = {!! $fichajes->map(fn($f) => [
     'fecha'        => $f->fecha_fichaje,
     'hora_inicio'  => substr($f->hora_inicio, 0, 5),
@@ -1060,6 +1072,72 @@ function calcHoras(ini, fin) {
     const [ih, im] = ini.split(':').map(Number);
     const [fh, fm] = fin.split(':').map(Number);
     return ((fh * 60 + fm) - (ih * 60 + im)) / 60;
+}
+
+// Horas fichadas brutas del año (sin deducir pausa) -- suma de todos los fichajes de ese año.
+function horasFichadasBrutasAnio(year) {
+    let total = 0;
+    for (const [fecha, f] of Object.entries(FICHAJES)) {
+        if (!fecha.startsWith(year + '-')) continue;
+        const h = calcHoras(f.hora_inicio, f.hora_fin);
+        if (h !== null) total += h;
+    }
+    return total;
+}
+
+// Días de vacaciones disfrutados en el año (mismo criterio que renderPills(): agrupa por
+// año de devengo, días hábiles según diasHabiles()).
+function diasVacacionesDisfrutadosAnio(year) {
+    let total = 0;
+    for (const a of AUSENCIAS) {
+        if (a.tipo !== 'Vacaciones') continue;
+        const devengo = a.anyo_devengo || a.desde.slice(0, 4);
+        if (String(devengo) !== String(year)) continue;
+        total += diasHabiles(a.desde, a.hasta);
+    }
+    return total;
+}
+
+function convenioStatCardHtml(numero, referencia, pct) {
+    const w = Math.max(0, Math.min(100, pct));
+    return `
+      <div style="background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px;padding:14px 16px;">
+        <p style="font-size:26px;font-weight:600;line-height:1.1;margin:0;color:#222;">${numero}</p>
+        <p style="font-size:11px;color:#999;margin:2px 0 10px;">${referencia}</p>
+        <div style="height:8px;border-radius:4px;background:#F1EFE8;overflow:hidden;">
+          <div style="height:100%;width:${w}%;background:#f97316;border-radius:4px;"></div>
+        </div>
+      </div>`;
+}
+
+function renderConvenio(year) {
+    const cont = document.getElementById('convenio-stats');
+    if (!cont) return;
+
+    const fichadas       = horasFichadasBrutasAnio(year);
+    const objetivoAnual   = HORAS_CONVENIO_ANIO[year] || 0;
+    const objetivoHoy     = HORAS_CONVENIO_HOY_ANIO[year] || 0;
+    const vacCorresponden = DIAS_VAC_CORRESPONDEN_ANIO[year] || 0;
+    const vacDisfrutadas  = diasVacacionesDisfrutadosAnio(year);
+
+    let html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">';
+    html += convenioStatCardHtml(
+        `${fichadas.toFixed(1)}h`,
+        `de ${objetivoAnual.toFixed(1)}h · objetivo del año`,
+        objetivoAnual > 0 ? (fichadas / objetivoAnual) * 100 : 0
+    );
+    html += convenioStatCardHtml(
+        `${fichadas.toFixed(1)}h`,
+        `de ${objetivoHoy.toFixed(1)}h · objetivo a hoy`,
+        objetivoHoy > 0 ? (fichadas / objetivoHoy) * 100 : 0
+    );
+    html += convenioStatCardHtml(
+        `${vacDisfrutadas}`,
+        `de ${vacCorresponden.toFixed(1)} días de vacaciones que corresponden`,
+        vacCorresponden > 0 ? (vacDisfrutadas / vacCorresponden) * 100 : 0
+    );
+    html += '</div>';
+    cont.innerHTML = html;
 }
 
 function ausenciaColorParaDia(fecha) {
@@ -1154,6 +1232,7 @@ function renderHorarioGrid(year) {
 }
 
 renderHorarioGrid(calYear);
+renderConvenio(calYear);
 </script>
 
 </x-app-layout>
