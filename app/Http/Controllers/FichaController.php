@@ -163,6 +163,13 @@ class FichaController extends Controller
         $projectTable = $this->resolveTable($project, $table);
         abort_unless(Auth::user()?->canViewTable($project, $table), 403);
 
+        // fichaje (vm) tiene reglas de negocio propias (límite de 2 días según rol, validación de
+        // horario, duplicados) que solo vive en FichajeController -- la ficha genérica no las
+        // conoce, así que se redirige siempre a la pantalla custom en vez de duplicarlas aquí.
+        if ($projectTable->name === 'fichaje' && $project->slug === 'vm') {
+            return redirect()->route('vm.fichaje_form.nuevo', $project->slug);
+        }
+
         // Prerellenar campos desde query string (ej: al crear desde pestaña de tabla relacionada)
         $prefill = request()->only($projectTable->fields->pluck('name')->toArray());
 
@@ -270,6 +277,13 @@ class FichaController extends Controller
     {
         $projectTable = $this->resolveTable($project, $table);
         abort_unless(Auth::user()?->canViewTable($project, $table), 403);
+
+        // Mismo motivo que en create(): delega en el controlador custom para que un POST directo
+        // a la ruta genérica no pueda crear un fichaje saltándose sus reglas de negocio.
+        if ($projectTable->name === 'fichaje' && $project->slug === 'vm') {
+            return app(\App\Http\Controllers\Vm\FichajeController::class)->store($request, $project);
+        }
+
         $this->validateRequired($request, $projectTable);
         $data = $this->filterData($request, $projectTable);
         $data['createuser'] = $this->currentUserId();
