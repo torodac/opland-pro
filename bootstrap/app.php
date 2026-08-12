@@ -24,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'opland.only'        => \App\Http\Middleware\EnsureOplandProject::class,
             'rodcar.only'        => \App\Http\Middleware\EnsureRodcarProject::class,
             'mb.only'            => \App\Http\Middleware\EnsureMbProject::class,
+            'nf.only'            => \App\Http\Middleware\EnsureNfProject::class,
             'table.access'       => \App\Http\Middleware\CheckTableAccess::class,
         ]);
         $middleware->appendToGroup('web', \App\Http\Middleware\ForcePasswordChange::class);

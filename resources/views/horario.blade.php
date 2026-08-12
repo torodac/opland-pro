@@ -1,3 +1,4 @@
+@php use App\Http\Controllers\Vm\InformeImputacionesController as IC; @endphp
 @php
 $diasNombres = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 
@@ -81,6 +82,12 @@ function ausenciaCellHtml(string $tipo): string {
 .hor-table td.cell-fest { background:#fff5f5; }
 .hor-table td.cell-edit { cursor:pointer; }
 .hor-table td.cell-edit:hover { background:#EFF6FF; }
+
+/* La columna Usuario es la primera de la tabla, justo al lado del sidebar -- el tooltip por
+   defecto se centra sobre el elemento y su mitad izquierda queda tapada por el sidebar. Aquí se
+   ancla por la izquierda (el borde izquierdo del tooltip coincide con el del texto) para que
+   crezca siempre hacia la derecha, nunca hacia el sidebar. */
+.app-tooltip-right .app-tooltip-box { left: 0; transform: none; }
 
 .hce { width:100%; height:22px; border-radius:4px; border:1px dashed #d1d5db; }
 td.cell-edit:hover .hce { border-color:#93C5FD; background:#EFF6FF; }
@@ -179,11 +186,14 @@ $deptLabel = $dept->nombre ?: 'Sin departamento';
             @foreach($usuarios as $u)
             <tr>
                 @php
-                    $horasAcum    = $horasAcumuladasMap[$u->id] ?? 0;
-                    $festivosAcum = $festivosTrabajadosMap[$u->id] ?? 0;
-                    $nombreConAcumulado = "{$u->nombre} ({$horasAcum}h/{$festivosAcum}d)";
+                    $saldo = $saldoMap[$u->id] ?? ['total' => 0, 'dias_fest' => 0, 'horas_resto' => 0];
+                    $diasFestFmt = number_format($saldo['dias_fest'], 1, ',', '');
+                    $horasRestoFmt = number_format($saldo['horas_resto'], 1, ',', '');
+                    $nombreConDesglose = "{$u->nombre} ({$diasFestFmt}d fest / {$horasRestoFmt}h ext)";
+                    $totalFmt = IC::fmtHoras($saldo['total'], true) ?: '0h 00m';
+                    $tooltipTexto = "{$u->nombre}\nTotal: {$totalFmt}\n({$diasFestFmt}d fest / {$horasRestoFmt}h ext)";
                 @endphp
-                <td class="col-user"><span class="app-tooltip">{{ $nombreConAcumulado }}<span class="app-tooltip-box">{{ $nombreConAcumulado }}</span></span></td>
+                <td class="col-user"><span class="app-tooltip app-tooltip-right">{{ $nombreConDesglose }}<span class="app-tooltip-box">{{ $tooltipTexto }}</span></span></td>
                 @foreach($dates as $di => $d)
                 @php
                     $ds     = $d->toDateString();

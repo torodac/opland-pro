@@ -79,6 +79,15 @@ return [
             'transport' => 'array',
         ],
 
+        'nf' => [
+            'transport' => 'smtp',
+            'host' => env('MAIL_NF_HOST', 'smtp-relay.sendinblue.com'),
+            'port' => env('MAIL_NF_PORT', 587),
+            'username' => env('MAIL_NF_USERNAME'),
+            'password' => env('MAIL_NF_PASSWORD'),
+            'timeout' => null,
+        ],
+
         'failover' => [
             'transport' => 'failover',
             'mailers' => [

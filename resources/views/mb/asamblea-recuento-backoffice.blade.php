@@ -13,6 +13,20 @@
 .rc-stat-green{background:#f0fdf4;border-color:#86efac}
 .rc-stat-green .rc-stat-num{color:#15803d}
 .rc-stat-green .rc-stat-label{color:#166534}
+.rc-stat-amber{background:#fffbeb;border-color:#fcd34d}
+.rc-stat-amber .rc-stat-num{color:#b45309}
+.rc-stat-amber .rc-stat-label{color:#92400e}
+.rc-stat-grey{background:#f8fafc;border-color:#cbd5e1}
+.rc-stat-grey .rc-stat-num{color:#475569}
+.rc-stat-grey .rc-stat-label{color:#64748b}
+.rc-stat-red{background:#fef2f2;border-color:#fca5a5}
+.rc-stat-red .rc-stat-num{color:#b91c1c}
+.rc-stat-red .rc-stat-label{color:#991b1b}
+.rc-stat-info{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:rgba(0,0,0,.12);color:inherit;font-size:10px;font-weight:700;cursor:default;font-style:normal;margin-left:4px;vertical-align:middle}
+.app-tooltip-down .app-tooltip-box{bottom:auto;top:100%;margin-bottom:0;margin-top:6px}
+.rc-stat[data-filter]{cursor:pointer;transition:box-shadow .15s}
+.rc-stat[data-filter]:hover{box-shadow:0 0 0 2px rgba(15,23,42,.15)}
+.rc-stat-activo{box-shadow:0 0 0 2px rgba(15,23,42,.45)}
 
 .rc-playstop-group{display:inline-flex;align-items:center;gap:8px}
 .rc-btn{border-radius:10px;padding:11px 18px;border:1px solid #dce6ee;background:#fff;cursor:pointer;font-size:13px;font-weight:600}
@@ -54,16 +68,46 @@
 .rl-table td.voto.vacio{color:#d1d5db;cursor:default}
 .rl-table td.voto:not(.vacio):hover{background:#fef2f2}
 .rl-hint{font-size:11.5px;color:#9ca3af;margin-bottom:10px}
+.rl-table th[data-col]{cursor:pointer;user-select:none}
+.rl-table th[data-col]:hover{background:#eef2f6}
+.rl-table th[data-col].sort-asc::after{content:" \25B2";font-size:8px}
+.rl-table th[data-col].sort-desc::after{content:" \25BC";font-size:8px}
+.rl-badge-cancelada{display:inline-block;font-size:9.5px;font-weight:700;color:#b91c1c;background:#fee2e2;border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:middle}
+.rl-badge-sin-votacion{display:inline-block;font-size:9.5px;font-weight:700;color:#64748b;background:#f1f5f9;border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:middle}
+.rl-badge-sin-vivienda{display:inline-block;font-size:9.5px;font-weight:700;color:#b91c1c;background:#fee2e2;border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:middle}
+.rl-export{text-decoration:none;white-space:nowrap}
 </style>
 
 <div class="rc-stats-row">
-  <div class="rc-stat rc-stat-blue">
+  <div class="rc-stat rc-stat-blue" id="box-repartidas" data-filter="" onclick="aplicarFiltro(null)">
     <span class="rc-stat-num" id="stat-repartidas">{{ $totalHojas }}</span>
-    <span class="rc-stat-label">hojas repartidas</span>
+    <span class="rc-stat-label">hojas repartidas
+      <span class="app-tooltip app-tooltip-down" onclick="event.stopPropagation()"><span class="rc-stat-info">i</span><span class="app-tooltip-box">Total de hojas de voto entregadas a los asistentes en esta asamblea (mb_asambleas_hojas, sin contar las dadas de baja).</span></span>
+    </span>
   </div>
-  <div class="rc-stat rc-stat-green">
+  <div class="rc-stat rc-stat-green" id="box-recontadas" data-filter="recontadas" onclick="aplicarFiltro('recontadas')">
     <span class="rc-stat-num" id="stat-recontadas">{{ $hojasRecontadas }}</span>
-    <span class="rc-stat-label">hojas recontadas</span>
+    <span class="rc-stat-label">hojas recontadas
+      <span class="app-tooltip app-tooltip-down" onclick="event.stopPropagation()"><span class="rc-stat-info">i</span><span class="app-tooltip-box">Hojas con al menos un voto escaneado en alguna pregunta. No incluye las hojas anuladas (ver "anuladas con voto"). Clic para filtrar el listado.</span></span>
+    </span>
+  </div>
+  <div class="rc-stat rc-stat-amber" id="box-anuladas-con-voto" data-filter="anuladas" onclick="aplicarFiltro('anuladas')">
+    <span class="rc-stat-num" id="stat-anuladas-con-voto">{{ $hojasAnuladasConVoto }}</span>
+    <span class="rc-stat-label">anuladas con voto
+      <span class="app-tooltip app-tooltip-down" onclick="event.stopPropagation()"><span class="rc-stat-info">i</span><span class="app-tooltip-box">Hojas que fueron anuladas (dadas de baja / reasignadas a otra vivienda) pero que ya tenían al menos un voto escaneado antes de anularse. Revísalas: puede haber que corregir el recuento. Clic para filtrar el listado.</span></span>
+    </span>
+  </div>
+  <div class="rc-stat rc-stat-grey" id="box-sin-votacion" data-filter="sin_votacion" onclick="aplicarFiltro('sin_votacion')">
+    <span class="rc-stat-num" id="stat-sin-votacion">{{ $hojasSinVotacion }}</span>
+    <span class="rc-stat-label">sin votación
+      <span class="app-tooltip app-tooltip-down" onclick="event.stopPropagation()"><span class="rc-stat-info">i</span><span class="app-tooltip-box">Hojas repartidas sin ningún voto escaneado todavía: pendientes de recontar mientras el recuento está en marcha, o abstención total en las 6 preguntas si ya ha terminado. Clic para filtrar el listado.</span></span>
+    </span>
+  </div>
+  <div class="rc-stat rc-stat-red" id="box-sin-vivienda" data-filter="sin_vivienda" onclick="aplicarFiltro('sin_vivienda')">
+    <span class="rc-stat-num" id="stat-sin-vivienda">{{ $hojasSinVivienda }}</span>
+    <span class="rc-stat-label">sin vivienda
+      <span class="app-tooltip app-tooltip-down" onclick="event.stopPropagation()"><span class="rc-stat-info">i</span><span class="app-tooltip-box">Votos escaneados con un número de hoja que no corresponde a ninguna hoja repartida ni anulada (probablemente un número mal escaneado). No computan en el recuento hasta que se les asigne una vivienda. Clic para filtrar el listado.</span></span>
+    </span>
   </div>
   <div class="rc-playstop-group">
     <button type="button" class="rc-btn rc-btn-play" id="btn-play" onclick="iniciarRecuento()">▶ Iniciar</button>
@@ -106,22 +150,25 @@
       </div>
       <div class="rc-col rc-abs">
         <div class="rc-col-label">Abstención</div>
-        <div class="rc-col-num" id="abs-{{ $p->numero_pregunta }}">{{ max($totalHojas - $si - $no, 0) }}</div>
+        <div class="rc-col-num" id="abs-{{ $p->numero_pregunta }}">{{ max($hojasRecontadas - $si - $no, 0) }}</div>
       </div>
     </div>
   </div>
   @endforeach
 </div>
 
-<p class="rl-hint">Clic en un voto para eliminarlo (por si se escaneó la pregunta equivocada). Las celdas en blanco no tienen voto registrado. La hoja con actividad más reciente aparece siempre arriba.</p>
+<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:10px">
+  <p class="rl-hint" style="margin:0">Clic en un voto para eliminarlo (por si se escaneó la pregunta equivocada). Las celdas en blanco no tienen voto registrado. La hoja con actividad más reciente aparece siempre arriba. Clic en una cabecera para ordenar por esa columna.</p>
+  <a class="rc-btn rl-export" href="{{ url($project->slug . '/asamblea/recuento/export') }}?id_asamblea={{ $asamblea->id }}">⬇ Exportar Excel</a>
+</div>
 
 <div style="overflow-x:auto">
 <table class="rl-table">
   <thead><tr>
-    <th>Hoja</th>
-    <th>Vivienda</th>
+    <th data-col="hoja">Hoja</th>
+    <th data-col="vivienda">Vivienda</th>
     @foreach($preguntas as $p)
-    <th class="num" title="{{ $p->texto }}">P{{ $p->numero_pregunta }}</th>
+    <th class="num" data-col="{{ $p->numero_pregunta }}" title="{{ $p->texto }}">P{{ $p->numero_pregunta }}</th>
     @endforeach
   </tr></thead>
   <tbody id="listado-body"></tbody>
@@ -130,11 +177,14 @@
 
 @php
 $estadoInicial = [
-    'totalHojas'      => $totalHojas,
-    'hojasRecontadas' => $hojasRecontadas,
-    'tallies'         => $tallies,
-    'hojas'           => $hojas,
-    'votosPorHoja'    => $votosPorHoja,
+    'totalHojas'           => $totalHojas,
+    'hojasRecontadas'      => $hojasRecontadas,
+    'hojasAnuladasConVoto' => $hojasAnuladasConVoto,
+    'hojasSinVotacion'     => $hojasSinVotacion,
+    'hojasSinVivienda'     => $hojasSinVivienda,
+    'tallies'              => $tallies,
+    'hojas'                => $hojas,
+    'votosPorHoja'         => $votosPorHoja,
 ];
 @endphp
 
@@ -154,8 +204,8 @@ const estadoDot = document.getElementById('estado-dot');
 const estadoLabel = document.getElementById('estado-label');
 const listadoBody = document.getElementById('listado-body');
 
-function pintarPregunta(numeroPregunta, si, no, totalHojas) {
-  const abs = Math.max(totalHojas - si - no, 0);
+function pintarPregunta(numeroPregunta, si, no, hojasRecontadas) {
+  const abs = Math.max(hojasRecontadas - si - no, 0);
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
   set('si-' + numeroPregunta, si);
   set('no-' + numeroPregunta, no);
@@ -174,24 +224,99 @@ function celdaVoto(numeroHoja, numeroPregunta, voto) {
   return `<td class="voto vacio">—</td>`;
 }
 
+let ultimoHojas = [];
+let ultimoVotosPorHoja = {};
+let sortCol = null;   // 'hoja' | 'vivienda' | numero_pregunta (string)
+let sortDir = 1;       // 1 asc, -1 desc
+let filtroActivo = null; // null | 'recontadas' | 'anuladas' | 'sin_votacion' | 'sin_vivienda'
+
+function pasaFiltro(h) {
+  if (filtroActivo === null) return true;
+  const tieneVoto = Object.keys(ultimoVotosPorHoja[h.numero_hoja] || {}).length > 0;
+  if (filtroActivo === 'recontadas')   return !h.cancelada && !h.sinVivienda && tieneVoto;
+  if (filtroActivo === 'anuladas')     return h.cancelada && tieneVoto;
+  if (filtroActivo === 'sin_votacion') return !h.cancelada && !h.sinVivienda && !tieneVoto;
+  if (filtroActivo === 'sin_vivienda') return !!h.sinVivienda;
+  return true;
+}
+
+function aplicarFiltro(nombre) {
+  filtroActivo = (nombre === null || filtroActivo === nombre) ? null : nombre;
+  document.querySelectorAll('.rc-stat[data-filter]').forEach(el => {
+    el.classList.toggle('rc-stat-activo', filtroActivo !== null && el.dataset.filter === filtroActivo);
+  });
+  renderListado(ultimoHojas, ultimoVotosPorHoja);
+}
+
+function ordenarHojas(hojas) {
+  if (sortCol === null) return hojas;
+  const arr = hojas.slice();
+  arr.sort((a, b) => {
+    let va, vb;
+    if (sortCol === 'hoja') { va = a.numero_hoja; vb = b.numero_hoja; }
+    else if (sortCol === 'vivienda') { va = (a.nombre || '').toLowerCase(); vb = (b.nombre || '').toLowerCase(); }
+    else {
+      va = (ultimoVotosPorHoja[a.numero_hoja] || {})[sortCol] || '';
+      vb = (ultimoVotosPorHoja[b.numero_hoja] || {})[sortCol] || '';
+    }
+    if (va < vb) return -1 * sortDir;
+    if (va > vb) return 1 * sortDir;
+    return 0;
+  });
+  return arr;
+}
+
+function actualizarIndicadoresOrden() {
+  document.querySelectorAll('.rl-table th[data-col]').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.col === String(sortCol)) {
+      th.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc');
+    }
+  });
+}
+
+document.querySelectorAll('.rl-table th[data-col]').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.col;
+    if (String(sortCol) === col) sortDir *= -1; else { sortCol = col; sortDir = 1; }
+    actualizarIndicadoresOrden();
+    renderListado(ultimoHojas, ultimoVotosPorHoja);
+  });
+});
+
 function renderListado(hojas, votosPorHoja) {
+  ultimoHojas = hojas;
+  ultimoVotosPorHoja = votosPorHoja;
+
   if (!hojas.length) {
     listadoBody.innerHTML = `<tr><td colspan="${2 + PREGUNTAS.length}" style="text-align:center;color:#9ca3af;padding:24px">Todavía no hay hojas repartidas.</td></tr>`;
     return;
   }
-  listadoBody.innerHTML = hojas.map(h => {
+  const filtradas = hojas.filter(pasaFiltro);
+  if (!filtradas.length) {
+    listadoBody.innerHTML = `<tr><td colspan="${2 + PREGUNTAS.length}" style="text-align:center;color:#9ca3af;padding:24px">Ninguna hoja coincide con el filtro.</td></tr>`;
+    return;
+  }
+  listadoBody.innerHTML = ordenarHojas(filtradas).map(h => {
     const votos = votosPorHoja[h.numero_hoja] || {};
     const celdas = PREGUNTAS.map(p => celdaVoto(h.numero_hoja, p.numero_pregunta, votos[p.numero_pregunta])).join('');
-    return `<tr><td>${h.numero_hoja}</td><td>${h.nombre}</td>${celdas}</tr>`;
+    let badge = '';
+    if (h.cancelada) badge = '<span class="rl-badge-cancelada">Cancelada</span>';
+    else if (h.sinVivienda) badge = '<span class="rl-badge-sin-vivienda">Sin vivienda</span>';
+    else if (Object.keys(votos).length === 0) badge = '<span class="rl-badge-sin-votacion">Sin votación</span>';
+    return `<tr><td>${h.numero_hoja}${badge}</td><td>${h.nombre || '—'}</td>${celdas}</tr>`;
   }).join('');
 }
 
 function renderTodo(data) {
   document.getElementById('stat-repartidas').textContent = data.totalHojas;
   document.getElementById('stat-recontadas').textContent = data.hojasRecontadas;
+  document.getElementById('stat-anuladas-con-voto').textContent = data.hojasAnuladasConVoto;
+  document.getElementById('stat-sin-votacion').textContent = data.hojasSinVotacion;
+  document.getElementById('stat-sin-vivienda').textContent = data.hojasSinVivienda;
   PREGUNTAS.forEach(p => {
     const t = data.tallies[p.numero_pregunta] || {};
-    pintarPregunta(p.numero_pregunta, t.S || 0, t.N || 0, data.totalHojas);
+    pintarPregunta(p.numero_pregunta, t.S || 0, t.N || 0, data.hojasRecontadas);
   });
   renderListado(data.hojas, data.votosPorHoja);
 }

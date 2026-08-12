@@ -296,6 +296,16 @@ class FichajeController extends Controller
             return response()->json(['error' => $horarioError], 422);
         }
 
+        $yaExiste = DB::table('vm_fichaje')
+            ->where('control_user', $data['control_user'])
+            ->where('fecha_fichaje', $data['fecha_fichaje'])
+            ->where('id', '!=', $id)
+            ->where('deleted', 0)
+            ->exists();
+        if ($yaExiste) {
+            return response()->json(['error' => 'Ese empleado ya tiene otro fichaje ese día'], 422);
+        }
+
         $data['ajuste_he']        = (int) ($data['ajuste_he'] ?? 0);
         $data['festivo']        = (int) ($data['festivo'] ?? 0);
         $data['fuera_de_turno'] = (int) ($data['fuera_de_turno'] ?? 0);

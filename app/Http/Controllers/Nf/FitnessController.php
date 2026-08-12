@@ -1,0 +1,329 @@
+<?php
+
+namespace App\Http\Controllers\Nf;
+
+use App\Http\Controllers\Controller;
+use App\Mail\NfDocumentoMail;
+use App\Mail\NfPagoMail;
+use App\Models\Project;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+
+class FitnessController extends Controller
+{
+    // Ficha de cliente: datos personales + servicios contratados.
+    public function ficha(Project $project, int $id)
+    {
+        $cliente = DB::table('nf_clientes')->where('id', $id)->firstOrFail();
+
+        $contratos = DB::table('nf_contratos as c')
+            ->leftJoin('nf_tipo as t', 't.id', '=', 'c.id_tipo')
+            ->where('c.id_clientes', $id)
+            ->where('c.deleted', false)
+            ->orderByDesc('c.fecha_inicio')
+            ->orderByDesc('c.id')
+            ->select('c.*', 't.nombre as tipo_nombre')
+            ->get();
+
+        $hoy = now()->toDateString();
+        $activo = $contratos->contains(fn($c) => $c->fecha_inicio <= $hoy && $c->fecha_fin >= $hoy);
+
+        $generos = DB::table('nf_genero')->orderBy('id')->get();
+        $gruposFitness = DB::table('nf_grupo')->where('id_tipo', 2)->where('deleted', false)->orderBy('nombre')->get();
+        $colorGrupo = $this->colorGrupo();
+
+        return view('nf.cliente', compact('project', 'cliente', 'contratos', 'activo', 'generos', 'gruposFitness', 'colorGrupo'));
+    }
+
+    // Colores de los badges de grupo/servicio, compartidos entre la ficha de cliente y pagos_form.
+    private function colorGrupo(): array
+    {
+        return [
+            'Verde' => '#3D8B5A', 'Azul' => '#3B6FA6', 'Rojo' => '#B5432F',
+            'Morado' => '#7B4FA0', 'Amarillo' => '#D2A72C', 'Rosa' => '#C9698B',
+            'Naranja' => '#D2762C',
+        ];
+    }
+
+    // Pantalla "Pagos" con navegador de mes-año: lista los pagos de ese mes únicamente y permite
+    // generar los pendientes desde ahí (réplica de fitness/pagos/{mes} del legacy opland-app,
+    // adaptada a un mes en formato "YYYY-MM" en vez de "mYYYY").
+    public function pagosList(Request $request, Project $project, ?string $mes = null)
+    {
+        $mes = $mes && preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $mes) ? $mes : now()->format('Y-m');
+        $inicioMes = \Carbon\Carbon::createFromFormat('Y-m-d', $mes . '-01');
+
+        $estado = in_array($request->input('estado'), ['pendiente', 'cobrado'], true) ? $request->input('estado') : 'pendiente';
+        $nombre = $request->input('nombre');
+        $grupo  = $request->input('grupo');
+
+        // Base compartida por los stats (Pendiente/Cobrado) y el listado: mes + filtros de
+        // nombre/grupo, pero SIN el filtro de estado, para que los importes de los stats no
+        // cambien al alternar entre ellos (solo cambia cuál está resaltado/activo).
+        $base = DB::table('nf_pagos as p')
+            ->join('nf_clientes as cli', 'cli.id', '=', 'p.id_clientes')
+            ->leftJoin('nf_contratos as c', 'c.id', '=', 'p.id_contratos')
+            ->where('p.deleted', false)
+            ->whereBetween('p.fecha_pago', [$inicioMes->toDateString(), $inicioMes->copy()->endOfMonth()->toDateString()]);
+
+        if ($nombre) {
+            $base->where('cli.nombre', 'ilike', "%{$nombre}%");
+        }
+        if ($grupo) {
+            $base->where('c.id_grupo', $grupo);
+        }
+
+        $totalPendiente = (clone $base)->where('p.id_estado_pagos', 1)->sum('p.cantidad');
+        $totalPagado    = (clone $base)->where('p.id_estado_pagos', 2)->sum('p.cantidad');
+
+        $pagos = (clone $base)
+            ->where('p.id_estado_pagos', $estado === 'cobrado' ? 2 : 1)
+            ->leftJoin('nf_estado_pagos as e', 'e.id', '=', 'p.id_estado_pagos')
+            ->leftJoin('nf_forma_pago as fp', 'fp.id', '=', 'p.id_forma_pago')
+            ->orderBy('cli.nombre')
+            ->select(
+                'p.*',
+                'cli.nombre as cliente_nombre',
+                'cli.telefono as cliente_telefono',
+                'c.nombre as contrato_nombre',
+                'c.id_tipo as contrato_id_tipo',
+                'e.nombre as estado_nombre',
+                'fp.nombre as forma_pago_nombre'
+            )
+            ->get();
+
+        $grupos = DB::table('nf_grupo')->where('deleted', false)->orderBy('id_tipo')->orderBy('nombre')->get();
+
+        return view('nf.pagos-list', [
+            'project' => $project,
+            'mes' => $mes,
+            'mesLabel' => ucfirst($inicioMes->translatedFormat('F Y')),
+            'mesAnterior' => $inicioMes->copy()->subMonth()->format('Y-m'),
+            'mesSiguiente' => $inicioMes->copy()->addMonth()->format('Y-m'),
+            'pagos' => $pagos,
+            'colorGrupo' => $this->colorGrupo(),
+            'grupos' => $grupos,
+            'estado' => $estado,
+            'nombre' => $nombre,
+            'grupo' => $grupo,
+            'totalPendiente' => $totalPendiente,
+            'totalPagado' => $totalPagado,
+        ]);
+    }
+
+    // Resuelve grupo/fecha_fin/dia1/dia2 según las reglas de negocio del legacy: Osteopatía
+    // ("Consulta") es fija, sin días, fecha_fin = fecha_inicio; Fitness exige grupo elegido y
+    // permite fecha_fin y días de asistencia propios.
+    private function resolverDatosContrato(array $data): array
+    {
+        $esOsteopatia = (int) $data['id_tipo'] === 1;
+
+        if ($esOsteopatia) {
+            $grupo = DB::table('nf_grupo')->where('id_tipo', 1)->first();
+            abort_if(!$grupo, 500, 'No existe el grupo "Consulta" para Osteopatía.');
+            return [$grupo, $data['fecha_inicio'], false, false, $esOsteopatia];
+        }
+
+        $grupo = DB::table('nf_grupo')->where('id', $data['id_grupo'] ?? null)->where('id_tipo', 2)->first();
+        abort_if(!$grupo, 422, 'Selecciona un grupo válido.');
+        $fechaFin = $data['fecha_fin'] ?? $data['fecha_inicio'];
+        $dia1 = (bool) ($data['dia1'] ?? false);
+        $dia2 = (bool) ($data['dia2'] ?? false);
+        return [$grupo, $fechaFin, $dia1, $dia2, $esOsteopatia];
+    }
+
+    private function validarDatosContrato(Request $request): array
+    {
+        return $request->validate([
+            'id_tipo' => 'required|integer|in:1,2',
+            'id_grupo' => 'nullable|integer',
+            'fecha_inicio' => 'required|date',
+            'fecha_fin' => 'nullable|date',
+            'dia1' => 'nullable|boolean',
+            'dia2' => 'nullable|boolean',
+            'importe' => 'required|numeric|min:0',
+            'descripcion' => 'nullable|string',
+        ]);
+    }
+
+    // Alta de un nuevo contrato desde la ficha del cliente (modal).
+    // Réplica de las reglas de FitnessController@guardar_contrato del legacy opland-app:
+    // Osteopatía ("Consulta") es una sesión suelta sin grupo a elegir, sin días recurrentes,
+    // fecha_fin = fecha_inicio, y genera automáticamente su pago ya cobrado en efectivo.
+    // Fitness es una inscripción con grupo elegido, fecha_fin y días de asistencia; sus pagos
+    // se generan más adelante desde /nf/pagos ("Generar pagos").
+    public function guardarContrato(Request $request, Project $project, int $clienteId)
+    {
+        DB::table('nf_clientes')->where('id', $clienteId)->firstOrFail();
+
+        $data = $this->validarDatosContrato($request);
+        [$grupo, $fechaFin, $dia1, $dia2, $esOsteopatia] = $this->resolverDatosContrato($data);
+        $now = now();
+
+        $idContrato = DB::table('nf_contratos')->insertGetId([
+            'id_clientes' => $clienteId,
+            'id_tipo' => $data['id_tipo'],
+            'id_grupo' => $grupo->id,
+            'fecha_inicio' => $data['fecha_inicio'],
+            'fecha_fin' => $fechaFin,
+            'importe' => $data['importe'],
+            'dia1' => $dia1,
+            'dia2' => $dia2,
+            'nombre' => $grupo->nombre,
+            'descripcion' => $data['descripcion'] ?? null,
+            'createuser' => Auth::id(),
+            'createdat' => $now,
+            'updatedat' => $now,
+            'hidden' => 0,
+            'deleted' => false,
+        ]);
+
+        if ($esOsteopatia) {
+            DB::table('nf_pagos')->insert([
+                'id_clientes' => $clienteId,
+                'id_contratos' => $idContrato,
+                'cantidad' => $data['importe'],
+                'fecha_pago' => $data['fecha_inicio'],
+                'fecha_pagado' => $data['fecha_inicio'],
+                'id_estado_pagos' => 2,
+                'id_forma_pago' => 1,
+                'createuser' => Auth::id(),
+                'createdat' => $now,
+                'updatedat' => $now,
+                'hidden' => 0,
+                'deleted' => false,
+            ]);
+        }
+
+        return back()->with('msg', 'Contrato creado correctamente.');
+    }
+
+    // Edición de un contrato existente desde la ficha del cliente. A diferencia del alta, editar
+    // no vuelve a generar el pago automático de Osteopatía (eso solo ocurre al crear).
+    public function actualizarContrato(Request $request, Project $project, int $contratoId)
+    {
+        $contrato = DB::table('nf_contratos')->where('id', $contratoId)->firstOrFail();
+
+        $data = $this->validarDatosContrato($request);
+        [$grupo, $fechaFin, $dia1, $dia2] = $this->resolverDatosContrato($data);
+
+        DB::table('nf_contratos')->where('id', $contratoId)->update([
+            'id_tipo' => $data['id_tipo'],
+            'id_grupo' => $grupo->id,
+            'fecha_inicio' => $data['fecha_inicio'],
+            'fecha_fin' => $fechaFin,
+            'importe' => $data['importe'],
+            'dia1' => $dia1,
+            'dia2' => $dia2,
+            'nombre' => $grupo->nombre,
+            'descripcion' => $data['descripcion'] ?? null,
+            'updateuser' => Auth::id(),
+            'updatedat' => now(),
+        ]);
+
+        return back()->with('msg', 'Contrato actualizado correctamente.');
+    }
+
+    // Marca un pago como cobrado (Efectivo=1 / Banco=2) y avisa al cliente por email.
+    // Réplica de FitnessController@pagar_pago del legacy opland-app.
+    public function pagarPago(Project $project, int $id, int $formaPago)
+    {
+        $pago = DB::table('nf_pagos')->where('id', $id)->first();
+        abort_if(!$pago, 404);
+
+        DB::table('nf_pagos')->where('id', $id)->update([
+            'id_estado_pagos' => 2,
+            'id_forma_pago' => $formaPago,
+            'fecha_pagado' => now(),
+            'updateuser' => Auth::id(),
+            'updatedat' => now(),
+        ]);
+
+        $cliente = DB::table('nf_clientes')->where('id', $pago->id_clientes)->first();
+        if ($cliente && $cliente->email) {
+            $details = [
+                'title' => 'Confirmación Automática de Pago',
+                'header' => 'Estimad@ ' . $cliente->nombre . ',',
+                'body' => 'Nature Fitness ha recibido el pago de ' . $pago->cantidad . ' euros en concepto del mes de '
+                    . \Carbon\Carbon::parse($pago->fecha_pago)->translatedFormat('M Y') . '.',
+            ];
+            Mail::to($cliente->email)->send(new NfPagoMail($details));
+        }
+
+        return back()->with('msg', 'Pago confirmado correctamente.');
+    }
+
+    // Envía por email el documento adjunto y lo marca como enviado.
+    // Réplica de FitnessController@enviar_documento del legacy opland-app.
+    public function enviarDocumento(Project $project, int $id)
+    {
+        $documento = DB::table('nf_documentos')->where('id', $id)->first();
+        abort_if(!$documento, 404);
+
+        $cliente = DB::table('nf_clientes')->where('id', $documento->id_clientes)->first();
+        abort_if(!$cliente || !$cliente->email, 422, 'El cliente no tiene email registrado.');
+
+        $details = [
+            'title' => $documento->nombre,
+            'header' => 'Estimad@ ' . $cliente->nombre . ',',
+            'file' => $documento->file_documento,
+            'body' => 'Adjunto encontrarás el documento ' . $documento->nombre,
+        ];
+        Mail::to($cliente->email)->send(new NfDocumentoMail($details));
+
+        DB::table('nf_documentos')->where('id', $id)->update([
+            'id_estado_documento' => 2,
+            'fecha_envio' => now(),
+            'updateuser' => Auth::id(),
+            'updatedat' => now(),
+        ]);
+
+        return back()->with('msg', 'Documento enviado correctamente.');
+    }
+
+    // Genera los pagos pendientes del mes para cada contrato activo que todavía no tenga uno.
+    // Réplica de FitnessController@generar_pagos del legacy opland-app.
+    public function generarPagos(Request $request, Project $project)
+    {
+        $mes = $request->input('mes'); // formato YYYY-MM
+        abort_unless(preg_match('/^\d{4}-\d{2}$/', (string) $mes), 422, 'Mes inválido.');
+
+        $inicioMes = $mes . '-01';
+        $finMes = date('Y-m-t', strtotime($inicioMes));
+
+        $contratos = DB::table('nf_contratos')
+            ->where('deleted', false)
+            ->where('fecha_inicio', '<=', $finMes)
+            ->where('fecha_fin', '>=', $inicioMes)
+            ->get();
+
+        $pagosExistentes = DB::table('nf_pagos')
+            ->where('fecha_pago', '>=', $inicioMes)
+            ->where('fecha_pago', '<=', $finMes)
+            ->pluck('id_contratos')
+            ->all();
+
+        $creados = 0;
+        $now = now();
+        foreach ($contratos as $contrato) {
+            if (in_array($contrato->id, $pagosExistentes, true)) continue;
+            DB::table('nf_pagos')->insert([
+                'id_clientes' => $contrato->id_clientes,
+                'id_contratos' => $contrato->id,
+                'cantidad' => $contrato->importe,
+                'fecha_pago' => $inicioMes,
+                'id_estado_pagos' => 1,
+                'createuser' => Auth::id(),
+                'createdat' => $now,
+                'updatedat' => $now,
+                'hidden' => 0,
+                'deleted' => false,
+            ]);
+            $creados++;
+        }
+
+        return back()->with('msg', "Pagos generados correctamente ({$creados} nuevos).");
+    }
+}

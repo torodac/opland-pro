@@ -353,6 +353,19 @@ class FichaController extends Controller
             if ($horarioError) {
                 return back()->withErrors(['hora_inicio' => $horarioError])->withInput();
             }
+
+            $controlUser = $data['control_user'] ?? $registro->control_user ?? null;
+            if ($fechaFichaje && $controlUser) {
+                $yaExiste = DB::table('vm_fichaje')
+                    ->where('control_user', $controlUser)
+                    ->where('fecha_fichaje', $fechaFichaje)
+                    ->where('id', '!=', $id)
+                    ->where('deleted', 0)
+                    ->exists();
+                if ($yaExiste) {
+                    return back()->withErrors(['fecha_fichaje' => 'Ese empleado ya tiene otro fichaje ese día'])->withInput();
+                }
+            }
         }
 
         DB::table($projectTable->getFullTableName())->where('id', $id)->update($data);

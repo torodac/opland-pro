@@ -94,22 +94,22 @@ class HorarioController extends Controller
             ->pluck('nombre', 'fecha_fecha')
             ->toArray();
 
-        // Horas extra acumuladas (saldo histórico hasta hoy) y días festivos trabajados
-        // acumulados, para mostrar junto al nombre en la celda de usuario.
+        // Saldo histórico hasta hoy (mismo cálculo y desglose que "Saldo histórico" del informe
+        // mensual), para mostrar junto al nombre en la celda de usuario.
         $hoy = now()->toDateString();
-        $horasAcumuladasMap = [];
-        $festivosTrabajadosMap = [];
+        $saldoMap = [];
         foreach ($usuariosFiltrados as $u) {
-            $horasAcumuladasMap[$u->id]    = (int) round(VmHorasService::saldoAcumuladoHoras($u->id, $hoy));
-            $festivosTrabajadosMap[$u->id] = VmHorasService::festivosTrabajadosCount($u->id);
+            $saldoMap[$u->id] = VmHorasService::saldoAcumuladoHoras($u->id, $hoy);
         }
 
         // Ancho de la columna Usuario: el contenido más largo de TODOS los departamentos, para que
         // mida igual en todas las tablas de la página (cada tabla es independiente y si no se fuerza
         // se adapta cada una a su propio contenido).
-        $colUserMaxLen = $usuariosFiltrados->reduce(function ($max, $u) use ($horasAcumuladasMap, $festivosTrabajadosMap) {
-            $nombreConAcumulado = "{$u->nombre} ({$horasAcumuladasMap[$u->id]}h/{$festivosTrabajadosMap[$u->id]}d)";
-            return max($max, mb_strlen($nombreConAcumulado));
+        $colUserMaxLen = $usuariosFiltrados->reduce(function ($max, $u) use ($saldoMap) {
+            $s = $saldoMap[$u->id];
+            $nombreConDesglose = "{$u->nombre} (" . number_format($s['dias_fest'], 1, ',', '') . 'd fest / '
+                . number_format($s['horas_resto'], 1, ',', '') . 'h ext)';
+            return max($max, mb_strlen($nombreConDesglose));
         }, mb_strlen('Usuario'));
 
         return view('horario', [
@@ -124,8 +124,7 @@ class HorarioController extends Controller
             'horariosMap'    => $horariosMap,
             'ausenciasMap'   => $ausenciasMap,
             'festivosMap'    => $festivosMap,
-            'horasAcumuladasMap'    => $horasAcumuladasMap,
-            'festivosTrabajadosMap' => $festivosTrabajadosMap,
+            'saldoMap'       => $saldoMap,
             'colUserMaxLen'  => $colUserMaxLen,
             'prevWeek'       => $weekStart->copy()->subWeek()->toDateString(),
             'nextWeek'       => $weekStart->copy()->addWeek()->toDateString(),

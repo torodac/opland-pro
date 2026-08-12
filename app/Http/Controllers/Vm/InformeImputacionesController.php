@@ -335,9 +335,9 @@ class InformeImputacionesController extends Controller
             ];
         }
 
-        $histExtras    = $this->calcularSaldoHistorico($userId, $contratos, $me, $tipos, $sede);
+        $histExtras    = VmHorasService::saldoAcumuladoHoras($userId, $me);
         $yearStats     = $this->getYearStats($userId, $year, $month, $tipos, $contratos, $sede);
-        $saldoPrevYear = $this->calcularSaldoHistorico($userId, $contratos, ($year - 1) . '-12-31', $tipos, $sede);
+        $saldoPrevYear = VmHorasService::saldoAcumuladoHoras($userId, ($year - 1) . '-12-31');
 
         return [
             'usuario'          => $usuario,
@@ -359,131 +359,6 @@ class InformeImputacionesController extends Controller
             'is_liquidado'     => false,
             'liquidado_fecha'  => null,
             'fecha_horas_extra'=> null,
-        ];
-    }
-
-    // Devuelve ['total' => horas acumuladas, 'dias_fest' => nº días de festivo trabajado,
-    // 'horas_resto' => horas del total que no vienen de trabajar un festivo (descansos
-    // trabajados, extra normal, ajustes, compensaciones, etc.)]
-    private function calcularSaldoHistorico(int $userId, $contratos, string $hasta, $tipos, string $sede = ''): array
-    {
-        $esTurno = VmHorasService::esDeptoTurno($userId);
-
-        $fichajes = DB::table('vm_fichaje')
-            ->where('control_user', $userId)
-            ->where('deleted', 0)
-            ->whereNotNull('hora_inicio')
-            ->where('fecha_fichaje', '<=', $hasta)
-            ->get(['fecha_fichaje', 'hora_inicio', 'hora_fin',
-                   'pausa_inicio', 'pausa_fin', 'festivo', 'ajuste_he']);
-
-        // Festivos hasta la fecha para bono +8h
-        $festivosHist = VmHorasService::festivosSet($sede, '2000-01-01', $hasta);
-
-        // Horarios descanso del usuario (para bono festivo sin fichaje)
-        $descansosDias = DB::table('vm_horarios')
-            ->where('id_usuario', $userId)
-            ->where('tipo', 'descanso')
-            ->where('fecha', '<=', $hasta)
-            ->pluck('fecha')->flip()->all();
-
-        $esDescanso = fn(string $fecha) => $esTurno
-            ? isset($descansosDias[$fecha])
-            : ((int) date('N', strtotime($fecha)) >= 6); // 6=sábado, 7=domingo
-
-        $total    = 0.0;
-        $diasFest = 0;
-        $festMin  = 0;
-        foreach ($fichajes as $f) {
-            $isFest = ($f->festivo ?? 0) == 1;
-            $hasFin = !empty($f->hora_fin);
-            $isFestivo    = isset($festivosHist[$f->fecha_fichaje]);
-            $isDescansoEf = $esDescanso($f->fecha_fichaje);
-
-            $contratoDia = null;
-            foreach ($contratos as $c) {
-                if ($c->fecha_alta <= $f->fecha_fichaje && (is_null($c->fecha_baja) || $c->fecha_baja >= $f->fecha_fichaje)) {
-                    $contratoDia = $c;
-                    break;
-                }
-            }
-            if (!$contratoDia || !$contratoDia->horas_semana) continue;
-
-            $esperadoMin = (int) round(($contratoDia->horas_semana / 5) * 60);
-            $diaMin = 0;
-            if ($hasFin) {
-                $tf   = VmHorasService::hmsToMinutes($f->hora_fin) - VmHorasService::hmsToMinutes($f->hora_inicio);
-                $pMin = (($f->pausa_inicio ?? null) && ($f->pausa_fin ?? null))
-                    ? VmHorasService::hmsToMinutes($f->pausa_fin) - VmHorasService::hmsToMinutes($f->pausa_inicio)
-                    : null;
-                $ded   = VmHorasService::pausaDeducible($pMin, (float) $contratoDia->horas_semana);
-                $diaMin = $isFest ? $tf - $ded : $tf - $esperadoMin - $ded;
-            }
-            // El bono es para festivos/descansos SIN trabajar o sin fichaje (bloque de más abajo)
-            // -- si ya se trabajó, todo lo trabajado ya cuenta como extra en la rama de arriba, y
-            // sumar el bono aquí lo contaría dos veces. El bono son las horas de contrato del día,
-            // no un fijo de 8h para todos.
-            if (($isFestivo || $isDescansoEf) && !$isFest) $diaMin += $esperadoMin;
-
-            // Desglose: solo festivos trabajados (no descansos) cuentan como "días festivo".
-            if ($isFestivo && $hasFin) {
-                $diasFest++;
-                $festMin += $diaMin;
-            }
-
-            $total += $diaMin + (int) ($f->ajuste_he ?? 0);
-        }
-
-        // Bono festivo por días de descanso en festivo (sin fichaje) -- las horas de contrato del
-        // día, no un fijo de 8h (relevante para contratos con jornada diaria distinta de 8h).
-        foreach ($festivosHist as $fDate => $_) {
-            if (!$esDescanso($fDate)) continue;
-            // Comprobar que no hay fichaje ese día (ya contado arriba)
-            $tieneF = $fichajes->contains('fecha_fichaje', $fDate);
-            if ($tieneF) continue;
-            foreach ($contratos as $c) {
-                if ($c->fecha_alta <= $fDate && (is_null($c->fecha_baja) || $c->fecha_baja >= $fDate)) {
-                    $total += (int) round(($c->horas_semana / 5) * 60);
-                    break;
-                }
-            }
-        }
-
-        // Descontar días de compensación (tipo varchar)
-        $compTipos = $tipos->filter(fn($t) => VmHorasService::categoriaAusencia($t->nombre) === 'C')
-                           ->keys()->toArray(); // claves = nombres
-
-        if (!empty($compTipos)) {
-            $compAus = DB::table('vm_ausencias')
-                ->where('id_usuarios', $userId)
-                ->whereIn('tipo', $compTipos)
-                ->where('fecha_fin', '<=', $hasta)
-                ->where(function ($q) { $q->where('deleted', 0)->orWhereNull('deleted'); })
-                ->get(['fecha_inicio', 'fecha_fin', 'tipo']);
-
-            foreach ($compAus as $a) {
-                $cur = $a->fecha_inicio;
-                $lim = min($a->fecha_fin, $hasta);
-                while ($cur <= $lim) {
-                    foreach ($contratos as $c) {
-                        if ($c->fecha_alta <= $cur && (is_null($c->fecha_baja) || $c->fecha_baja >= $cur)) {
-                            $total -= (int) round(($c->horas_semana / 5) * 60);
-                            break;
-                        }
-                    }
-                    // Un día de "Comp. festivo" consume (descuenta) un día festivo trabajado del
-                    // desglose -- ya se ha compensado, no debe seguir contando como pendiente.
-                    if ($a->tipo === 'Comp. festivo') $diasFest--;
-                    $cur = date('Y-m-d', strtotime('+1 day', strtotime($cur)));
-                }
-            }
-        }
-        $diasFest = max(0, $diasFest);
-
-        return [
-            'total'       => $total / 60,
-            'dias_fest'   => $diasFest,
-            'horas_resto' => ($total - $festMin) / 60,
         ];
     }
 

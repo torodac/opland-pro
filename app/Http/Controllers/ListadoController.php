@@ -136,6 +136,11 @@ class ListadoController extends Controller
             $aDemandarTooltip       = $this->aDemandarPorAnio($ejercicioActualDefault);
         }
 
+        $nfClientesTelefono = null;
+        if ($fullTable === 'nf_pagos') {
+            $nfClientesTelefono = DB::table('nf_clientes')->pluck('telefono', 'id')->toArray();
+        }
+
         $breezewayPendientesHeader = null;
         if ($fullTable === 'vm_usuarios') {
             $breezewayPendientesHeader = DB::table('vm_breezeway_pendientes')
@@ -190,6 +195,7 @@ class ListadoController extends Controller
             'sumSuperficieViviendas' => $sumSuperficieViviendas,
             'countViviendasActivas'  => $countViviendasActivas,
             'aDemandarTooltip'       => $aDemandarTooltip,
+            'nfClientesTelefono' => $nfClientesTelefono,
             'breadcrumb'        => [
                 ['label' => $projectTable->label, 'url' => ''],
             ],
@@ -327,7 +333,20 @@ class ListadoController extends Controller
             // primero al ordenar descendente (comportamiento por defecto), y con columnas
             // mayoritariamente vacías (p.ej. un booleano poco usado) el resultado parece
             // "no hacer nada" porque la primera página sigue llena de valores en blanco.
-            $query->orderByRaw('"' . $sortField . '" ' . $sortDir . ' NULLS LAST');
+            $sortFieldDef = $projectTable->listFields->firstWhere('name', $sortField);
+            $refTable = $sortFieldDef && $sortFieldDef->isForeignKey()
+                ? $sortFieldDef->getRefFullTable($project->slug)
+                : '';
+
+            if ($refTable !== '') {
+                // Campo desplegable (FK): ordenar por el nombre visible de la tabla referenciada,
+                // no por el id almacenado, mediante subconsulta correlacionada.
+                $query->orderByRaw(
+                    '(SELECT "nombre" FROM "' . $refTable . '" WHERE "' . $refTable . '"."id" = "' . $fullTable . '"."' . $sortField . '") ' . $sortDir . ' NULLS LAST'
+                );
+            } else {
+                $query->orderByRaw('"' . $sortField . '" ' . $sortDir . ' NULLS LAST');
+            }
         } else {
             $query->orderByDesc('id');
         }

@@ -83,6 +83,15 @@
             Generar cuotas
         </button>
         @endif
+
+        {{-- Generar pagos del mes (solo nf_pagos): modal pidiendo el mes --}}
+        @if($projectTable->name === 'pagos' && $project->slug === 'nf')
+        <button type="button" onclick="document.getElementById('gp-modal').classList.remove('hidden')"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+            <i class="fa-solid fa-gears text-orange-400"></i>
+            Generar pagos
+        </button>
+        @endif
         @endif
 
         {{-- Acciones (dropdown): exportar, importar, actualización masiva, copiar IDs --}}
@@ -491,6 +500,9 @@
         @endif
     </div>
     @else
+    @php $esCuotasProvisional = $projectTable->name === 'cuotas' && $project->slug === 'mb'; @endphp
+    @php $esNfPagos = $projectTable->name === 'pagos' && $project->slug === 'nf'; @endphp
+    @php $esNfDocumentos = $projectTable->name === 'documentos' && $project->slug === 'nf'; @endphp
     {{-- Tabla de datos --}}
     <div class="bg-white rounded-xl border border-gray-200">
         <div class="overflow-x-auto" @if($modoTabla) x-data="newRowForm()" @endif>
@@ -498,6 +510,9 @@
                 <thead>
                     <tr class="border-b border-gray-200 bg-gray-50">
                         @if($modoTabla)
+                            <th class="w-8"></th>
+                        @endif
+                        @if($esCuotasProvisional)
                             <th class="w-8"></th>
                         @endif
                         @foreach($campos as $campo)
@@ -662,7 +677,7 @@
                                     </button>
                                     <div x-show="open"
                                          class="absolute right-6 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 text-sm">
-                                        <a href="{{ ($projectTable->name === 'facturas' && $project->slug === 'opland') ? route('opland.factura_form.show', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : route('ficha', [$project->slug, $projectTable->name, $registro->id])) }}"
+                                        <a href="{{ ($projectTable->name === 'facturas' && $project->slug === 'opland') ? route('opland.factura_form.show', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : (($projectTable->name === 'clientes' && $project->slug === 'nf') ? route('nf.clientes_form', [$project->slug, $registro->id]) : route('ficha', [$project->slug, $projectTable->name, $registro->id]))) }}"
                                            class="flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50">
                                             Ver ficha
                                         </a>
@@ -697,7 +712,17 @@
                         @else
                             {{-- ── FILA NORMAL (solo lectura) ── --}}
                             <tr class="hover:bg-gray-50 cursor-pointer"
-                                onclick="window.location='{{ $projectTable->name === 'fichaje' ? route('vm.fichaje_form', [$project->slug, $registro->id]) : ($projectTable->name === 'usuarios' && $project->slug === 'vm' ? route('vm.usuario_form', [$project->slug, $registro->id]) : (($projectTable->name === 'facturas' && $project->slug === 'opland') ? route('opland.factura_form.show', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : route('ficha', [$project->slug, $projectTable->name, $registro->id])))) }}'">
+                                onclick="window.location='{{ $projectTable->name === 'fichaje' ? route('vm.fichaje_form', [$project->slug, $registro->id]) : ($projectTable->name === 'usuarios' && $project->slug === 'vm' ? route('vm.usuario_form', [$project->slug, $registro->id]) : (($projectTable->name === 'facturas' && $project->slug === 'opland') ? route('opland.factura_form.show', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : (($projectTable->name === 'clientes' && $project->slug === 'nf') ? route('nf.clientes_form', [$project->slug, $registro->id]) : route('ficha', [$project->slug, $projectTable->name, $registro->id]))))) }}'">
+                                @if($esCuotasProvisional)
+                                    <td class="pl-3 pr-0 py-3 w-8" onclick="event.stopPropagation()">
+                                        <button type="button" onclick="toggleCuotaHistorico({{ $registro->id }}, this)"
+                                                class="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100">
+                                            <svg id="hist-icon-{{ $registro->id }}" class="w-4 h-4 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                                            </svg>
+                                        </button>
+                                    </td>
+                                @endif
                                 @foreach($campos as $campo)
                                     @php
                                         $colAlign = match(true) {
@@ -720,10 +745,39 @@
                                     </button>
                                     <div x-show="open"
                                          class="absolute right-6 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 text-sm">
-                                        <a href="{{ ($projectTable->name === 'facturas' && $project->slug === 'opland') ? route('opland.factura_form.show', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : route('ficha', [$project->slug, $projectTable->name, $registro->id])) }}"
+                                        <a href="{{ ($projectTable->name === 'facturas' && $project->slug === 'opland') ? route('opland.factura_form.show', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : (($projectTable->name === 'clientes' && $project->slug === 'nf') ? route('nf.clientes_form', [$project->slug, $registro->id]) : route('ficha', [$project->slug, $projectTable->name, $registro->id]))) }}"
                                            class="flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50">
                                             Ver ficha
                                         </a>
+                                        @if($esNfPagos && $registro->id_estado_pagos == 1)
+                                        <form method="POST" action="{{ route('nf.pagos.pagar', [$project->slug, $registro->id, 2]) }}">
+                                            @csrf
+                                            <button class="w-full flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50">
+                                                Confirmar Banco
+                                            </button>
+                                        </form>
+                                        <form method="POST" action="{{ route('nf.pagos.pagar', [$project->slug, $registro->id, 1]) }}">
+                                            @csrf
+                                            <button class="w-full flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50">
+                                                Confirmar Efectivo
+                                            </button>
+                                        </form>
+                                        @if(!empty($nfClientesTelefono[$registro->id_clientes] ?? null))
+                                        <a href="https://wa.me/34{{ $nfClientesTelefono[$registro->id_clientes] }}?text={{ rawurlencode('Hola, te escribo para recordarte que la cuota de este mes está pendiente. Abona tu cuota del 25 al 30 de cada mes. Quedo a la espera de que te pongas en contacto conmigo. Saludos') }}"
+                                           target="_blank"
+                                           class="w-full flex items-center gap-2 px-3 py-2 text-green-600 hover:bg-green-50">
+                                            Recordatorio WhatsApp
+                                        </a>
+                                        @endif
+                                        @endif
+                                        @if($esNfDocumentos && $registro->id_estado_documento == 1)
+                                        <form method="POST" action="{{ route('nf.documentos.enviar', [$project->slug, $registro->id]) }}">
+                                            @csrf
+                                            <button class="w-full flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50">
+                                                Enviar por email
+                                            </button>
+                                        </form>
+                                        @endif
                                         @if($canEdit)
                                         @if($tieneHidden)
                                         <form method="POST" action="{{ route('ficha.archive', [$project->slug, $projectTable->name, $registro->id]) }}">
@@ -751,6 +805,13 @@
                                     </div>
                                 </td>
                             </tr>
+                            @if($esCuotasProvisional)
+                                <tr id="hist-row-{{ $registro->id }}" style="display:none">
+                                    <td colspan="{{ $campos->count() + 2 }}" class="bg-gray-50 px-6 py-3">
+                                        <div id="hist-body-{{ $registro->id }}" class="text-xs text-gray-400">Cargando histórico…</div>
+                                    </td>
+                                </tr>
+                            @endif
                         @endif
                     @empty
                         <tr>
@@ -914,6 +975,39 @@
                 </div>
                 <div class="flex justify-end gap-2 pt-1">
                     <button type="button" onclick="document.getElementById('gc-modal').classList.add('hidden')"
+                            class="px-4 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="submit"
+                            class="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors bg-orange-500 hover:bg-orange-600">
+                        Generar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
+
+{{-- Modal "Generar pagos" (nf_pagos): crea los pagos pendientes del mes indicado para los contratos activos --}}
+@if($projectTable->name === 'pagos' && $project->slug === 'nf')
+<div id="gp-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/40" onclick="document.getElementById('gp-modal').classList.add('hidden')"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="relative bg-white rounded-xl shadow-xl w-1/3 min-w-80">
+            <div class="px-5 py-4 border-b border-gray-100">
+                <h3 class="text-base font-semibold text-gray-800">Generar pagos del mes</h3>
+                <p class="text-xs text-gray-400 mt-0.5">Crea un pago pendiente para cada contrato activo ese mes que todavía no tenga uno.</p>
+            </div>
+            <form method="POST" action="{{ route('nf.pagos.generar', $project->slug) }}" class="px-5 py-4 space-y-3">
+                @csrf
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Mes</label>
+                    <input type="month" name="mes" value="{{ now()->format('Y-m') }}" required
+                           class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2">
+                </div>
+                <div class="flex justify-end gap-2 pt-1">
+                    <button type="button" onclick="document.getElementById('gp-modal').classList.add('hidden')"
                             class="px-4 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
                         Cancelar
                     </button>
@@ -1141,4 +1235,48 @@ async function copiarIds() {
         alert('Error al copiar los IDs.');
     }
 }
+
+@if($esCuotasProvisional)
+const HIST_URL_TPL = @json(route('mb.cuotas_provisional.historico', [$project->slug, '__ID__']));
+
+async function toggleCuotaHistorico(id, btn) {
+    const row = document.getElementById(`hist-row-${id}`);
+    const icon = document.getElementById(`hist-icon-${id}`);
+    const abrir = row.style.display === 'none';
+    row.style.display = abrir ? '' : 'none';
+    icon.style.transform = abrir ? 'rotate(90deg)' : '';
+    if (!abrir || row.dataset.loaded) return;
+
+    const body = document.getElementById(`hist-body-${id}`);
+    try {
+        const res = await fetch(HIST_URL_TPL.replace('__ID__', id), { headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        const eventos = data.historico || [];
+        if (!eventos.length) {
+            body.innerHTML = '<span class="text-gray-400">Sin cambios de estado registrados para esta cuota.</span>';
+        } else {
+            const filas = eventos.map(h => `
+                <tr class="border-t border-gray-100">
+                    <td class="py-1 pr-4">${h.fecha_exportacion}</td>
+                    <td class="py-1 pr-4">${h.estado_anterior ?? '—'} → <span class="font-medium">${h.estado_nuevo ?? '—'}</span></td>
+                    <td class="py-1 pr-4 text-right">${h.pendiente_anterior} → ${h.pendiente_nuevo}</td>
+                    <td class="py-1">${h.fichero_origen ?? ''}</td>
+                </tr>`).join('');
+            body.innerHTML = `
+                <table class="w-full text-xs">
+                    <thead><tr class="text-gray-400">
+                        <th class="text-left py-1 pr-4 font-medium">Fecha exportación</th>
+                        <th class="text-left py-1 pr-4 font-medium">Estado</th>
+                        <th class="text-right py-1 pr-4 font-medium">Pendiente</th>
+                        <th class="text-left py-1 font-medium">Fichero</th>
+                    </tr></thead>
+                    <tbody>${filas}</tbody>
+                </table>`;
+        }
+        row.dataset.loaded = '1';
+    } catch (e) {
+        body.innerHTML = '<span class="text-red-500">Error al cargar el histórico.</span>';
+    }
+}
+@endif
 </script>

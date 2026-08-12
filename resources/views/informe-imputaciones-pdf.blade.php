@@ -156,7 +156,7 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
             </table>
             <div class="saldo-box">
                 Saldo historico: <strong>{{ IC::fmtHoras($hist_extras, true) ?: '0h 00m' }}</strong>
-                <br><span style="color:#999;font-size:8pt;">({{ $hist_extras_dias_fest }}d fest / {{ number_format($hist_extras_horas_resto, 1, ',', '') }}h ext)</span>
+                <br><span style="color:#999;font-size:8pt;">({{ number_format($hist_extras_dias_fest, 1, ',', '') }}d fest / {{ number_format($hist_extras_horas_resto, 1, ',', '') }}h ext)</span>
             </div>
             @if(!empty($sin_contrato) && $sin_contrato)
             <div style="margin-top:6pt;font-size:8pt;color:#374151;">Horas extras compensadas en la liquidación.</div>

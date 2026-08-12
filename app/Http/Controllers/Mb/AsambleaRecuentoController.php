@@ -10,10 +10,11 @@ use Illuminate\Support\Facades\DB;
 
 class AsambleaRecuentoController extends Controller
 {
-    private function tallies(int $idAsamblea): array
+    private function tallies(int $idAsamblea, array $numerosAnulados = []): array
     {
         $rows = DB::table('mb_asambleas_votos')
             ->where('id_asambleas', $idAsamblea)
+            ->when(!empty($numerosAnulados), fn($q) => $q->whereNotIn('numero_hoja', $numerosAnulados))
             ->select('numero_pregunta', 'voto', DB::raw('count(*) as n'))
             ->groupBy('numero_pregunta', 'voto')
             ->get();
@@ -37,15 +38,50 @@ class AsambleaRecuentoController extends Controller
             ->orderBy('numero_pregunta')
             ->get(['numero_pregunta', 'texto']);
 
-        $totalHojas = DB::table('mb_asambleas_hojas')
+        $numerosActuales = DB::table('mb_asambleas_hojas')
             ->where('id_asambleas', $idAsamblea)
             ->where('deleted', 0)
-            ->count();
+            ->pluck('numero_hoja');
+
+        $totalHojas = $numerosActuales->count();
+
+        // Hojas anuladas (dadas de baja/reemplazadas): no deben contar como recontadas aunque
+        // tengan votos escaneados de antes de anularse -- esos votos se reportan aparte, como
+        // aviso de que puede haber que revisar el recuento.
+        $numerosAnulados = DB::table('mb_asambleas_hojas_historico')
+            ->where('id_asambleas', $idAsamblea)
+            ->pluck('numero_hoja')
+            ->unique();
+
+        // Votos escaneados de una hoja que nunca se registró como repartida (ni vigente ni en el
+        // histórico) -- probablemente un número mal escaneado. No deben computar en el recuento
+        // hasta que se les asigne una vivienda.
+        $numerosConocidos = $numerosActuales->merge($numerosAnulados)->unique();
+        $numerosSinVivienda = DB::table('mb_asambleas_votos')
+            ->where('id_asambleas', $idAsamblea)
+            ->whereNotIn('numero_hoja', $numerosConocidos)
+            ->distinct()
+            ->pluck('numero_hoja');
+
+        $numerosExcluidos = $numerosAnulados->merge($numerosSinVivienda)->unique();
 
         $hojasRecontadas = DB::table('mb_asambleas_votos')
             ->where('id_asambleas', $idAsamblea)
+            ->whereNotIn('numero_hoja', $numerosExcluidos)
             ->distinct()
             ->count('numero_hoja');
+
+        $hojasAnuladasConVoto = DB::table('mb_asambleas_votos')
+            ->where('id_asambleas', $idAsamblea)
+            ->whereIn('numero_hoja', $numerosAnulados)
+            ->distinct()
+            ->count('numero_hoja');
+
+        $hojasSinVivienda = $numerosSinVivienda->count();
+
+        // Hojas repartidas sin ningún voto escaneado todavía -- pendientes de recontar mientras el
+        // recuento está en marcha, o abstención total en las 6 preguntas si ya ha terminado.
+        $hojasSinVotacion = $totalHojas - $hojasRecontadas;
 
         $ultimaActividad = DB::table('mb_asambleas_votos')
             ->where('id_asambleas', $idAsamblea)
@@ -60,11 +96,39 @@ class AsambleaRecuentoController extends Controller
             ->get(['ah.numero_hoja', 'v.nombre'])
             ->map(function ($h) use ($ultimaActividad) {
                 $h->ultima_actividad = $ultimaActividad[$h->numero_hoja] ?? null;
+                $h->cancelada = false;
                 return $h;
             });
 
-        $conActividad = $hojas->filter(fn($h) => $h->ultima_actividad !== null)->sortByDesc('ultima_actividad')->values();
-        $sinActividad = $hojas->filter(fn($h) => $h->ultima_actividad === null)->sortBy('numero_hoja')->values();
+        // Hojas dadas de baja/reasignadas (mb_asambleas_hojas_historico): se muestran también en
+        // el listado, marcadas como "Cancelada", para poder revisar sus votos si los tuviera.
+        $hojasCanceladas = DB::table('mb_asambleas_hojas_historico as ah')
+            ->join('mb_viviendas as v', 'v.id', '=', 'ah.id_viviendas')
+            ->where('ah.id_asambleas', $idAsamblea)
+            ->get(['ah.numero_hoja', 'v.nombre'])
+            ->map(function ($h) use ($ultimaActividad) {
+                $h->ultima_actividad = $ultimaActividad[$h->numero_hoja] ?? null;
+                $h->cancelada = true;
+                return $h;
+            });
+
+        // Hojas con votos pero sin vivienda asignada (numero_hoja no reconocido): se muestran
+        // también en el listado, marcadas como "Sin vivienda", para poder localizarlas y
+        // corregir el número de hoja o registrar el reparto que falta.
+        $hojasSinViviendaRows = $numerosSinVivienda->map(function ($numeroHoja) use ($ultimaActividad) {
+            return (object) [
+                'numero_hoja'      => $numeroHoja,
+                'nombre'           => null,
+                'ultima_actividad' => $ultimaActividad[$numeroHoja] ?? null,
+                'cancelada'        => false,
+                'sinVivienda'      => true,
+            ];
+        });
+
+        $hojasTodas = $hojas->concat($hojasCanceladas)->concat($hojasSinViviendaRows);
+
+        $conActividad = $hojasTodas->filter(fn($h) => $h->ultima_actividad !== null)->sortByDesc('ultima_actividad')->values();
+        $sinActividad = $hojasTodas->filter(fn($h) => $h->ultima_actividad === null)->sortBy('numero_hoja')->values();
         $hojasOrdenadas = $conActividad->concat($sinActividad)->values();
 
         $votos = DB::table('mb_asambleas_votos')
@@ -77,12 +141,15 @@ class AsambleaRecuentoController extends Controller
         }
 
         return [
-            'preguntas'       => $preguntas,
-            'totalHojas'      => $totalHojas,
-            'hojasRecontadas' => $hojasRecontadas,
-            'tallies'         => $this->tallies($idAsamblea),
-            'hojas'           => $hojasOrdenadas,
-            'votosPorHoja'    => $votosPorHoja,
+            'preguntas'            => $preguntas,
+            'totalHojas'           => $totalHojas,
+            'hojasRecontadas'      => $hojasRecontadas,
+            'hojasAnuladasConVoto' => $hojasAnuladasConVoto,
+            'hojasSinVotacion'     => $hojasSinVotacion,
+            'hojasSinVivienda'     => $hojasSinVivienda,
+            'tallies'              => $this->tallies($idAsamblea, $numerosExcluidos->all()),
+            'hojas'                => $hojasOrdenadas,
+            'votosPorHoja'         => $votosPorHoja,
         ];
     }
 
@@ -112,6 +179,53 @@ class AsambleaRecuentoController extends Controller
         $idAsamblea = (int) $request->id_asamblea;
 
         return response()->json($this->estado($idAsamblea));
+    }
+
+    public function exportarListado(Request $request, Project $project)
+    {
+        $idAsamblea = (int) $request->id_asamblea;
+        $estado     = $this->estado($idAsamblea);
+
+        $headers = ['Hoja', 'Vivienda', 'Estado'];
+        foreach ($estado['preguntas'] as $p) {
+            $headers[] = 'P' . $p->numero_pregunta;
+        }
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->fromArray([$headers], null, 'A1');
+
+        $rowNum = 2;
+        foreach ($estado['hojas'] as $h) {
+            $tieneVoto = !empty($estado['votosPorHoja'][$h->numero_hoja]);
+            $sinVivienda = $h->sinVivienda ?? false;
+            $estadoTexto = $h->cancelada ? 'Cancelada' : ($sinVivienda ? 'Sin vivienda' : (!$tieneVoto ? 'Sin votación' : ''));
+            $row = [$h->numero_hoja, $h->nombre ?? '', $estadoTexto];
+            foreach ($estado['preguntas'] as $p) {
+                $voto = $estado['votosPorHoja'][$h->numero_hoja][$p->numero_pregunta] ?? null;
+                $row[] = $voto === 'S' ? 'Sí' : ($voto === 'N' ? 'No' : '');
+            }
+            $sheet->fromArray([$row], null, "A{$rowNum}");
+            $rowNum++;
+        }
+
+        $lastCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle("A1:{$lastCol}1")->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
+            'fill' => ['fillType' => 'solid', 'startColor' => ['argb' => 'FFF97316']],
+        ]);
+        foreach (range(1, count($headers)) as $col) {
+            $sheet->getColumnDimensionByColumn($col)->setAutoSize(true);
+        }
+
+        $writer   = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xlsx');
+        $filename = 'recuento_asamblea_' . $idAsamblea . '_' . now()->format('Ymd_His') . '.xlsx';
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
     }
 
     public function eliminarVoto(Request $request, Project $project)

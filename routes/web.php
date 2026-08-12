@@ -302,9 +302,12 @@ Route::middleware('auth')->group(function () {
             Route::get('pyg', [\App\Http\Controllers\Mb\DesgloseContableController::class, 'index'])->where('project', 'mb')->name('mb.pyg');
             Route::get('pyg/movimientos', [\App\Http\Controllers\Mb\DesgloseContableController::class, 'movimientos'])->where('project', 'mb')->name('mb.pyg.movimientos');
 
-            // Prueba: carga del informe de recibos contra mb_cuotas_provisional (no toca mb_cuotas real).
+            // Carga del informe "Listado de recibos": mapeo -> evaluar (sin escribir) -> confirmar.
             Route::get('cuotas_import', [\App\Http\Controllers\Mb\CuotasImportController::class, 'index'])->where('project', 'mb')->name('mb.cuotas_import');
-            Route::post('cuotas_import/import', [\App\Http\Controllers\Mb\CuotasImportController::class, 'import'])->where('project', 'mb')->name('mb.cuotas_import.import');
+            Route::post('cuotas_import/evaluar', [\App\Http\Controllers\Mb\CuotasImportController::class, 'evaluar'])->where('project', 'mb')->name('mb.cuotas_import.evaluar');
+            Route::post('cuotas_import/confirmar', [\App\Http\Controllers\Mb\CuotasImportController::class, 'confirmar'])->where('project', 'mb')->name('mb.cuotas_import.confirmar');
+            Route::post('cuotas_import/cancelar', [\App\Http\Controllers\Mb\CuotasImportController::class, 'cancelar'])->where('project', 'mb')->name('mb.cuotas_import.cancelar');
+            Route::get('cuotas_provisional/{cuota}/historico', [\App\Http\Controllers\Mb\CuotasImportController::class, 'historico'])->where(['project' => 'mb', 'cuota' => '[0-9]+'])->name('mb.cuotas_provisional.historico');
 
             // Sustituye al listado genérico de "viviendas" (mismo motivo que "pyg" arriba: ->where('project','mb')
             // para que el comodín genérico {table} siga funcionando igual para cualquier otro proyecto).
@@ -332,6 +335,7 @@ Route::middleware('auth')->group(function () {
             Route::get('asamblea/reparto/historico', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'historico'])->where('project', 'mb')->name('mb.asamblea.reparto.historico');
 
             Route::get('asamblea/recuento/estado', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'estadoRefresh'])->where('project', 'mb')->name('mb.asamblea.recuento.estado');
+            Route::get('asamblea/recuento/export', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'exportarListado'])->where('project', 'mb')->name('mb.asamblea.recuento.export');
             Route::post('asamblea/recuento/voto', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'registrarVoto'])->where('project', 'mb')->name('mb.asamblea.recuento.voto');
 
             Route::get('asamblea_reparto', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'backoffice'])->where('project', 'mb')->name('mb.asamblea_reparto');
@@ -345,6 +349,16 @@ Route::middleware('auth')->group(function () {
             Route::post('asamblea_generador/pregunta', [\App\Http\Controllers\Mb\AsambleaGeneradorController::class, 'agregarPregunta'])->where('project', 'mb')->name('mb.asamblea_generador.pregunta.add');
             Route::delete('asamblea_generador/pregunta', [\App\Http\Controllers\Mb\AsambleaGeneradorController::class, 'eliminarPregunta'])->where('project', 'mb')->name('mb.asamblea_generador.pregunta.delete');
         }); // fin mb.only
+
+        Route::middleware('nf.only')->group(function () {
+            Route::get('clientes_form/{id}', [\App\Http\Controllers\Nf\FitnessController::class, 'ficha'])->where(['project' => 'nf', 'id' => '[0-9]+'])->name('nf.clientes_form');
+            Route::post('clientes/{id}/contratos', [\App\Http\Controllers\Nf\FitnessController::class, 'guardarContrato'])->where(['project' => 'nf', 'id' => '[0-9]+'])->name('nf.clientes.contratos.store');
+            Route::put('contratos/{id}', [\App\Http\Controllers\Nf\FitnessController::class, 'actualizarContrato'])->where(['project' => 'nf', 'id' => '[0-9]+'])->name('nf.contratos.update');
+            Route::post('pagos/{pago}/pagar/{formaPago}', [\App\Http\Controllers\Nf\FitnessController::class, 'pagarPago'])->where(['project' => 'nf', 'pago' => '[0-9]+', 'formaPago' => '[0-9]+'])->name('nf.pagos.pagar');
+            Route::post('documentos/{documento}/enviar', [\App\Http\Controllers\Nf\FitnessController::class, 'enviarDocumento'])->where(['project' => 'nf', 'documento' => '[0-9]+'])->name('nf.documentos.enviar');
+            Route::post('pagos/generar', [\App\Http\Controllers\Nf\FitnessController::class, 'generarPagos'])->where('project', 'nf')->name('nf.pagos.generar');
+            Route::get('pagos_list/{mes?}', [\App\Http\Controllers\Nf\FitnessController::class, 'pagosList'])->where(['project' => 'nf', 'mes' => '\d{4}-(0[1-9]|1[0-2])'])->name('nf.pagos_list');
+        }); // fin nf.only
 
         Route::get('{table}', [ListadoController::class, 'index'])->name('listado');
         Route::get('{table}/ids', [ListadoController::class, 'ids'])->name('listado.ids');

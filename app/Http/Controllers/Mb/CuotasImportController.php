@@ -6,23 +6,52 @@ use App\Http\Controllers\Controller;
 use App\Models\Project;
 use App\Services\CuotasReportParser;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
-// Carga del informe "Listado de recibos" (mb) -- FASE DE PRUEBA: escribe en mb_cuotas_provisional,
-// no en mb_cuotas real, para poder validar el pipeline completo con ficheros reales sin tocar
-// producción. El recorte de "solo últimos 6 años" (pedido por el cliente) todavía NO está activo;
-// se activará explícitamente más adelante.
+// Carga del informe "Listado de recibos" (mb) -- escribe directamente en mb_cuotas (producción).
+// El recorte de "solo últimos 6 años" (pedido por el cliente) todavía NO está activo; se activará
+// explícitamente más adelante.
+//
+// Flujo en 3 pasos:
+//   1. Mapeo:  si hay conceptos sin clasificar, se pide ejercicio+tipo y se guardan en mb_cuotas_mapeo.
+//   2. Evaluar: se calcula TODO lo que cambiaría (cuotas, importe recién cobrado, cambios de
+//      propietario, avisos de demandas) sin escribir nada en la base de datos.
+//   3. Confirmar: solo si el usuario lo confirma explícitamente se aplica de verdad. Si se
+//      descarta, no se ha tocado ni una fila.
+//
+// Cada fichero cargado es una "foto" (fecha_exportacion, tomada del nombre del fichero) del estado
+// de todas las cuotas en esa fecha -- no de la fecha en que se sube. Por eso el dato en bruto se
+// guarda siempre en mb_cuotas_exportaciones (una fila por cuota+fecha_exportacion, nunca se pierde
+// ni se sobreescribe salvo recarga del mismo fichero), y tanto el estado actual (mb_cuotas) como el
+// histórico de cambios (mb_cuotas_estado_historico) se recalculan a partir de ahí cada vez que una
+// cuota recibe una foto nueva. Esto permite cargar ficheros en cualquier orden -- incluido hacer
+// backfill de años antiguos después de tener ya cargado el año actual -- sin que el orden de carga
+// corrompa ni el estado actual ni el histórico, y registra también los retrocesos reales (p.ej. un
+// recibo devuelto por el banco: Pagada -> Pendiente).
+//
+// mb_cuotas tiene estados administrativos/legales que el fichero nunca trae (Demandada, Incobrable,
+// Anulada) y un enlace a su expediente (id_demandas). Si una cuota ya existente tiene uno de esos
+// estados, la carga actualiza importe/pendiente/forma_pago/propietario pero NUNCA pisa el estado ni
+// id_demandas -- si además el fichero implicaría un cambio de estado, se avisa aparte.
+//
+// El propietario de cada vivienda (mb_propietarios_historico) se actualiza siempre que cambie,
+// independientemente de si alguna cuota de esa vivienda tiene un estado protegido -- es un dato a
+// nivel de vivienda, no de cuota. Nunca se fusiona automáticamente con un propietario existente por
+// similitud de nombre (solo por coincidencia EXACTA tras normalizar): si no hay coincidencia exacta
+// se crea uno nuevo, y los duplicados por variantes de escritura se revisan aparte en
+// /mb/propietarios ("posibles duplicados").
 class CuotasImportController extends Controller
 {
     private const TIPOS_SELECCIONABLES = ['C-I', 'C-II', 'C-I_Derrama', 'G.dev.', 'Dudoso', 'Entrega a cuenta'];
     private const FECHA_CORTE_RUIDO_HISTORICO = '2010-01-01'; // por debajo de esto, solo se procesa si reconcilia con mb_cuotas real
+    private const ESTADOS_PROTEGIDOS = ['Demandada', 'Incobrable', 'Anulada'];
 
     public function index(Project $project)
     {
-        $ultimasCargas = DB::table('mb_cuotas_provisional')->exists()
-            ? DB::table('mb_cuotas_provisional')->selectRaw('COUNT(*) as n, MAX(updatedat) as ultima')->first()
-            : null;
+        $ultimasCargas = DB::table('mb_cuotas')->selectRaw('COUNT(*) as n, MAX(updatedat) as ultima')->first();
 
         return view('mb.cuotas-import', [
             'project'      => $project,
@@ -30,12 +59,116 @@ class CuotasImportController extends Controller
             'ultimaCarga'  => $ultimasCargas->ultima ?? null,
             'breadcrumb'   => [
                 ['label' => 'Cuotas', 'url' => route('listado', [$project->slug, 'cuotas'])],
-                ['label' => 'Carga de recibos (prueba)', 'url' => ''],
+                ['label' => 'Carga de recibos', 'url' => ''],
             ],
         ]);
     }
 
-    public function import(Request $request, Project $project)
+    // Paso 1: recibe el fichero (o continúa uno ya subido vía tmp_id tras resolver el mapeo) y
+    // devuelve needs_mapping si hay conceptos sin clasificar. Si todo está mapeado, evalúa
+    // directamente (paso 2) sin escribir nada.
+    public function evaluar(Request $request, Project $project)
+    {
+        [$tmpId, $filePath, $originalName, $error] = $this->resolverTmp($request);
+        if ($error) return response()->json(['ok' => false, 'error' => $error]);
+
+        $this->guardarMappingsEnviados($request);
+
+        try {
+            $records = (new CuotasReportParser())->parse($filePath);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => 'No se puede leer el fichero: ' . $e->getMessage()]);
+        }
+
+        if (empty($records)) {
+            return response()->json(['ok' => false, 'error' => 'No se ha reconocido ninguna fila de cuota en el fichero.']);
+        }
+
+        $mapeo = DB::table('mb_cuotas_mapeo')->get()->keyBy('concepto');
+        $necesitaMapeo = $this->resolverConceptosNuevos($records, $mapeo);
+        if ($necesitaMapeo !== null) {
+            return response()->json(array_merge(['needs_mapping' => true, 'tmp_id' => $tmpId], $necesitaMapeo));
+        }
+
+        $fechaExportacion = $this->fechaExportacionDesdeNombre($originalName) ?? now()->toDateString();
+        $now = now();
+
+        [$clavesTocadas, $snapshotsNuevos, $sinVivienda, $omitidasRuido, $ultimoPorVivienda] =
+            $this->procesarRegistros($records, $mapeo, $fechaExportacion, $originalName, $now);
+
+        $resultado = $this->calcularResultado($clavesTocadas, $snapshotsNuevos, $fechaExportacion, $now, escribir: false);
+        $cambiosPropietario = $this->resolverPropietarios($ultimoPorVivienda, $fechaExportacion, $now, escribir: false);
+
+        return response()->json(array_merge(['ok' => true, 'tmp_id' => $tmpId], $resultado, [
+            'sin_vivienda'             => array_keys($sinVivienda),
+            'omitidas_ruido_historico' => $omitidasRuido,
+            'cambios_propietario'      => $cambiosPropietario,
+        ]));
+        // OJO: no se borra el fichero temporal aquí -- se necesita para confirmar() o cancelar().
+    }
+
+    // Paso 3: aplica de verdad lo evaluado. Vuelve a parsear el MISMO fichero (por tmp_id) y esta
+    // vez sí escribe: mb_cuotas_exportaciones, mb_cuotas + histórico de estado, y el histórico de
+    // propietarios.
+    public function confirmar(Request $request, Project $project)
+    {
+        $request->validate(['tmp_id' => ['required', 'string', 'regex:/^cuotas_[a-zA-Z0-9_.]+$/']]);
+        $tmpId = $request->input('tmp_id');
+        $filePath = Storage::disk('local')->path("cuotas_tmp/{$tmpId}.xls");
+        if (!file_exists($filePath)) {
+            return response()->json(['ok' => false, 'error' => 'Fichero temporal no encontrado. Vuelve a subirlo.']);
+        }
+        $originalName = Storage::disk('local')->exists("cuotas_tmp/{$tmpId}.name")
+            ? Storage::disk('local')->get("cuotas_tmp/{$tmpId}.name")
+            : 'recibos.xls';
+
+        try {
+            $records = (new CuotasReportParser())->parse($filePath);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => 'No se puede leer el fichero: ' . $e->getMessage()]);
+        }
+
+        $mapeo = DB::table('mb_cuotas_mapeo')->get()->keyBy('concepto');
+        $fechaExportacion = $this->fechaExportacionDesdeNombre($originalName) ?? now()->toDateString();
+        $now = now();
+
+        $resultado = DB::transaction(function () use ($records, $mapeo, $fechaExportacion, $originalName, $filePath, $now) {
+            [$clavesTocadas, $snapshotsNuevos, $sinVivienda, $omitidasRuido, $ultimoPorVivienda] =
+                $this->procesarRegistros($records, $mapeo, $fechaExportacion, $originalName, $now);
+
+            $this->persistirExportaciones($snapshotsNuevos, $fechaExportacion, $now);
+
+            $resultado = $this->calcularResultado($clavesTocadas, $snapshotsNuevos, $fechaExportacion, $now, escribir: true);
+            $cambiosPropietario = $this->resolverPropietarios($ultimoPorVivienda, $fechaExportacion, $now, escribir: true);
+
+            $destino = 'mb/cuotas_imports/' . now()->format('Y-m-d_His') . '_' . $originalName;
+            Storage::disk('public')->put($destino, file_get_contents($filePath));
+
+            return array_merge($resultado, [
+                'sin_vivienda'             => array_keys($sinVivienda),
+                'omitidas_ruido_historico' => $omitidasRuido,
+                'cambios_propietario'      => $cambiosPropietario,
+                'fichero_guardado'         => $destino,
+            ]);
+        });
+
+        Storage::disk('local')->delete(["cuotas_tmp/{$tmpId}.xls", "cuotas_tmp/{$tmpId}.name"]);
+
+        return response()->json(array_merge(['ok' => true], $resultado));
+    }
+
+    // Descarta la evaluación sin aplicar nada -- borra el fichero temporal.
+    public function cancelar(Request $request, Project $project)
+    {
+        $request->validate(['tmp_id' => ['required', 'string', 'regex:/^cuotas_[a-zA-Z0-9_.]+$/']]);
+        $tmpId = $request->input('tmp_id');
+        Storage::disk('local')->delete(["cuotas_tmp/{$tmpId}.xls", "cuotas_tmp/{$tmpId}.name"]);
+
+        return response()->json(['ok' => true]);
+    }
+
+    // Resuelve el fichero temporal a partir del upload o de un tmp_id ya existente.
+    private function resolverTmp(Request $request): array
     {
         if ($request->hasFile('file')) {
             $request->validate(['file' => 'required|file|max:51200']);
@@ -50,13 +183,17 @@ class CuotasImportController extends Controller
 
         $filePath = Storage::disk('local')->path("cuotas_tmp/{$tmpId}.xls");
         if (!file_exists($filePath)) {
-            return response()->json(['ok' => false, 'error' => 'Fichero temporal no encontrado. Vuelve a subirlo.']);
+            return [null, null, null, 'Fichero temporal no encontrado. Vuelve a subirlo.'];
         }
         $originalName = Storage::disk('local')->exists("cuotas_tmp/{$tmpId}.name")
             ? Storage::disk('local')->get("cuotas_tmp/{$tmpId}.name")
             : 'recibos.xls';
 
-        // Aplicar las clasificaciones que haya enviado el usuario para conceptos nuevos.
+        return [$tmpId, $filePath, $originalName, null];
+    }
+
+    private function guardarMappingsEnviados(Request $request): void
+    {
         foreach ($request->input('mappings', []) as $mapping) {
             $concepto  = trim((string) ($mapping['concepto'] ?? ''));
             $ejercicio = trim((string) ($mapping['ejercicio'] ?? ''));
@@ -68,23 +205,15 @@ class CuotasImportController extends Controller
                 ['ejercicio' => $ejercicio, 'tipo_cuota' => $tipo, 'updatedat' => now(), 'createdat' => now()]
             );
         }
+    }
 
-        try {
-            $records = (new CuotasReportParser())->parse($filePath);
-        } catch (\Throwable $e) {
-            return response()->json(['ok' => false, 'error' => 'No se puede leer el fichero: ' . $e->getMessage()]);
-        }
-
-        if (empty($records)) {
-            return response()->json(['ok' => false, 'error' => 'No se ha reconocido ninguna fila de cuota en el fichero.']);
-        }
-
-        $mapeo = DB::table('mb_cuotas_mapeo')->get()->keyBy('concepto');
-
+    // Clasificación automática ("cuenta" -> Entrega a cuenta) + detección de conceptos que aún
+    // necesitan que el usuario indique ejercicio+tipo. Devuelve null si todo está ya mapeado, o el
+    // payload a devolver (needs_mapping) si falta alguno.
+    private function resolverConceptosNuevos(array $records, &$mapeo): ?array
+    {
         $conceptosDelFichero = collect($records)->pluck('concepto')->unique();
 
-        // Clasificación automática: cualquier concepto que contenga "cuenta" (entregas a cuenta)
-        // se mapea directo a "Entrega a cuenta", sin pedir clasificación manual.
         foreach ($conceptosDelFichero as $concepto) {
             if ($mapeo->has($concepto) || !str_contains(mb_strtolower($concepto), 'cuenta')) continue;
 
@@ -101,63 +230,39 @@ class CuotasImportController extends Controller
         }
 
         $desconocidos = $conceptosDelFichero->filter(fn($c) => !$mapeo->has($c))->values();
+        if ($desconocidos->isEmpty()) return null;
 
-        if ($desconocidos->isNotEmpty()) {
-            $ejemplos = [];
-            foreach ($desconocidos as $concepto) {
-                $fila = collect($records)->firstWhere('concepto', $concepto);
-                $ejemplos[] = [
-                    'concepto'           => $concepto,
-                    'ejercicio_sugerido' => $this->ejercicioFromFecha($fila['fecha_emision']),
-                    'ejemplo_vivienda'   => $fila['vivienda_cuota_name'],
-                    'ejemplo_fecha'      => $fila['fecha_emision'],
-                    'ejemplo_importe'    => $fila['importe'],
-                ];
-            }
-
-            return response()->json([
-                'needs_mapping' => true,
-                'tmp_id'        => $tmpId,
-                'conceptos'     => $ejemplos,
-                'tipos'         => self::TIPOS_SELECCIONABLES,
-            ]);
+        $ejemplos = [];
+        foreach ($desconocidos as $concepto) {
+            $fila = collect($records)->firstWhere('concepto', $concepto);
+            $ejemplos[] = [
+                'concepto'           => $concepto,
+                'ejercicio_sugerido' => $this->ejercicioFromFecha($fila['fecha_emision']),
+                'ejemplo_vivienda'   => $fila['vivienda_cuota_name'],
+                'ejemplo_fecha'      => $fila['fecha_emision'],
+                'ejemplo_importe'    => $fila['importe'],
+            ];
         }
 
-        $resultado = $this->runImport($records, $mapeo, $originalName, $filePath);
-
-        Storage::disk('local')->delete(["cuotas_tmp/{$tmpId}.xls", "cuotas_tmp/{$tmpId}.name"]);
-
-        return response()->json(array_merge(['ok' => true], $resultado));
+        return ['conceptos' => $ejemplos, 'tipos' => self::TIPOS_SELECCIONABLES];
     }
 
-    private function runImport(array $records, $mapeo, string $originalName, string $filePath): array
-    {
-        return DB::transaction(function () use ($records, $mapeo, $originalName, $filePath) {
-            return $this->runImportInTransaction($records, $mapeo, $originalName, $filePath);
-        });
-    }
-
-    private function runImportInTransaction(array $records, $mapeo, string $originalName, string $filePath): array
+    // Resuelve cada fila del fichero a vivienda+tipo_cuota, aplica el filtro de ruido histórico, y
+    // construye la "foto hipotética" (snapshot) de cada cuota tocada. No escribe nada en la BD.
+    // Devuelve [clavesTocadas, snapshotsNuevos, sinVivienda, omitidasRuido, ultimoPorVivienda].
+    private function procesarRegistros(array $records, $mapeo, string $fechaExportacion, string $originalName, Carbon $now): array
     {
         $viviendaMap = DB::table('mb_viviendas')->pluck('id', 'cuota_name')
             ->mapWithKeys(fn($id, $nombre) => [$this->normalize($nombre) => $id]);
 
-        // Existentes en mb_cuotas_provisional, para upsert.
-        $provisionalExistentes = DB::table('mb_cuotas_provisional')->get()->keyBy(
-            fn($c) => $c->id_viviendas . '|' . $this->normalize($c->concepto) . '|' . $c->fecha_emision
-        );
-
-        // mb_cuotas REAL, solo para reconciliar el ruido histórico anterior a 2010.
         $realCuotas = DB::table('mb_cuotas')->get()->keyBy(
             fn($c) => $c->id_viviendas . '|' . $this->normalize($c->concepto) . '|' . $c->fecha_emision
         );
 
-        $nuevas = 0; $actualizadas = 0; $sinCambios = 0;
-        $sinVivienda = []; $omitidasRuido = []; $pendienteHistorico = 0;
-        $ultimoPorVivienda = []; // id_viviendas => ultima fila procesada (por fecha)
-
-        $now = now();
-        $hoy = $now->toDateString();
+        $sinVivienda = []; $omitidasRuido = [];
+        $ultimoPorVivienda = [];
+        $clavesTocadas = [];
+        $snapshotsNuevos = [];
 
         foreach ($records as $r) {
             $idViv = $viviendaMap[$this->normalize($r['vivienda_cuota_name'])] ?? null;
@@ -172,8 +277,6 @@ class CuotasImportController extends Controller
 
             $key = $idViv . '|' . $this->normalize($r['concepto']) . '|' . $r['fecha_emision'];
 
-            // Ruido histórico anterior a 2010: solo se procesa si reconcilia con mb_cuotas real
-            // (misma vivienda+concepto+fecha, mismo ejercicio derivado, mismo tipo_cuota mapeado).
             if ($r['fecha_emision'] < self::FECHA_CORTE_RUIDO_HISTORICO) {
                 $real = $realCuotas[$key] ?? null;
                 $reconcilia = $real
@@ -187,100 +290,327 @@ class CuotasImportController extends Controller
 
             $importeCobrado = round($r['importe'] - $r['pendiente'], 2);
             $estado = $r['pendiente'] > 0 ? 'Pendiente' : 'Pagada';
-            $nombreCuota = $r['concepto'] . ' - ' . \Carbon\Carbon::parse($r['fecha_emision'])->format('d/m/Y');
 
-            $existente = $provisionalExistentes[$key] ?? null;
-
-            if (!$existente) {
-                DB::table('mb_cuotas_provisional')->insert([
-                    'id_viviendas'     => $idViv,
-                    'nombre'           => $nombreCuota,
-                    'fecha_emision'    => $r['fecha_emision'],
-                    'concepto'         => $r['concepto'],
-                    'ejercicio'        => $ejercicio,
-                    'tipo_cuota'       => $tipoCuota,
-                    'propietario'      => $r['propietario'],
-                    'forma_pago'       => $r['forma_pago'],
-                    'importe'          => $r['importe'],
-                    'pendiente'        => $r['pendiente'],
-                    'importe_cobrado'  => $importeCobrado,
-                    'estado'           => $estado,
-                    'createdat'        => $now,
-                    'updatedat'        => $now,
-                ]);
-                $nuevas++;
-            } else {
-                $cambia = abs((float) $existente->importe - $r['importe']) > 0.005
-                    || abs((float) $existente->pendiente - $r['pendiente']) > 0.005
-                    || trim((string) $existente->forma_pago) !== $r['forma_pago']
-                    || $this->normalize($existente->propietario) !== $this->normalize($r['propietario']);
-
-                if ($cambia) {
-                    if (abs((float) $existente->pendiente - $r['pendiente']) > 0.005) {
-                        DB::table('mb_cuotas_pendiente_historico')->insert([
-                            'id_cuota'           => $existente->id,
-                            'pendiente_anterior' => $existente->pendiente,
-                            'pendiente_nuevo'    => $r['pendiente'],
-                            'fecha_carga'        => $hoy,
-                            'createdat'          => $now,
-                        ]);
-                        $pendienteHistorico++;
-                    }
-
-                    DB::table('mb_cuotas_provisional')->where('id', $existente->id)->update([
-                        'importe'         => $r['importe'],
-                        'pendiente'       => $r['pendiente'],
-                        'forma_pago'      => $r['forma_pago'],
-                        'propietario'     => $r['propietario'],
-                        'importe_cobrado' => $importeCobrado,
-                        'estado'          => $estado,
-                        'updatedat'       => $now,
-                    ]);
-                    $actualizadas++;
-                } else {
-                    $sinCambios++;
-                }
-            }
+            $snapshotsNuevos[$key] = [
+                'id_viviendas'      => $idViv,
+                'concepto'          => $r['concepto'],
+                'fecha_emision'     => $r['fecha_emision'],
+                'fecha_exportacion' => $fechaExportacion,
+                'ejercicio'         => $ejercicio,
+                'tipo_cuota'        => $tipoCuota,
+                'propietario'       => $r['propietario'],
+                'forma_pago'        => $r['forma_pago'],
+                'importe'           => $r['importe'],
+                'pendiente'         => $r['pendiente'],
+                'importe_cobrado'   => $importeCobrado,
+                'estado'            => $estado,
+                'fichero_origen'    => $originalName,
+                'createdat'         => $now,
+                'updatedat'         => $now,
+            ];
+            $clavesTocadas[$key] = [$idViv, $r['concepto'], $r['fecha_emision']];
 
             if (!isset($ultimoPorVivienda[$idViv]) || $r['fecha_emision'] >= $ultimoPorVivienda[$idViv]['fecha_emision']) {
                 $ultimoPorVivienda[$idViv] = ['fecha_emision' => $r['fecha_emision'], 'propietario' => $r['propietario']];
             }
         }
 
-        // Detección (informativa, sin escritura) de cambios de propietario respecto al histórico real.
-        $cambiosPropietario = [];
-        if (!empty($ultimoPorVivienda)) {
-            $activos = DB::table('mb_propietarios_historico')
-                ->whereIn('id_viviendas', array_keys($ultimoPorVivienda))
-                ->whereNull('fecha_hasta')
-                ->get()->keyBy('id_viviendas');
+        return [$clavesTocadas, $snapshotsNuevos, $sinVivienda, $omitidasRuido, $ultimoPorVivienda];
+    }
 
-            foreach ($ultimoPorVivienda as $idViv => $info) {
-                $activo = $activos[$idViv] ?? null;
-                if ($activo && $this->normalize($activo->propietario) !== $this->normalize($info['propietario'])) {
-                    $cambiosPropietario[] = [
-                        'id_viviendas'         => $idViv,
-                        'propietario_historico'=> $activo->propietario,
-                        'propietario_fichero'  => $info['propietario'],
-                    ];
-                }
+    // Inserta/actualiza en mb_cuotas_exportaciones las fotos de esta carga (solo se llama desde
+    // confirmar(), nunca desde evaluar()).
+    private function persistirExportaciones(array $snapshotsNuevos, string $fechaExportacion, Carbon $now): void
+    {
+        $existentes = DB::table('mb_cuotas_exportaciones')
+            ->where('fecha_exportacion', $fechaExportacion)
+            ->get()->keyBy(fn($c) => $c->id_viviendas . '|' . $this->normalize($c->concepto) . '|' . $c->fecha_emision);
+
+        foreach ($snapshotsNuevos as $key => $datosSnap) {
+            $existenteSnap = $existentes[$key] ?? null;
+            if (!$existenteSnap) {
+                DB::table('mb_cuotas_exportaciones')->insert($datosSnap);
+                continue;
+            }
+            $cambia = abs((float) $existenteSnap->importe - $datosSnap['importe']) > 0.005
+                || abs((float) $existenteSnap->pendiente - $datosSnap['pendiente']) > 0.005
+                || trim((string) $existenteSnap->forma_pago) !== $datosSnap['forma_pago']
+                || $this->normalize($existenteSnap->propietario) !== $this->normalize($datosSnap['propietario']);
+            if ($cambia) {
+                $datosSnapSinCreate = $datosSnap;
+                unset($datosSnapSinCreate['createdat']);
+                DB::table('mb_cuotas_exportaciones')->where('id', $existenteSnap->id)->update($datosSnapSinCreate);
             }
         }
+    }
 
-        // Guardar el fichero original para auditoría.
-        $destino = 'mb/cuotas_imports/' . now()->format('Y-m-d_His') . '_' . $originalName;
-        Storage::disk('public')->put($destino, file_get_contents($filePath));
+    // Calcula (y si $escribir=true, persiste) el estado actual y el histórico de cada cuota tocada,
+    // a partir de TODAS sus fotos conocidas (las que ya hay en mb_cuotas_exportaciones + la
+    // hipotética/nueva de esta carga, aunque todavía no esté persistida), ordenadas por
+    // fecha_exportacion -- no por orden de carga. Clasifica cada cuota en: nuevas,
+    // pendiente_a_pagada, pagada_a_pendiente, actualizadas_otros_datos, sin_cambios. Detecta avisos
+    // de demandas (cuota con id_demandas activa cuyo estado protegido difiere del que marcaría el
+    // fichero).
+    private function calcularResultado(array $clavesTocadas, array $snapshotsNuevos, string $fechaExportacion, Carbon $now, bool $escribir): array
+    {
+        if (empty($clavesTocadas)) {
+            return [
+                'fecha_exportacion' => $fechaExportacion,
+                'nuevas' => 0, 'pendiente_a_pagada' => 0, 'pagada_a_pendiente' => 0,
+                'actualizadas_otros_datos' => 0, 'sin_cambios' => 0,
+                'importe_recien_cobrado' => 0.0, 'estado_historico' => 0, 'avisos_demandas' => [],
+            ];
+        }
+
+        $idViviendasTocadas = collect($clavesTocadas)->pluck(0)->unique()->values();
+
+        // Timeline existente en BD, EXCLUYENDO la foto de esta misma fecha_exportacion para esta
+        // clave (si ya existiera de una carga previa del mismo fichero) -- se sustituye siempre por
+        // la versión en memoria de $snapshotsNuevos, así el cálculo es idéntico se haya persistido
+        // ya o no.
+        $timelinesPorClave = DB::table('mb_cuotas_exportaciones')
+            ->whereIn('id_viviendas', $idViviendasTocadas)
+            ->orderBy('fecha_exportacion')
+            ->orderBy('id')
+            ->get()
+            ->groupBy(fn($row) => $row->id_viviendas . '|' . $this->normalize($row->concepto) . '|' . $row->fecha_emision);
+
+        $cuotasPorClave = DB::table('mb_cuotas')
+            ->whereIn('id_viviendas', $idViviendasTocadas)
+            ->get()
+            ->keyBy(fn($c) => $c->id_viviendas . '|' . $this->normalize($c->concepto) . '|' . $c->fecha_emision);
+
+        $nuevas = 0; $pendienteAPagada = 0; $pagadaAPendiente = 0; $actualizadasOtros = 0; $sinCambios = 0;
+        $eventosHistorico = 0; $importeRecienCobrado = 0.0; $avisosDemandas = [];
+        $userId = Auth::id();
+
+        foreach ($clavesTocadas as $key => $meta) {
+            $timeline = ($timelinesPorClave[$key] ?? collect())
+                ->reject(fn($row) => (string) $row->fecha_exportacion === $fechaExportacion)
+                ->values();
+            $nuevoSnap = $snapshotsNuevos[$key] ?? null;
+            if ($nuevoSnap) $timeline->push((object) $nuevoSnap);
+            $timeline = $timeline->sortBy('fecha_exportacion')->values();
+            if ($timeline->isEmpty()) continue;
+
+            $eventos = [];
+            $prev = null;
+            $fechaCobroActual = null;
+            foreach ($timeline as $snap) {
+                if ($prev !== null) {
+                    $pendienteCambia = abs((float) $prev->pendiente - (float) $snap->pendiente) > 0.005;
+                    $estadoCambia = trim((string) $prev->estado) !== trim((string) $snap->estado);
+                    if ($pendienteCambia || $estadoCambia) {
+                        $eventos[] = [
+                            'estado_anterior'    => $prev->estado,
+                            'estado_nuevo'       => $snap->estado,
+                            'pendiente_anterior' => $prev->pendiente,
+                            'pendiente_nuevo'    => $snap->pendiente,
+                            'fecha_exportacion'  => $snap->fecha_exportacion,
+                            'fichero_origen'     => $snap->fichero_origen,
+                            'createdat'          => $now,
+                        ];
+                    }
+                }
+                if ($snap->estado === 'Pagada' && ($prev === null || $prev->estado !== 'Pagada')) {
+                    $fechaCobroActual = $snap->fecha_exportacion;
+                } elseif ($snap->estado !== 'Pagada') {
+                    $fechaCobroActual = null;
+                }
+                $prev = $snap;
+            }
+
+            $ultimo = $timeline->last();
+            $nombreCuota = $ultimo->concepto . ' - ' . Carbon::parse($ultimo->fecha_emision)->format('d/m/Y');
+
+            $cuotaExistente = $cuotasPorClave[$key] ?? null;
+            $estadoProtegido = $cuotaExistente && in_array(trim((string) $cuotaExistente->estado), self::ESTADOS_PROTEGIDOS, true);
+
+            $hayCambioEnEsteCarga = collect($eventos)->contains(fn($e) => (string) $e['fecha_exportacion'] === $fechaExportacion);
+
+            if ($estadoProtegido && $cuotaExistente->id_demandas !== null && $hayCambioEnEsteCarga) {
+                $avisosDemandas[] = [
+                    'id_cuota'      => $cuotaExistente->id,
+                    'id_viviendas'  => $cuotaExistente->id_viviendas,
+                    'concepto'      => $cuotaExistente->concepto,
+                    'fecha_emision' => $cuotaExistente->fecha_emision,
+                    'estado_actual' => $cuotaExistente->estado,
+                    'estado_fichero'=> $ultimo->estado,
+                    'id_demandas'   => $cuotaExistente->id_demandas,
+                ];
+            }
+
+            $datos = [
+                'id_viviendas'    => $ultimo->id_viviendas,
+                'nombre'          => $nombreCuota,
+                'fecha_emision'   => $ultimo->fecha_emision,
+                'concepto'        => $ultimo->concepto,
+                'ejercicio'       => $ultimo->ejercicio,
+                'tipo_cuota'      => $ultimo->tipo_cuota,
+                'propietario'     => $ultimo->propietario,
+                'forma_pago'      => $ultimo->forma_pago,
+                'importe'         => $ultimo->importe,
+                'pendiente'       => $ultimo->pendiente,
+                'importe_cobrado' => $ultimo->importe_cobrado,
+                'updatedat'       => $now,
+            ];
+            if (!$estadoProtegido) {
+                $datos['estado']     = $ultimo->estado;
+                $datos['fecha_pago'] = $fechaCobroActual;
+            }
+
+            if ($cuotaExistente) {
+                $estadoAntes = trim((string) $cuotaExistente->estado);
+                $estadoDespues = $estadoProtegido ? $estadoAntes : trim((string) $datos['estado']);
+                $otrosCambios = abs((float) $cuotaExistente->importe - (float) $datos['importe']) > 0.005
+                    || trim((string) $cuotaExistente->forma_pago) !== trim((string) $datos['forma_pago'])
+                    || $this->normalize($cuotaExistente->propietario) !== $this->normalize($datos['propietario']);
+                $pendienteCambioReal = abs((float) $cuotaExistente->pendiente - (float) $datos['pendiente']) > 0.005;
+
+                if (!$estadoProtegido && $estadoAntes !== 'Pagada' && $estadoDespues === 'Pagada') {
+                    $pendienteAPagada++;
+                    $importeRecienCobrado += (float) $cuotaExistente->pendiente;
+                } elseif (!$estadoProtegido && $estadoAntes === 'Pagada' && $estadoDespues !== 'Pagada') {
+                    $pagadaAPendiente++;
+                } elseif ($otrosCambios || $pendienteCambioReal) {
+                    $actualizadasOtros++;
+                } else {
+                    $sinCambios++;
+                }
+
+                if ($escribir) {
+                    DB::table('mb_cuotas')->where('id', $cuotaExistente->id)->update(array_merge($datos, ['updateuser' => $userId]));
+                }
+                $idCuota = $cuotaExistente->id;
+            } else {
+                $datos['estado']     = $datos['estado'] ?? $ultimo->estado;
+                $datos['fecha_pago'] = $datos['fecha_pago'] ?? $fechaCobroActual;
+                if ($datos['estado'] === 'Pagada') {
+                    $importeRecienCobrado += (float) $ultimo->importe;
+                }
+                $nuevas++;
+
+                if ($escribir) {
+                    $datos['blocked'] = 0; $datos['hidden'] = 0; $datos['deleted'] = 0;
+                    $datos['createuser'] = $userId;
+                    $datos['createdat'] = $now;
+                    $idCuota = DB::table('mb_cuotas')->insertGetId($datos);
+                } else {
+                    $idCuota = null;
+                }
+            }
+
+            if ($escribir && $idCuota) {
+                DB::table('mb_cuotas_estado_historico')->where('id_cuota', $idCuota)->delete();
+                if (!empty($eventos)) {
+                    foreach ($eventos as &$ev) { $ev['id_cuota'] = $idCuota; }
+                    unset($ev);
+                    DB::table('mb_cuotas_estado_historico')->insert($eventos);
+                }
+            }
+            $eventosHistorico += count($eventos);
+        }
 
         return [
+            'fecha_exportacion'         => $fechaExportacion,
             'nuevas'                    => $nuevas,
-            'actualizadas'              => $actualizadas,
+            'pendiente_a_pagada'        => $pendienteAPagada,
+            'pagada_a_pendiente'        => $pagadaAPendiente,
+            'actualizadas_otros_datos'  => $actualizadasOtros,
             'sin_cambios'               => $sinCambios,
-            'pendiente_historico'       => $pendienteHistorico,
-            'sin_vivienda'              => array_keys($sinVivienda),
-            'omitidas_ruido_historico'  => $omitidasRuido,
-            'cambios_propietario_detectados' => $cambiosPropietario,
-            'fichero_guardado'          => $destino,
+            'importe_recien_cobrado'    => round($importeRecienCobrado, 2),
+            'estado_historico'          => $eventosHistorico,
+            'avisos_demandas'           => $avisosDemandas,
         ];
+    }
+
+    // Detecta (y si $escribir=true, aplica) los cambios de propietario respecto al histórico real.
+    // Se compara contra quién era el propietario activo EN LA FECHA DE EXPORTACIÓN del fichero, no
+    // contra el propietario activo ahora mismo -- si se está cargando un fichero antiguo (backfill),
+    // el propietario "actual" puede ser alguien posterior que nada tiene que ver con lo que refleja
+    // ese fichero, y compararlo así generaría cambios falsos.
+    //
+    // La resolución a mb_propietarios es SIEMPRE por coincidencia exacta (tras normalizar) -- nunca
+    // se fusiona automáticamente por similitud; si no hay coincidencia exacta se crea un propietario
+    // nuevo. Los posibles duplicados por variantes de escritura se revisan aparte en
+    // /mb/propietarios.
+    private function resolverPropietarios(array $ultimoPorVivienda, string $fechaExportacion, Carbon $now, bool $escribir): array
+    {
+        if (empty($ultimoPorVivienda)) return [];
+
+        $activos = DB::table('mb_propietarios_historico')
+            ->whereIn('id_viviendas', array_keys($ultimoPorVivienda))
+            ->where('fecha_desde', '<=', $fechaExportacion)
+            ->where(fn($q) => $q->whereNull('fecha_hasta')->orWhere('fecha_hasta', '>=', $fechaExportacion))
+            ->orderByDesc('fecha_desde')
+            ->get()
+            ->groupBy('id_viviendas')
+            ->map(fn($rows) => $rows->first());
+
+        $nombresViviendas = DB::table('mb_viviendas')
+            ->whereIn('id', array_keys($ultimoPorVivienda))
+            ->pluck('nombre', 'id');
+
+        $userId = Auth::id();
+        $cambios = [];
+
+        foreach ($ultimoPorVivienda as $idViv => $info) {
+            $activo = $activos[$idViv] ?? null;
+            if (!$activo || $this->normalize($activo->propietario) === $this->normalize($info['propietario'])) continue;
+
+            $normNuevo = $this->normalize($info['propietario']);
+            $idPropietarios = DB::table('mb_propietarios')->whereRaw('upper(nombre) = ?', [$normNuevo])->value('id');
+            $esNuevo = $idPropietarios === null;
+
+            if ($escribir) {
+                if ($esNuevo) {
+                    $idPropietarios = DB::table('mb_propietarios')->insertGetId([
+                        'nombre' => $info['propietario'], 'blocked' => 0, 'hidden' => 0, 'deleted' => 0,
+                        'createuser' => $userId, 'createdat' => $now, 'updatedat' => $now,
+                    ]);
+                }
+                DB::table('mb_propietarios_historico')->where('id', $activo->id)->update([
+                    'fecha_hasta' => Carbon::parse($fechaExportacion)->subDay()->toDateString(),
+                    'updatedat' => $now, 'updateuser' => $userId,
+                ]);
+                DB::table('mb_propietarios_historico')->insert([
+                    'id_viviendas' => $idViv, 'nombre' => $info['propietario'], 'propietario' => $info['propietario'],
+                    'id_propietarios' => $idPropietarios, 'fecha_desde' => $fechaExportacion, 'fecha_hasta' => null,
+                    'blocked' => 0, 'hidden' => 0, 'deleted' => 0, 'createuser' => $userId,
+                    'createdat' => $now, 'updatedat' => $now,
+                ]);
+            }
+
+            $cambios[] = [
+                'id_viviendas'          => $idViv,
+                'nombre_vivienda'       => $nombresViviendas[$idViv] ?? null,
+                'propietario_anterior'  => $activo->propietario,
+                'propietario_nuevo'     => $info['propietario'],
+                'resolucion'            => $esNuevo ? 'nuevo' : 'existente',
+            ];
+        }
+
+        return $cambios;
+    }
+
+    public function historico(Request $request, Project $project, int $cuota)
+    {
+        $eventos = DB::table('mb_cuotas_estado_historico')
+            ->where('id_cuota', $cuota)
+            ->orderByDesc('fecha_exportacion')
+            ->orderByDesc('id')
+            ->get();
+
+        return response()->json(['historico' => $eventos]);
+    }
+
+    private function fechaExportacionDesdeNombre(string $nombreFichero): ?string
+    {
+        if (preg_match('/^(\d{4})(\d{2})(\d{2})[ _.-]/', $nombreFichero, $m)
+            && checkdate((int) $m[2], (int) $m[3], (int) $m[1])) {
+            return "{$m[1]}-{$m[2]}-{$m[3]}";
+        }
+        return null;
     }
 
     private function ejercicioFromFecha(string $fecha): string
