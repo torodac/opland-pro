@@ -11,6 +11,7 @@ use App\Models\ProjectTable;
 use App\Models\TableField;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
@@ -106,9 +107,16 @@ class ExcelController extends Controller
         $listFields    = $projectTable->fields->where('in_list', true)->pluck('name')->toArray();
         $projectTables = $project->tables()->pluck('name')->toArray();
         $dbFields      = $projectTable->fields->pluck('name')->toArray();
-        $keyHeadings   = array_values(array_intersect($headings, $dbFields));
+        // "id" no es un TableField (es la PK implícita de toda tabla dinámica), pero si el
+        // Excel la trae debe poder elegirse como campo clave para localizar el registro a
+        // actualizar -- se admite explícitamente aquí y en TablaImport::collection().
+        if (Schema::hasColumn($projectTable->getFullTableName(), 'id') && !in_array('id', $dbFields)) {
+            $dbFields[] = 'id';
+        }
+        $keyHeadings     = array_values(array_intersect($headings, $dbFields));
+        $unknownHeadings = array_values(array_diff($headings, $dbFields));
 
-        return view('excel.import-preview', compact('project', 'projectTable', 'headings', 'preview', 'listFields', 'projectTables', 'keyHeadings'));
+        return view('excel.import-preview', compact('project', 'projectTable', 'headings', 'preview', 'listFields', 'projectTables', 'keyHeadings', 'unknownHeadings'));
     }
 
     public function import(Request $request, Project $project, string $table)

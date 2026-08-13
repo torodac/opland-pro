@@ -17,6 +17,13 @@ $fechaCorta = function ($fecha) use ($mesesCortos) {
     $d = \Carbon\Carbon::parse($fecha);
     return $mesesCortos[$d->format('m')] . "'" . $d->format('y');
 };
+
+// Calculado aparte (no inline dentro de @json en el <script>): el compilador de Blade trunca
+// mal la expresión route('ficha.borrar', [$project->slug, 'contratos', '__ID__']) cuando se
+// escribe directamente dentro de @json(...) -- deja el array sin cerrar a partir de la 2a
+// cadena literal consecutiva. Precalcularla aquí evita el problema.
+$urlContratoBorrarTpl = route('ficha.borrar', [$project->slug, 'contratos', '__ID__']);
+$urlContratoArchivarTpl = route('ficha.archive', [$project->slug, 'contratos', '__ID__']);
 @endphp
 
 <x-app-layout :breadcrumb="[['label'=>'Clientes','url'=>route('listado',[$project->slug,'clientes'])],['label'=>$cliente->nombre,'url'=>route('nf.clientes_form',[$project->slug,$cliente->id])]]" :project="$project">
@@ -27,13 +34,13 @@ $fechaCorta = function ($fecha) use ($mesesCortos) {
            class="btn btn-grey" title="Ver ficha estándar">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
         </a>
-        <a href="{{ route('ficha.create', [$project->slug, 'clientes']) }}" class="btn btn-grey">
+        <a href="{{ route('ficha.create', [$project->slug, 'clientes']) }}" class="btn btn-grey" title="Nuevo">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-            Nuevo
+            <span class="btn-label">Nuevo</span>
         </a>
-        <button onclick="enterEdit()" class="btn btn-grey">
+        <button onclick="enterEdit()" class="btn btn-grey" title="Editar">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>
-            Editar
+            <span class="btn-label">Editar</span>
         </button>
     </div>
     <div id="editActions" style="display:none;align-items:center;gap:6px;">
@@ -48,12 +55,15 @@ $fechaCorta = function ($fecha) use ($mesesCortos) {
 </x-slot>
 
 <style>
-  #nf-ficha .btn { font-size:13px;padding:6px 12px;border-radius:6px;cursor:pointer;border:.5px solid rgba(0,0,0,.15);background:#fff;color:#1B1B18;display:inline-flex;align-items:center;gap:5px;line-height:1.2; }
-  #nf-ficha .btn-grey { background:rgba(0,0,0,.045);border-color:transparent;color:#888; }
-  #nf-ficha .btn-primary { background:#E6F1FB;color:#0C447C;border-color:#B5D4F4;font-weight:600; }
-  #nf-ficha .btn-orange { background:#F97316;color:#fff;border-color:#F97316;font-weight:600; }
-  #nf-ficha .icon-btn { background:none;border:none;cursor:pointer;padding:5px;color:#888;display:inline-flex;align-items:center;border-radius:6px; }
-  #nf-ficha .icon-btn:hover { background:rgba(0,0,0,.06);color:#222; }
+  /* .btn/.icon-btn se usan tanto dentro de #nf-ficha (tabla, edit-box) como en el header de
+     acciones del layout (#viewActions/#editActions), que es hermano de #nf-ficha en el DOM
+     (ver x-slot="actions" -> <header>, separado de <main> donde vive #nf-ficha) -> sin acotar. */
+  .btn { font-size:13px;padding:6px 12px;border-radius:6px;cursor:pointer;border:.5px solid rgba(0,0,0,.15);background:#fff;color:#1B1B18;display:inline-flex;align-items:center;gap:5px;line-height:1.2; }
+  .btn-grey { background:rgba(0,0,0,.045);border-color:transparent;color:#888; }
+  .btn-primary { background:#E6F1FB;color:#0C447C;border-color:#B5D4F4;font-weight:600; }
+  .btn-orange { background:#F97316;color:#fff;border-color:#F97316;font-weight:600; }
+  .icon-btn { background:none;border:none;cursor:pointer;padding:5px;color:#888;display:inline-flex;align-items:center;justify-content:center;border-radius:6px; }
+  .icon-btn:hover { background:rgba(0,0,0,.06);color:#222; }
 
   #nf-ficha .head { display:flex;align-items:flex-start;gap:12px;margin-bottom:1.2rem; }
   #nf-ficha .avatar { width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:15px;flex-shrink:0; }
@@ -80,18 +90,49 @@ $fechaCorta = function ($fecha) use ($mesesCortos) {
   #nf-ficha .sec-title { font-weight:600;font-size:14.5px;margin:0;display:flex;align-items:center;gap:7px; }
 
   #nf-ficha table.servicios { width:100%;border-collapse:collapse;table-layout:fixed; }
+  #nf-ficha .col-servicio { width:18%; }
+  #nf-ficha .col-fechas { width:32%; }
+  #nf-ficha .col-importe { width:14%; }
+  #nf-ficha .col-cobros { width:36%; }
+  #nf-ficha .circulo { display:inline-block;width:10px;height:10px;border-radius:50%;margin:1px 3px 1px 0;background:#fff;border:1.5px solid #ccc;box-sizing:border-box; }
+  #nf-ficha .circulo-pagado { background:#3D8B5A;border-color:#3D8B5A; }
+  #nf-ficha .circulo-pendiente { background:#B5432F;border-color:#B5432F; }
+  #nf-ficha .circulo-sin_generar { background:#fff;border-color:#ccc; }
   #nf-ficha table.servicios th { text-align:left;padding:6px 8px;font-size:11px;color:#888;font-weight:500; }
   #nf-ficha table.servicios td { padding:8px;font-size:13px;vertical-align:middle; }
   #nf-ficha table.servicios tr.trow { border-top:.5px solid rgba(0,0,0,.06); }
+  #nf-ficha table.servicios tr.trow-click { cursor:pointer; }
+  #nf-ficha table.servicios tr.trow-click:hover { background:rgba(0,0,0,.025); }
   #nf-ficha .dot { width:10px;height:10px;border-radius:50%;display:inline-block;flex-shrink:0;border:1px solid rgba(0,0,0,.15);margin-right:6px;vertical-align:middle; }
   #nf-ficha .dia-pill { font-size:10.5px;font-weight:700;padding:2px 6px;border-radius:5px;background:#fff;color:#bbb;border:.5px solid rgba(0,0,0,.1);margin-right:3px;display:inline-block; }
   #nf-ficha .dia-pill.on { background:#E6F1FB;color:#0C447C;border-color:#B5D4F4; }
   #nf-ficha .empty-note { font-size:13px;color:#aaa;margin:0; }
+  #nf-ficha .dias-wrap { display:inline;margin-left:6px; }
 
   #nf-ficha .fecha-corta, #nf-ficha .dia-corta { display:none; }
   @media (max-width:640px) {
     #nf-ficha .fecha-full, #nf-ficha .dia-full { display:none; }
     #nf-ficha .fecha-corta, #nf-ficha .dia-corta { display:inline; }
+    /* Objetivos táctiles más grandes para dedos en pantallas pequeñas */
+    .icon-btn { padding:9px;min-width:38px;min-height:38px; }
+    .btn { padding:8px 12px;min-height:38px; }
+    /* Anchos + paddings recortados y validados contra el peor caso real medido en el propio
+       navegador: badge "Consulta", rango de fechas abreviado + las 2 píldoras de día en la
+       misma línea, importe a 3 cifras -- a 375px de viewport el margen es muy ajustado, así
+       que se recorta el padding de celdas/badges/píldoras para ganar sitio. */
+    #nf-ficha .col-servicio { width:24%; }
+    #nf-ficha .col-fechas { width:56%; }
+    #nf-ficha .col-importe { width:20%; }
+    #nf-ficha table.servicios td { padding:8px 4px; }
+    #nf-ficha .badge { padding:2px 6px; }
+    #nf-ficha .dia-pill { padding:2px 5px;margin-right:2px; }
+    #nf-ficha .dias-wrap { margin-left:4px; }
+    #nf-ficha .importe-mes { display:none; }
+    /* Columna de círculos de cobro mensual: solo en la vista web (escritorio), no en móvil. */
+    #nf-ficha .col-cobros { display:none; }
+  }
+  @media (max-width:480px) {
+    .btn-label { display:none; }
   }
 
   /* El modal vive fuera de #nf-ficha (hermano en el DOM), así que estas reglas van sin acotar */
@@ -111,6 +152,7 @@ $fechaCorta = function ($fecha) use ($mesesCortos) {
   .segmented { display:flex;gap:6px;background:rgba(0,0,0,.03);border-radius:8px;padding:3px;margin-bottom:12px; }
   .segmented button { flex:1;border:none;background:none;padding:7px;border-radius:6px;font-weight:600;font-size:13px;color:#888;cursor:pointer;font-family:inherit; }
   .segmented button.active { background:#fff;color:#0C447C;box-shadow:0 1px 2px rgba(0,0,0,.08); }
+  .segmented button:disabled { cursor:not-allowed;opacity:.55; }
   .day-row { display:flex;gap:8px;margin-bottom:10px; }
   .day-check { flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border:.5px solid rgba(0,0,0,.15);border-radius:6px;padding:7px;font-size:12.5px;cursor:pointer;color:#888;user-select:none; }
   .day-check.active { background:#E6F1FB;color:#0C447C;border-color:#B5D4F4; }
@@ -190,15 +232,16 @@ $fechaCorta = function ($fecha) use ($mesesCortos) {
     @else
     <table class="servicios">
       <thead><tr>
-        <th style="width:26%;">Servicio</th>
-        <th style="width:28%;">Fechas</th>
-        <th style="width:18%;">Días</th>
-        <th style="width:18%;text-align:right;">Importe</th>
-        <th style="width:10%;"></th>
+        <th class="col-servicio">Servicio</th>
+        <th class="col-fechas">Fechas</th>
+        <th class="col-cobros">Cobros</th>
+        <th class="col-importe" style="text-align:right;">Importe</th>
       </tr></thead>
       <tbody>
         @foreach($contratos as $c)
-        <tr class="trow">
+        <tr class="trow trow-click"
+            data-contrato="{{ json_encode(['nombre' => $c->nombre, 'id_tipo' => (int) $c->id_tipo, 'id_grupo' => $c->id_grupo, 'fecha_inicio' => $c->fecha_inicio, 'fecha_fin' => $c->fecha_fin, 'dia1' => (bool) $c->dia1, 'dia2' => (bool) $c->dia2, 'importe' => $c->importe, 'descripcion' => $c->descripcion, 'hidden' => (bool) $c->hidden]) }}"
+            onclick="abrirModalEditar({{ $c->id }}, this)">
           <td>
             @if(isset($colorGrupo[$c->nombre]))
               <span class="badge" style="background:{{ $colorGrupo[$c->nombre] }};color:#fff;">{{ $c->nombre }}</span>
@@ -210,32 +253,27 @@ $fechaCorta = function ($fecha) use ($mesesCortos) {
             @if((int) $c->id_tipo === 2)
               <span class="fecha-full">Desde {{ \Carbon\Carbon::parse($c->fecha_inicio)->format('d/m/Y') }} hasta {{ \Carbon\Carbon::parse($c->fecha_fin)->format('d/m/Y') }}</span>
               <span class="fecha-corta">{{ $fechaCorta($c->fecha_inicio) }}-{{ $fechaCorta($c->fecha_fin) }}</span>
+              <span class="dias-wrap">
+                <span class="dia-pill {{ $c->dia1 ? 'on' : '' }}"><span class="dia-full">Día 1</span><span class="dia-corta">1</span></span>
+                <span class="dia-pill {{ $c->dia2 ? 'on' : '' }}"><span class="dia-full">Día 2</span><span class="dia-corta">2</span></span>
+              </span>
             @else
               <span class="fecha-full">{{ \Carbon\Carbon::parse($c->fecha_inicio)->format('d/m/Y') }}</span>
               <span class="fecha-corta">{{ $fechaCorta($c->fecha_inicio) }}</span>
             @endif
           </td>
-          <td>
-            @if((int) $c->id_tipo === 2)
-              <span class="dia-pill {{ $c->dia1 ? 'on' : '' }}"><span class="dia-full">Día 1</span><span class="dia-corta">d1</span></span>
-              <span class="dia-pill {{ $c->dia2 ? 'on' : '' }}"><span class="dia-full">Día 2</span><span class="dia-corta">d2</span></span>
+          <td class="col-cobros">
+            @if(!empty($c->mesesCobro))
+              @php $tituloEstado = ['pagado' => 'Cobrado', 'pendiente' => 'Pendiente de cobro', 'sin_generar' => 'Pago no generado todavía']; @endphp
+              @foreach($c->mesesCobro as $estadoMes)
+                <span class="circulo circulo-{{ $estadoMes }}" title="{{ $tituloEstado[$estadoMes] }}"></span>
+              @endforeach
             @else
               <span style="color:#bbb;">—</span>
             @endif
           </td>
           <td style="text-align:right;font-weight:600;">
-            {{ number_format($c->importe, 2, ',', '.') }} €{{ (int) $c->id_tipo === 2 ? '/mes' : '' }}
-          </td>
-          <td style="text-align:right;white-space:nowrap;">
-            <button type="button" class="icon-btn" title="Editar"
-                    data-contrato="{{ json_encode(['id_tipo' => (int) $c->id_tipo, 'id_grupo' => $c->id_grupo, 'fecha_inicio' => $c->fecha_inicio, 'fecha_fin' => $c->fecha_fin, 'dia1' => (bool) $c->dia1, 'dia2' => (bool) $c->dia2, 'importe' => $c->importe, 'descripcion' => $c->descripcion]) }}"
-                    onclick="abrirModalEditar({{ $c->id }}, this)">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>
-            </button>
-            <button type="button" class="icon-btn" title="Borrar"
-                    onclick="confirmarBorrarContrato('{{ route('ficha.borrar', [$project->slug, 'contratos', $c->id]) }}', '{{ addslashes($c->nombre) }}')">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg>
-            </button>
+            {{ number_format($c->importe, 0, ',', '.') }} €<span class="importe-mes">{{ (int) $c->id_tipo === 2 ? '/mes' : '' }}</span>
           </td>
         </tr>
         @endforeach
@@ -291,13 +329,24 @@ $fechaCorta = function ($fecha) use ($mesesCortos) {
         <textarea name="descripcion" id="descripcion" rows="3" placeholder="Notas, observaciones..."></textarea>
       </div>
 
-      <div class="modal-footer">
-        <button type="button" class="btn btn-grey" onclick="closeModal()">Cancelar</button>
-        <button type="submit" class="btn btn-primary">Guardar</button>
+      <div class="modal-footer" style="justify-content:space-between;">
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="btn hide" id="btnBorrarContrato" style="color:#A32D2D;border-color:#F7C1C1;" onclick="borrarContratoDesdeModal()">Borrar</button>
+          <button type="button" class="btn btn-grey hide" id="btnOcultarContrato" onclick="ocultarContratoDesdeModal()">Ocultar</button>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="btn btn-grey" onclick="closeModal()">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
       </div>
     </form>
   </div>
 </div>
+
+<form method="POST" id="formOcultarContrato" style="display:none;">
+  @csrf
+  @method('PATCH')
+</form>
 
 {{-- Modal: confirmar borrado de cliente --}}
 <div class="modal-overlay" id="modalBorrarCliente">
@@ -331,6 +380,18 @@ $fechaCorta = function ($fecha) use ($mesesCortos) {
   </div>
 </div>
 
+{{-- Modal: confirmar ocultar/mostrar contrato --}}
+<div class="modal-overlay" id="modalOcultarContrato">
+  <div class="modal" style="width:360px;">
+    <p class="modal-title" id="tituloOcultarContrato">Ocultar contrato</p>
+    <p style="font-size:13.5px;color:#555;margin:0 0 .5rem;" id="textoOcultarContrato"></p>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-grey" onclick="closeModalOcultar()">Cancelar</button>
+      <button type="button" class="btn btn-primary" onclick="confirmarOcultarContrato()" id="btnConfirmarOcultar">Ocultar</button>
+    </div>
+  </div>
+</div>
+
 <script>
   function enterEdit() {
     document.getElementById('nf-ficha').classList.add('editing');
@@ -352,22 +413,40 @@ $fechaCorta = function ($fecha) use ($mesesCortos) {
 
   const urlContratoStore = @json(route('nf.clientes.contratos.store', [$project->slug, $cliente->id]));
   const urlContratoUpdate = @json(route('nf.contratos.update', [$project->slug, '__ID__']));
+  const urlContratoBorrar = @json($urlContratoBorrarTpl);
+  const urlContratoArchivar = @json($urlContratoArchivarTpl);
+  let contratoEditandoId = null;
+  let contratoEditandoNombre = '';
+  let contratoEditandoHidden = false;
 
   function openModal() {
+    contratoEditandoId = null;
     document.getElementById('modalContratoTitulo').textContent = 'Nuevo contrato';
     document.getElementById('formContrato').action = urlContratoStore;
     document.getElementById('metodoContrato').value = 'POST';
     document.getElementById('descripcion').value = '';
+    document.getElementById('btnBorrarContrato').classList.add('hide');
+    document.getElementById('btnOcultarContrato').classList.add('hide');
+    document.getElementById('tipoOsteo').disabled = false;
+    document.getElementById('tipoFitness').disabled = false;
     document.getElementById('modalContrato').classList.add('open');
     setTipo('osteo');
   }
 
-  function abrirModalEditar(id, btn) {
-    const c = JSON.parse(btn.dataset.contrato);
+  function abrirModalEditar(id, el) {
+    const c = JSON.parse(el.dataset.contrato);
+    contratoEditandoId = id;
+    contratoEditandoNombre = c.nombre || '';
+    contratoEditandoHidden = !!c.hidden;
 
     document.getElementById('modalContratoTitulo').textContent = 'Editar contrato';
     document.getElementById('formContrato').action = urlContratoUpdate.replace('__ID__', id);
     document.getElementById('metodoContrato').value = 'PUT';
+    document.getElementById('btnBorrarContrato').classList.remove('hide');
+    document.getElementById('btnOcultarContrato').classList.remove('hide');
+    document.getElementById('btnOcultarContrato').textContent = contratoEditandoHidden ? 'Mostrar' : 'Ocultar';
+    document.getElementById('tipoOsteo').disabled = true;
+    document.getElementById('tipoFitness').disabled = true;
     document.getElementById('modalContrato').classList.add('open');
 
     document.getElementById('dia1Toggle').classList.remove('active');
@@ -386,6 +465,34 @@ $fechaCorta = function ($fecha) use ($mesesCortos) {
     document.getElementById('importe').value = c.importe;
     document.getElementById('descripcion').value = c.descripcion || '';
   }
+
+  function borrarContratoDesdeModal() {
+    if (!contratoEditandoId) return;
+    closeModal();
+    confirmarBorrarContrato(urlContratoBorrar.replace('__ID__', contratoEditandoId), contratoEditandoNombre);
+  }
+
+  function ocultarContratoDesdeModal() {
+    if (!contratoEditandoId) return;
+    closeModal();
+    const accion = contratoEditandoHidden ? 'mostrar' : 'ocultar';
+    document.getElementById('tituloOcultarContrato').textContent = contratoEditandoHidden ? 'Mostrar contrato' : 'Ocultar contrato';
+    document.getElementById('textoOcultarContrato').innerHTML = contratoEditandoNombre
+      ? `¿Seguro que quieres ${accion} el contrato <strong>${contratoEditandoNombre}</strong>?`
+      : `¿Seguro que quieres ${accion} este contrato?`;
+    document.getElementById('btnConfirmarOcultar').textContent = contratoEditandoHidden ? 'Mostrar' : 'Ocultar';
+    document.getElementById('modalOcultarContrato').classList.add('open');
+  }
+
+  function confirmarOcultarContrato() {
+    const form = document.getElementById('formOcultarContrato');
+    form.action = urlContratoArchivar.replace('__ID__', contratoEditandoId);
+    form.submit();
+  }
+  function closeModalOcultar() { document.getElementById('modalOcultarContrato').classList.remove('open'); }
+  document.getElementById('modalOcultarContrato').addEventListener('click', function (e) {
+    if (e.target === this) closeModalOcultar();
+  });
 
   function closeModal() { document.getElementById('modalContrato').classList.remove('open'); }
   document.getElementById('modalContrato').addEventListener('click', function (e) {

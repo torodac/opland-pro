@@ -90,7 +90,10 @@ class TablaImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
         $systemCols   = ['deleted', 'hidden', 'blocked'];
         $allowedNames = array_merge(
             $this->projectTable->fields->pluck('name')->toArray(),
-            array_filter($systemCols, fn($c) => Schema::hasColumn($fullTable, $c))
+            array_filter($systemCols, fn($c) => Schema::hasColumn($fullTable, $c)),
+            // "id" no está registrado como TableField, pero si el Excel la trae debe poder
+            // usarse como campo clave para localizar el registro a actualizar.
+            Schema::hasColumn($fullTable, 'id') ? ['id'] : []
         );
         $fieldTypes   = $this->projectTable->fields->pluck('type', 'name')->toArray();
         $now          = now();

@@ -11,12 +11,14 @@ $estadoBadgeFor = fn ($estado) => match ($estado) {
     'Anulado'   => ['bg' => '#F1EFE8', 'fg' => '#5F5E5A'],
     default     => ['bg' => '#F1EFE8', 'fg' => '#5F5E5A'],
 };
+// Clicar el stat ya activo lo desactiva (pasa a 'todos', sin filtrar por estado) en vez de
+// dejarlo fijo -- así Pendiente/Cobrado funcionan como un interruptor, no como una selección obligatoria.
 $linkFor = fn ($estadoLink) => route('nf.pagos_list', array_filter([
     'project' => $project->slug,
     'mes' => $mes,
     'nombre' => $nombre,
     'grupo' => $grupo,
-    'estado' => $estadoLink,
+    'estado' => $estado === $estadoLink ? 'todos' : $estadoLink,
 ]));
 @endphp
 
@@ -36,11 +38,19 @@ $linkFor = fn ($estadoLink) => route('nf.pagos_list', array_filter([
 <div id="nf-pagos-list">
 
 <style>
-  #nf-pagos-list .btn { font-size:13px;padding:6px 12px;border-radius:6px;cursor:pointer;border:.5px solid rgba(0,0,0,.15);background:#fff;color:#1B1B18;display:inline-flex;align-items:center;gap:5px;line-height:1.2; }
-  #nf-pagos-list .btn-orange { background:#F97316;color:#fff;border-color:#F97316;font-weight:600; }
-  #nf-pagos-list .icon-btn { background:none;border:none;cursor:pointer;padding:5px;color:#888;display:inline-flex;align-items:center;border-radius:6px; }
-  #nf-pagos-list .icon-btn:hover { background:rgba(0,0,0,.06);color:#222; }
-  #nf-pagos-list .icon-btn.whatsapp:hover { background:#EAF3DE;color:#27500A; }
+  /* .btn/.icon-btn tambien se usan en el header de acciones (#actions -> <header>), que es
+     hermano de #nf-pagos-list en el DOM (vive dentro de <main>) -> sin acotar a #nf-pagos-list. */
+  .btn { font-size:13px;padding:6px 12px;border-radius:6px;cursor:pointer;border:.5px solid rgba(0,0,0,.15);background:#fff;color:#1B1B18;display:inline-flex;align-items:center;gap:5px;line-height:1.2; }
+  .btn-orange { background:#F97316;color:#fff;border-color:#F97316;font-weight:600; }
+  .icon-btn { background:none;border:none;cursor:pointer;padding:5px;color:#888;display:inline-flex;align-items:center;justify-content:center;border-radius:6px; }
+  .icon-btn:hover { background:rgba(0,0,0,.06);color:#222; }
+  .icon-btn.whatsapp, #nf-pagos-list .dropdown-item.whatsapp { color:#27500A; }
+  .icon-btn.whatsapp:hover { background:#EAF3DE; }
+  #nf-pagos-list .row-actions { display:inline-flex;align-items:center;gap:2px;position:relative; }
+  #nf-pagos-list .dropdown-menu { display:none;position:absolute;right:0;top:100%;margin-top:2px;background:#fff;border:.5px solid rgba(0,0,0,.1);border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.12);min-width:190px;z-index:20;overflow:hidden; }
+  #nf-pagos-list .dropdown-menu.open { display:block; }
+  #nf-pagos-list .dropdown-item { display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:13px;color:#333;text-decoration:none;white-space:nowrap; }
+  #nf-pagos-list .dropdown-item:hover { background:rgba(0,0,0,.04); }
 
   #nf-pagos-list .month-nav { display:flex;align-items:center;gap:14px;margin-bottom:14px; }
   #nf-pagos-list .month-nav a { display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;border:.5px solid rgba(0,0,0,.12);color:#555;background:#fff;text-decoration:none;flex-shrink:0; }
@@ -70,11 +80,27 @@ $linkFor = fn ($estadoLink) => route('nf.pagos_list', array_filter([
   #nf-pagos-list .badge { font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600;white-space:nowrap;display:inline-block; }
   #nf-pagos-list .empty-note { font-size:13px;color:#aaa;margin:0;padding:1.5rem 0;text-align:center; }
   #nf-pagos-list .table-scroll { overflow-x:auto; }
+  #nf-pagos-list .mobile-meta { display:none; }
 
   @media (max-width:640px) {
     #nf-pagos-list .month-label { font-size:15px;min-width:120px; }
     #nf-pagos-list .toolbar { flex-direction:column;align-items:stretch; }
     #nf-pagos-list .filter-form input[type="text"] { width:auto;flex:1; }
+    #nf-pagos-list .filter-form input[type="text"], #nf-pagos-list .filter-form select, #nf-pagos-list .filter-form .btn { min-height:38px;box-sizing:border-box; }
+    #nf-pagos-list .col-estado, #nf-pagos-list .col-fecha { display:none; }
+    #nf-pagos-list .mobile-meta { display:flex;flex-direction:column;gap:2px;margin-top:3px;font-size:11px;color:#888; }
+    .icon-btn { padding:6px;min-width:30px;min-height:30px; }
+    /* Con solo 4 columnas visibles, fijamos anchos en % para que sumen el 100% del contenedor
+       y truncamos con elipsis en vez de dejar que el contenido fuerce scroll horizontal. */
+    #nf-pagos-list table.pagos { table-layout:fixed; }
+    #nf-pagos-list table.pagos td, #nf-pagos-list table.pagos th { white-space:normal;padding:8px 4px; }
+    #nf-pagos-list table.pagos th:nth-child(1), #nf-pagos-list table.pagos td:nth-child(1) { width:34%; }
+    #nf-pagos-list table.pagos th:nth-child(2), #nf-pagos-list table.pagos td:nth-child(2) { width:22%; }
+    #nf-pagos-list table.pagos th:nth-child(3), #nf-pagos-list table.pagos td:nth-child(3) { width:18%; }
+    #nf-pagos-list table.pagos th:last-child, #nf-pagos-list table.pagos td:last-child { width:26%; }
+    #nf-pagos-list table.pagos td:nth-child(1), #nf-pagos-list table.pagos td:nth-child(2) { overflow:hidden;text-overflow:ellipsis; }
+    #nf-pagos-list .row-actions { flex-wrap:wrap;justify-content:flex-end;gap:1px; }
+    #nf-pagos-list .badge { font-size:10px;padding:2px 5px; }
   }
 </style>
 
@@ -113,7 +139,8 @@ $linkFor = fn ($estadoLink) => route('nf.pagos_list', array_filter([
 
 <div class="section-card">
     @if($pagos->isEmpty())
-        <p class="empty-note">No hay pagos {{ $estado === 'cobrado' ? 'cobrados' : 'pendientes' }} para {{ $mesLabel }} con los filtros aplicados.</p>
+        @php $etiquetaEstado = ['cobrado' => ' cobrados', 'pendiente' => ' pendientes', 'todos' => ''][$estado]; @endphp
+        <p class="empty-note">No hay pagos{{ $etiquetaEstado }} para {{ $mesLabel }} con los filtros aplicados.</p>
     @else
     <div class="table-scroll">
     <table class="pagos">
@@ -121,25 +148,32 @@ $linkFor = fn ($estadoLink) => route('nf.pagos_list', array_filter([
             <th>Cliente</th>
             <th>Servicio</th>
             <th style="text-align:right;">Importe</th>
-            <th>Estado</th>
-            <th>Fecha pago</th>
+            <th class="col-estado">Estado</th>
+            <th class="col-fecha">Fecha pago</th>
             <th></th>
         </tr></thead>
         <tbody>
             @foreach($pagos as $p)
             @php $badge = $badgeColorFor($p->contrato_nombre, $p->contrato_id_tipo); $estBadge = $estadoBadgeFor($p->estado_nombre); @endphp
-            <tr class="trow">
-                <td>{{ $p->cliente_nombre }}</td>
+            <tr class="trow" style="cursor:pointer;" onclick="window.location='{{ route('ficha', [$project->slug, 'pagos', $p->id]) }}'">
+                <td>
+                    {{ $p->cliente_nombre }}
+                    <div class="mobile-meta">
+                        <span class="badge" style="background:{{ $estBadge['bg'] }};color:{{ $estBadge['fg'] }};">{{ $p->estado_nombre ?? '—' }}</span>
+                        {{ \Carbon\Carbon::parse($p->fecha_pago)->format('d/m/Y') }}
+                    </div>
+                </td>
                 <td>
                     <span class="badge" style="background:{{ $badge['bg'] }};color:{{ $badge['fg'] }};">{{ $p->contrato_nombre ?? '—' }}</span>
                 </td>
                 <td style="text-align:right;font-weight:600;">{{ number_format($p->cantidad, 2, ',', '.') }} €</td>
-                <td>
+                <td class="col-estado">
                     <span class="badge" style="background:{{ $estBadge['bg'] }};color:{{ $estBadge['fg'] }};">{{ $p->estado_nombre ?? '—' }}</span>
                 </td>
-                <td>{{ \Carbon\Carbon::parse($p->fecha_pago)->format('d/m/Y') }}</td>
-                <td style="text-align:right;">
+                <td class="col-fecha">{{ \Carbon\Carbon::parse($p->fecha_pago)->format('d/m/Y') }}</td>
+                <td style="text-align:right;" onclick="event.stopPropagation()">
                     @if($p->estado_nombre === 'Pendiente')
+                        <div class="row-actions">
                         <form method="POST" action="{{ route('nf.pagos.pagar', [$project->slug, $p->id, 1]) }}" style="display:inline;">
                             @csrf
                             <button type="submit" class="icon-btn" title="Confirmar cobro en efectivo">
@@ -153,11 +187,18 @@ $linkFor = fn ($estadoLink) => route('nf.pagos_list', array_filter([
                             </button>
                         </form>
                         @if($p->cliente_telefono)
-                        <a href="https://wa.me/34{{ preg_replace('/\D/', '', $p->cliente_telefono) }}?text={{ rawurlencode('Hola, te escribo para recordarte que la cuota de este mes está pendiente. Abona tu cuota del 25 al 30 de cada mes. Quedo a la espera de que te pongas en contacto conmigo. Saludos') }}"
-                           target="_blank" class="icon-btn whatsapp" title="Recordatorio WhatsApp">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-1.746-.874-2.888-1.559-4.035-3.532-.305-.526.305-.489.874-1.628.096-.198.048-.371-.05-.52-.099-.148-.669-1.611-.916-2.208-.24-.579-.487-.5-.669-.51-.173-.008-.372-.01-.571-.01-.198 0-.52.075-.792.372-.272.298-1.04 1.017-1.04 2.479s1.065 2.876 1.213 3.074c.148.198 2.05 3.132 4.986 4.27 2.394.933 2.394.622 2.94.583.545-.04 1.758-.72 2.005-1.413.247-.694.247-1.29.173-1.412-.074-.124-.297-.198-.594-.347z"/><path d="M12 2C6.477 2 2 6.477 2 12c0 1.98.577 3.83 1.573 5.396L2.5 22l4.75-1.045A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18.2a8.19 8.19 0 01-4.176-1.145l-.3-.178-3.106.684.678-3.033-.196-.313A8.2 8.2 0 1120.2 12c0 4.53-3.67 8.2-8.2 8.2z"/></svg>
-                        </a>
+                        <button type="button" class="icon-btn" title="Más opciones" onclick="event.stopPropagation(); toggleRowMenu(this)">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>
+                        </button>
+                        <div class="dropdown-menu">
+                            <a href="https://wa.me/34{{ preg_replace('/\D/', '', $p->cliente_telefono) }}?text={{ rawurlencode('Hola, te escribo para recordarte que la cuota de este mes está pendiente. Abona tu cuota del 25 al 30 de cada mes. Quedo a la espera de que te pongas en contacto conmigo. Saludos') }}"
+                               target="_blank" class="dropdown-item whatsapp">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-1.746-.874-2.888-1.559-4.035-3.532-.305-.526.305-.489.874-1.628.096-.198.048-.371-.05-.52-.099-.148-.669-1.611-.916-2.208-.24-.579-.487-.5-.669-.51-.173-.008-.372-.01-.571-.01-.198 0-.52.075-.792.372-.272.298-1.04 1.017-1.04 2.479s1.065 2.876 1.213 3.074c.148.198 2.05 3.132 4.986 4.27 2.394.933 2.394.622 2.94.583.545-.04 1.758-.72 2.005-1.413.247-.694.247-1.29.173-1.412-.074-.124-.297-.198-.594-.347z"/><path d="M12 2C6.477 2 2 6.477 2 12c0 1.98.577 3.83 1.573 5.396L2.5 22l4.75-1.045A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18.2a8.19 8.19 0 01-4.176-1.145l-.3-.178-3.106.684.678-3.033-.196-.313A8.2 8.2 0 1120.2 12c0 4.53-3.67 8.2-8.2 8.2z"/></svg>
+                                Recordatorio WhatsApp
+                            </a>
+                        </div>
                         @endif
+                        </div>
                     @else
                         <span style="color:#bbb;font-size:12px;">{{ $p->forma_pago_nombre ?? '—' }}</span>
                     @endif
@@ -171,5 +212,19 @@ $linkFor = fn ($estadoLink) => route('nf.pagos_list', array_filter([
 </div>
 
 </div>
+
+<script>
+  function toggleRowMenu(btn) {
+    const menu = btn.nextElementSibling;
+    const wasOpen = menu.classList.contains('open');
+    document.querySelectorAll('#nf-pagos-list .dropdown-menu.open').forEach(el => el.classList.remove('open'));
+    if (!wasOpen) menu.classList.add('open');
+  }
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('#nf-pagos-list .row-actions')) {
+      document.querySelectorAll('#nf-pagos-list .dropdown-menu.open').forEach(el => el.classList.remove('open'));
+    }
+  });
+</script>
 
 </x-app-layout>

@@ -18,7 +18,7 @@ class NfDocumentoMail extends Mailable
     public function build()
     {
         $message = $this->mailer('nf')
-            ->from(env('MAIL_NF_FROM_ADDRESS', 'naturefitnes@gmail.com'), 'Nature Fitness')
+            ->from(env('MAIL_NF_FROM_ADDRESS', 'naturefitness@opland.es'), 'Nature Fitness')
             ->subject($this->details['title'])
             ->view('emails.nf.documento');
 

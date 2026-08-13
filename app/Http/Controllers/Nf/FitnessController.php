@@ -22,6 +22,7 @@ class FitnessController extends Controller
             ->leftJoin('nf_tipo as t', 't.id', '=', 'c.id_tipo')
             ->where('c.id_clientes', $id)
             ->where('c.deleted', false)
+            ->where(fn($q) => $q->whereNull('c.hidden')->orWhere('c.hidden', 0))
             ->orderByDesc('c.fecha_inicio')
             ->orderByDesc('c.id')
             ->select('c.*', 't.nombre as tipo_nombre')
@@ -30,11 +31,55 @@ class FitnessController extends Controller
         $hoy = now()->toDateString();
         $activo = $contratos->contains(fn($c) => $c->fecha_inicio <= $hoy && $c->fecha_fin >= $hoy);
 
+        // Desglose mensual de cobro (solo Fitness): un círculo por mes del contrato, verde si ese
+        // mes tiene un pago generado y cobrado (Pagada), rojo en cualquier otro caso (pendiente,
+        // anulado o sin pago generado todavía).
+        $pagosPorContrato = DB::table('nf_pagos')
+            ->whereIn('id_contratos', $contratos->pluck('id'))
+            ->where('deleted', false)
+            ->select('id_contratos', 'fecha_pago', 'id_estado_pagos')
+            ->get()
+            ->groupBy('id_contratos');
+        foreach ($contratos as $c) {
+            $c->mesesCobro = $this->mesesCobroFitness($c, $pagosPorContrato);
+        }
+
         $generos = DB::table('nf_genero')->orderBy('id')->get();
         $gruposFitness = DB::table('nf_grupo')->where('id_tipo', 2)->where('deleted', false)->orderBy('nombre')->get();
         $colorGrupo = $this->colorGrupo();
 
         return view('nf.cliente', compact('project', 'cliente', 'contratos', 'activo', 'generos', 'gruposFitness', 'colorGrupo'));
+    }
+
+    // Array de estados ('pagado'|'pendiente'|'sin_generar'), uno por cada mes natural entre
+    // fecha_inicio y fecha_fin del contrato. Solo aplica a Fitness (id_tipo=2); Osteopatía es
+    // una sesión suelta sin concepto de "meses" y devuelve un array vacío.
+    // 'sin_generar' (círculo hueco) = todavía no existe ningún pago para ese mes -- distinto de
+    // 'pendiente' (círculo rojo) = el pago existe pero no está cobrado.
+    private function mesesCobroFitness(object $contrato, \Illuminate\Support\Collection $pagosPorContrato): array
+    {
+        if ((int) $contrato->id_tipo !== 2) {
+            return [];
+        }
+
+        $pagos = $pagosPorContrato->get($contrato->id, collect());
+        $cursor = \Carbon\Carbon::parse($contrato->fecha_inicio)->startOfMonth();
+        $fin = \Carbon\Carbon::parse($contrato->fecha_fin)->startOfMonth();
+
+        $meses = [];
+        while ($cursor->lte($fin)) {
+            $mesActual = $cursor->format('Y-m');
+            $pago = $pagos->first(fn($p) => \Carbon\Carbon::parse($p->fecha_pago)->format('Y-m') === $mesActual);
+
+            $meses[] = match (true) {
+                !$pago => 'sin_generar',
+                (int) $pago->id_estado_pagos === 2 => 'pagado',
+                default => 'pendiente',
+            };
+            $cursor->addMonth();
+        }
+
+        return $meses;
     }
 
     // Colores de los badges de grupo/servicio, compartidos entre la ficha de cliente y pagos_form.
@@ -55,7 +100,9 @@ class FitnessController extends Controller
         $mes = $mes && preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $mes) ? $mes : now()->format('Y-m');
         $inicioMes = \Carbon\Carbon::createFromFormat('Y-m-d', $mes . '-01');
 
-        $estado = in_array($request->input('estado'), ['pendiente', 'cobrado'], true) ? $request->input('estado') : 'pendiente';
+        // 'todos' = ambos stats desactivados, sin filtrar por estado (clic de nuevo sobre el
+        // stat ya activo lo desactiva en vez de dejarlo fijo en pendiente/cobrado).
+        $estado = in_array($request->input('estado'), ['pendiente', 'cobrado', 'todos'], true) ? $request->input('estado') : 'pendiente';
         $nombre = $request->input('nombre');
         $grupo  = $request->input('grupo');
 
@@ -79,7 +126,7 @@ class FitnessController extends Controller
         $totalPagado    = (clone $base)->where('p.id_estado_pagos', 2)->sum('p.cantidad');
 
         $pagos = (clone $base)
-            ->where('p.id_estado_pagos', $estado === 'cobrado' ? 2 : 1)
+            ->when($estado !== 'todos', fn ($q) => $q->where('p.id_estado_pagos', $estado === 'cobrado' ? 2 : 1))
             ->leftJoin('nf_estado_pagos as e', 'e.id', '=', 'p.id_estado_pagos')
             ->leftJoin('nf_forma_pago as fp', 'fp.id', '=', 'p.id_forma_pago')
             ->orderBy('cli.nombre')

@@ -48,12 +48,24 @@
             <div class="px-4 py-3 border-b border-gray-100">
                 <h2 class="text-sm font-semibold text-gray-700">Primeras filas del archivo</h2>
             </div>
+            @if(!empty($unknownHeadings))
+            <div class="px-4 py-3 bg-amber-50 border-b border-amber-100 text-xs text-amber-700">
+                <strong>⚠ Columnas no reconocidas</strong> (no coinciden con ningún campo de {{ $projectTable->label }} y se ignorarán al importar):
+                <span class="font-mono">{{ implode(', ', $unknownHeadings) }}</span>
+            </div>
+            @endif
             <div class="overflow-x-auto">
                 <table class="w-full text-xs">
                     <thead class="bg-gray-50">
                         <tr>
                             @foreach($headings as $h)
-                                <th class="px-3 py-2 text-left font-medium text-gray-500">{{ $h }}</th>
+                                @php $esDesconocida = in_array($h, $unknownHeadings); @endphp
+                                <th class="px-3 py-2 text-left font-medium {{ $esDesconocida ? 'text-amber-600' : 'text-gray-500' }}">
+                                    {{ $h }}
+                                    @if($esDesconocida)
+                                        <span title="No coincide con ningún campo de la tabla; esta columna se ignorará">⚠</span>
+                                    @endif
+                                </th>
                             @endforeach
                         </tr>
                     </thead>
