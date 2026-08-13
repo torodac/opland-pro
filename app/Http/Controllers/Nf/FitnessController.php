@@ -92,6 +92,46 @@ class FitnessController extends Controller
         ];
     }
 
+    // Dashboard con navegador de ejercicio (temporada sept-agosto) y matriz de grupos x día de
+    // contrato (1/2), con el recuento de contratos Fitness de esa temporada (no borrados/ocultos).
+    // El "ejercicio" se identifica por su año de inicio: ejercicio=2025 -> 01/09/2025-31/08/2026.
+    public function dashboard(Project $project, ?string $ejercicio = null)
+    {
+        $anioActualEjercicio = now()->month >= 9 ? now()->year : now()->year - 1;
+        $anio = ($ejercicio && preg_match('/^\d{4}$/', $ejercicio)) ? (int) $ejercicio : $anioActualEjercicio;
+
+        $grupos = DB::table('nf_grupo')->where('id_tipo', 2)->where('deleted', false)->orderBy('nombre')->get();
+
+        $hoy = now()->toDateString();
+
+        $contratos = DB::table('nf_contratos')
+            ->where('id_tipo', 2)
+            ->where('deleted', false)
+            ->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))
+            ->where('fecha_inicio', '<=', $hoy)
+            ->where(fn($q) => $q->whereNull('fecha_fin')->orWhere('fecha_fin', '>=', $hoy))
+            ->select('id_grupo', 'dia1', 'dia2')
+            ->get();
+
+        $matriz = $grupos->map(fn($g) => [
+            'id' => $g->id,
+            'nombre' => $g->nombre,
+            'dia1' => $contratos->where('id_grupo', $g->id)->where('dia1', true)->count(),
+            'dia2' => $contratos->where('id_grupo', $g->id)->where('dia2', true)->count(),
+        ]);
+
+        return view('nf.dashboard', [
+            'project' => $project,
+            'anio' => $anio,
+            'ejercicioLabel' => "{$anio} - " . ($anio + 1),
+            'ejercicioAnterior' => $anio - 1,
+            'ejercicioSiguiente' => $anio + 1,
+            'matriz' => $matriz,
+            'totalContratos' => $contratos->count(),
+            'colorGrupo' => $this->colorGrupo(),
+        ]);
+    }
+
     // Pantalla "Pagos" con navegador de mes-año: lista los pagos de ese mes únicamente y permite
     // generar los pendientes desde ahí (réplica de fitness/pagos/{mes} del legacy opland-app,
     // adaptada a un mes en formato "YYYY-MM" en vez de "mYYYY").
@@ -125,11 +165,22 @@ class FitnessController extends Controller
         $totalPendiente = (clone $base)->where('p.id_estado_pagos', 1)->sum('p.cantidad');
         $totalPagado    = (clone $base)->where('p.id_estado_pagos', 2)->sum('p.cantidad');
 
+        // Ordenación por columna: mapa nombre público -> columna real (tras los joins de abajo).
+        $columnasOrdenables = [
+            'cliente'  => 'cli.nombre',
+            'servicio' => 'c.nombre',
+            'importe'  => 'p.cantidad',
+            'estado'   => 'e.nombre',
+            'fecha'    => 'p.fecha_pago',
+        ];
+        $sort = array_key_exists($request->input('sort'), $columnasOrdenables) ? $request->input('sort') : 'cliente';
+        $dir  = $request->input('dir', 'asc') === 'desc' ? 'desc' : 'asc';
+
         $pagos = (clone $base)
             ->when($estado !== 'todos', fn ($q) => $q->where('p.id_estado_pagos', $estado === 'cobrado' ? 2 : 1))
             ->leftJoin('nf_estado_pagos as e', 'e.id', '=', 'p.id_estado_pagos')
             ->leftJoin('nf_forma_pago as fp', 'fp.id', '=', 'p.id_forma_pago')
-            ->orderBy('cli.nombre')
+            ->orderBy($columnasOrdenables[$sort], $dir)
             ->select(
                 'p.*',
                 'cli.nombre as cliente_nombre',
@@ -155,6 +206,8 @@ class FitnessController extends Controller
             'estado' => $estado,
             'nombre' => $nombre,
             'grupo' => $grupo,
+            'sort' => $sort,
+            'dir' => $dir,
             'totalPendiente' => $totalPendiente,
             'totalPagado' => $totalPagado,
         ]);

@@ -65,7 +65,7 @@
             @endif
         </a>
 
-        @if(auth()->user()?->isProjectAdmin($project) || ($projectTable->name === 'fichaje' && $project->slug === 'vm'))
+        @if($canEdit || ($projectTable->name === 'fichaje' && $project->slug === 'vm'))
         <a href="{{ ($projectTable->name === 'fichaje' && $project->slug === 'vm') ? route('vm.fichaje_form.nuevo', $project->slug) : (($projectTable->name === 'facturas' && $project->slug === 'opland') ? route('opland.factura_form.nueva', $project->slug) : route('ficha.create', [$project->slug, $projectTable->name])) }}"
            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

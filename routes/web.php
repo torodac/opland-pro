@@ -169,7 +169,10 @@ Route::middleware('auth')->group(function () {
         Route::post('horario', [HorarioController::class, 'store'])->name('horario.store');
         Route::delete('horario', [HorarioController::class, 'destroy'])->name('horario.destroy');
 
-        Route::get('dashboard', [DashboardController::class, 'index'])->name('vm.dashboard');
+        // ->where('project','vm'): sin esto, esta ruta literal "dashboard" (sin parametros) coincide
+        // con CUALQUIER slug (p.ej. /nf/dashboard) antes que la ruta nf.dashboard registrada mas abajo,
+        // y EnsureVmProject devuelve 404 al no ser 'vm' (mismo patron de regresion que pyg/viviendas/propietarios).
+        Route::get('dashboard', [DashboardController::class, 'index'])->where('project', 'vm')->name('vm.dashboard');
         Route::post('dashboard/validar-conciliacion', [DashboardController::class, 'validarConciliacion'])->name('vm.dashboard.validar');
         Route::post('dashboard/validar-fichaje', [DashboardController::class, 'validarFichaje'])->name('vm.dashboard.validar-fichaje');
         Route::post('dashboard/validar-tarea',   [DashboardController::class, 'validarTarea'])->name('vm.dashboard.validar-tarea');
@@ -358,6 +361,7 @@ Route::middleware('auth')->group(function () {
             Route::post('documentos/{documento}/enviar', [\App\Http\Controllers\Nf\FitnessController::class, 'enviarDocumento'])->where(['project' => 'nf', 'documento' => '[0-9]+'])->name('nf.documentos.enviar');
             Route::post('pagos/generar', [\App\Http\Controllers\Nf\FitnessController::class, 'generarPagos'])->where('project', 'nf')->name('nf.pagos.generar');
             Route::get('pagos_list/{mes?}', [\App\Http\Controllers\Nf\FitnessController::class, 'pagosList'])->where(['project' => 'nf', 'mes' => '\d{4}-(0[1-9]|1[0-2])'])->name('nf.pagos_list');
+            Route::get('dashboard/{ejercicio?}', [\App\Http\Controllers\Nf\FitnessController::class, 'dashboard'])->where(['project' => 'nf', 'ejercicio' => '\d{4}'])->name('nf.dashboard');
         }); // fin nf.only
 
         Route::get('{table}', [ListadoController::class, 'index'])->name('listado');

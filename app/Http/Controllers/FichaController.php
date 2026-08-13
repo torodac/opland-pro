@@ -21,6 +21,31 @@ use App\Services\RoleHierarchy;
  */
 class FichaController extends Controller
 {
+    // Algunas tablas tienen una vista de ficha custom que sustituye a la genérica (ficha.blade.php).
+    // Mismo mapeo que ya usa listado.blade.php para los enlaces de fila; se replica aquí para que
+    // store()/update() redirijan tras guardar a esa misma vista custom en vez de a la genérica.
+    private function fichaRedirectUrl(Project $project, string $table, int $id): string
+    {
+        if ($table === 'fichaje' && $project->slug === 'vm') {
+            return route('vm.fichaje_form', [$project->slug, $id]);
+        }
+        if ($table === 'usuarios' && $project->slug === 'vm') {
+            return route('vm.usuario_form', [$project->slug, $id]);
+        }
+        if ($table === 'facturas' && $project->slug === 'opland') {
+            return route('opland.factura_form.show', [$project->slug, $id]);
+        }
+        if (in_array($table, ['tareas_limpieza', 'tareas_mantenimiento', 'tareas_piscinas']) && $project->slug === 'vm') {
+            $slugTarea = ['tareas_limpieza' => 'limpieza', 'tareas_mantenimiento' => 'mantenimiento', 'tareas_piscinas' => 'piscina'][$table];
+            return url("/vm/tareas_{$slugTarea}_form/{$id}");
+        }
+        if ($table === 'clientes' && $project->slug === 'nf') {
+            return route('nf.clientes_form', [$project->slug, $id]);
+        }
+
+        return route('ficha', [$project->slug, $table, $id]);
+    }
+
     private function abortIfNoRecordAccess(Project $project, string $fullTable, object $registro): void
     {
         if (!\Illuminate\Support\Facades\Schema::hasColumn($fullTable, 'control_user')) return;
@@ -306,7 +331,7 @@ class FichaController extends Controller
             return response()->json(['id' => $id]);
         }
 
-        return redirect()->route('ficha', [$project->slug, $table, $id]);
+        return redirect($this->fichaRedirectUrl($project, $table, $id));
     }
 
     public function update(Request $request, Project $project, string $table, int $id)
@@ -379,7 +404,7 @@ class FichaController extends Controller
         }
 
 
-        return redirect()->route('ficha', [$project->slug, $table, $id]);
+        return redirect($this->fichaRedirectUrl($project, $table, $id));
     }
 
     public function resetPassword(Project $project, string $table, int $id)
@@ -797,14 +822,21 @@ class FichaController extends Controller
             }
         }
 
-        // Campos file: guardar el archivo subido; si no se sube nada, no sobreescribir
+        // Campos file: guardar el archivo subido; si no se sube nada, no sobreescribir.
+        // store() devuelve string|false si falla al escribir en disco; si eso llegara a $data,
+        // el binding de PDO para una columna varchar lo guarda como el string "0", corrompiendo
+        // el valor existente en vez de dejarlo intacto (bug real detectado 2026-08-13).
         foreach ($projectTable->fields->where('type', 'file') as $field) {
             if ($request->hasFile($field->name)) {
                 $path = $request->file($field->name)->store(
                     $projectTable->project->slug . '/' . $projectTable->name,
                     'public'
                 );
-                $data[$field->name] = $path;
+                if (is_string($path) && $path !== '') {
+                    $data[$field->name] = $path;
+                } else {
+                    unset($data[$field->name]);
+                }
             } else {
                 unset($data[$field->name]);
             }

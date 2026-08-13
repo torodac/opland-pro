@@ -20,6 +20,16 @@ $linkFor = fn ($estadoLink) => route('nf.pagos_list', array_filter([
     'grupo' => $grupo,
     'estado' => $estado === $estadoLink ? 'todos' : $estadoLink,
 ]));
+// Cabeceras ordenables: clicar la misma columna alterna asc/desc; clicar otra empieza en asc.
+$sortLinkFor = fn ($columna) => route('nf.pagos_list', array_filter([
+    'project' => $project->slug,
+    'mes' => $mes,
+    'nombre' => $nombre,
+    'grupo' => $grupo,
+    'estado' => $estado,
+    'sort' => $columna,
+    'dir' => ($sort === $columna && $dir === 'asc') ? 'desc' : 'asc',
+]));
 @endphp
 
 <x-app-layout :breadcrumb="[['label'=>'Pagos','url'=>route('nf.pagos_list',[$project->slug])],['label'=>$mesLabel,'url'=>route('nf.pagos_list',[$project->slug,$mes])]]" :project="$project">
@@ -74,6 +84,8 @@ $linkFor = fn ($estadoLink) => route('nf.pagos_list', array_filter([
 
   #nf-pagos-list table.pagos { width:100%;border-collapse:collapse; }
   #nf-pagos-list table.pagos th { text-align:left;padding:10px 8px;font-size:11px;color:#888;font-weight:500;white-space:nowrap; }
+  #nf-pagos-list table.pagos th .th-sort { color:inherit;text-decoration:none;display:inline-block; }
+  #nf-pagos-list table.pagos th .th-sort:hover { color:#1B1B18; }
   #nf-pagos-list table.pagos td { padding:10px 8px;font-size:13px;vertical-align:middle;white-space:nowrap; }
   #nf-pagos-list table.pagos tr.trow { border-top:.5px solid rgba(0,0,0,.06); }
   #nf-pagos-list table.pagos tr.trow:hover { background:rgba(0,0,0,.015); }
@@ -144,12 +156,13 @@ $linkFor = fn ($estadoLink) => route('nf.pagos_list', array_filter([
     @else
     <div class="table-scroll">
     <table class="pagos">
+        @php $flecha = fn ($col) => $sort === $col ? ($dir === 'asc' ? ' ↑' : ' ↓') : ''; @endphp
         <thead><tr>
-            <th>Cliente</th>
-            <th>Servicio</th>
-            <th style="text-align:right;">Importe</th>
-            <th class="col-estado">Estado</th>
-            <th class="col-fecha">Fecha pago</th>
+            <th><a href="{{ $sortLinkFor('cliente') }}" class="th-sort">Cliente{{ $flecha('cliente') }}</a></th>
+            <th><a href="{{ $sortLinkFor('servicio') }}" class="th-sort">Servicio{{ $flecha('servicio') }}</a></th>
+            <th style="text-align:right;"><a href="{{ $sortLinkFor('importe') }}" class="th-sort">Importe{{ $flecha('importe') }}</a></th>
+            <th class="col-estado"><a href="{{ $sortLinkFor('estado') }}" class="th-sort">Estado{{ $flecha('estado') }}</a></th>
+            <th class="col-fecha"><a href="{{ $sortLinkFor('fecha') }}" class="th-sort">Fecha pago{{ $flecha('fecha') }}</a></th>
             <th></th>
         </tr></thead>
         <tbody>

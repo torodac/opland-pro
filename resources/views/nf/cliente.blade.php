@@ -1,6 +1,4 @@
 @php
-$initials = collect(explode(' ', $cliente->nombre))->take(2)->map(fn($w) => strtoupper($w[0] ?? ''))->implode('');
-
 $edad = $cliente->fecha_nacimiento ? \Carbon\Carbon::parse($cliente->fecha_nacimiento)->age : null;
 $generoNombre = $cliente->id_genero ? ($generos->firstWhere('id', $cliente->id_genero)?->nombre) : null;
 $subPartes = array_filter([
@@ -66,7 +64,15 @@ $urlContratoArchivarTpl = route('ficha.archive', [$project->slug, 'contratos', '
   .icon-btn:hover { background:rgba(0,0,0,.06);color:#222; }
 
   #nf-ficha .head { display:flex;align-items:flex-start;gap:12px;margin-bottom:1.2rem; }
-  #nf-ficha .avatar { width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:15px;flex-shrink:0; }
+  #nf-ficha .avatar-wrap { position:relative;width:96px;height:96px;flex-shrink:0; }
+  #nf-ficha .avatar-photo { width:96px;height:96px;border-radius:50%;object-fit:cover;display:block; }
+  #nf-ficha .avatar-icon { width:96px;height:96px;border-radius:50%;display:flex;align-items:center;justify-content:center; }
+  #nf-ficha .avatar-edit-btn { position:absolute;bottom:-4px;right:-4px;width:32px;height:32px;border-radius:50%;background:#fff;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#555;padding:0; }
+  #nf-ficha .avatar-edit-btn:hover { color:#1B1B18;background:#f5f5f4; }
+  /* iOS/Safari no abre el selector de fichero con .click() si el <input type="file"> (o un
+     ancestro) tiene display:none -- hay que mantenerlo "visible" para el navegador aunque sea
+     invisible para el usuario (bug real detectado 2026-08-13, probado en iPhone). */
+  #nf-ficha .visually-hidden { position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0; }
   #nf-ficha .name-row { display:flex;align-items:center;gap:8px;flex-wrap:wrap; }
   #nf-ficha .name { font-weight:600;font-size:17px;margin:0; }
   #nf-ficha .sub { font-size:12.5px;color:#888;margin:2px 0 0; }
@@ -162,7 +168,27 @@ $urlContratoArchivarTpl = route('ficha.archive', [$project->slug, 'contratos', '
 <div id="nf-ficha">
 
   <div class="head">
-    <div class="avatar" id="nfAvatar" style="background:{{ $activo ? '#EAF3DE' : '#FCEBEB' }};color:{{ $activo ? '#27500A' : '#A32D2D' }};">{{ $initials }}</div>
+    <div class="avatar-wrap">
+      @if($cliente->file_foto)
+        <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($cliente->file_foto) }}" class="avatar-photo" alt="Foto de {{ $cliente->nombre }}">
+      @else
+        <div class="avatar-icon" style="background:{{ $activo ? '#EAF3DE' : '#FCEBEB' }};color:{{ $activo ? '#27500A' : '#A32D2D' }};">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.7 0 4.9-2.2 4.9-4.9S14.7 2.2 12 2.2 7.1 4.4 7.1 7.1 9.3 12 12 12Zm0 2.4c-3.3 0-9.8 1.6-9.8 4.9v2.5h19.6v-2.5c0-3.3-6.5-4.9-9.8-4.9Z"/></svg>
+        </div>
+      @endif
+      {{-- Subida de foto deshabilitada temporalmente hasta aprobación del presupuesto de este
+           desarrollo por parte del cliente (2026-08-13). Para reactivar: quitar "style=display:none"
+           de este botón. --}}
+      <button type="button" class="avatar-edit-btn" onclick="document.getElementById('fotoInput').click()" title="Cambiar foto" style="display:none;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>
+      </button>
+    </div>
+    <form id="fotoForm" method="POST" action="{{ route('ficha.update', [$project->slug, 'clientes', $cliente->id]) }}" enctype="multipart/form-data" class="visually-hidden">
+      @csrf
+      @method('PUT')
+      <input type="hidden" name="nombre" value="{{ $cliente->nombre }}">
+      <input type="file" name="file_foto" id="fotoInput" accept="image/*" onchange="document.getElementById('fotoForm').submit()">
+    </form>
     <div style="min-width:0;">
       <div class="name-row">
         <p class="name">{{ $cliente->nombre }}</p>
