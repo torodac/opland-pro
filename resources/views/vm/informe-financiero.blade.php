@@ -92,7 +92,7 @@
     <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:16px;">
         <div style="padding:14px 18px;border-bottom:1px solid #f3f4f6;">
             <div id="chart-title" style="font-size:13.5px;font-weight:700;color:#111827;">Ingresos y gastos por mes — {{ $anioActual }} vs {{ $anioActual - 1 }}</div>
-            <div id="chart-hint" style="font-size:11px;color:#9ca3af;margin-top:1px;">vm_pyg.importe_ingresos / importe_gastos, agrupado por mes natural · eje = mes, no fecha continua · líneas = beneficio acumulado por ejercicio</div>
+            <div id="chart-hint" style="font-size:11px;color:#9ca3af;margin-top:1px;">Ingresos / gastos por código contable (7xx/6xx), agrupado por mes natural · eje = mes, no fecha continua · líneas = beneficio acumulado por ejercicio</div>
         </div>
 
         <div id="view-ejercicio">
@@ -164,11 +164,11 @@ function setModoGrafico(modo){
 
     if (esInter) {
         title.textContent = 'Ingresos y gastos — últimos 12 meses (interanual)';
-        hint.textContent  = 'vm_pyg.importe_ingresos / importe_gastos · ventana móvil: el último mes del eje es siempre el mes más reciente con datos · línea = beneficio acumulado de la ventana';
+        hint.textContent  = 'Ingresos / gastos por código contable (7xx/6xx) · ventana móvil: el último mes del eje es siempre el mes más reciente con datos · línea = beneficio acumulado de la ventana';
         if (window.resizeInformeFinancieroChart) window.resizeInformeFinancieroChart('chart-interanual');
     } else {
         title.textContent = 'Ingresos y gastos por mes — {{ $anioActual }} vs {{ $anioActual - 1 }}';
-        hint.textContent  = 'vm_pyg.importe_ingresos / importe_gastos, agrupado por mes natural · eje = mes, no fecha continua · líneas = beneficio acumulado por ejercicio';
+        hint.textContent  = 'Ingresos / gastos por código contable (7xx/6xx), agrupado por mes natural · eje = mes, no fecha continua · líneas = beneficio acumulado por ejercicio';
         if (window.resizeInformeFinancieroChart) window.resizeInformeFinancieroChart('chart-ejercicio');
     }
 

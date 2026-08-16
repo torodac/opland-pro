@@ -13,8 +13,7 @@ class InformeFinancieroController extends Controller
 
     public function index(Request $request, Project $project)
     {
-        $anios = DB::table('vm_pyg')
-            ->where('deleted', 0)
+        $anios = DB::table('vm_pyg_valores')
             ->selectRaw('DISTINCT EXTRACT(year FROM periodo)::int as anio')
             ->orderByDesc('anio')
             ->pluck('anio');
@@ -45,10 +44,10 @@ class InformeFinancieroController extends Controller
 
         $periodosEjercicio = $this->periodosParaGrafico($idsFiltro);
 
-        // La ventana interanual siempre se ancla al último período activo REAL (vm_pyg), no al último
-        // dato del subgrupo filtrado — si no, "Bajas" (que por definición no tiene el período más
-        // reciente) desplazaría la ventana hacia atrás en el tiempo, perdiendo el sentido de "ahora".
-        $ultimoPeriodoActivo = DB::table('vm_pyg')->where('deleted', 0)->max('periodo');
+        // La ventana interanual siempre se ancla al último período con datos REAL (vm_pyg_valores), no
+        // al último dato del subgrupo filtrado — si no, "Bajas" (que por definición no tiene el período
+        // más reciente) desplazaría la ventana hacia atrás en el tiempo, perdiendo el sentido de "ahora".
+        $ultimoPeriodoActivo = DB::table('vm_pyg_valores')->max('periodo');
 
         // La clasificación Constante/Alta/Baja también es dinámica en la vista interanual: se recalcula
         // sobre la propia ventana móvil de 12 meses (que puede pisar dos ejercicios), no sobre el
@@ -59,9 +58,9 @@ class InformeFinancieroController extends Controller
             $ventanaInteranual   = $this->ventanaInteranual($ultimoPeriodoActivo);
             $periodosVentana     = collect($ventanaInteranual)
                 ->map(fn($v) => sprintf('%04d-%02d-01', $v['anio'], $v['mes']));
-            $periodosActivosVentana = DB::table('vm_pyg')
-                ->where('deleted', 0)
+            $periodosActivosVentana = DB::table('vm_pyg_valores')
                 ->whereIn('periodo', $periodosVentana)
+                ->distinct()
                 ->orderBy('periodo')
                 ->pluck('periodo');
             $gruposInteranual = $this->clasificarPropiedadesEnPeriodos($periodosActivosVentana);
@@ -95,39 +94,55 @@ class InformeFinancieroController extends Controller
     // inventadas: epígrafe 1=ingresos, 4=aprovisionamientos, 6=personal, 7=otros gastos explotación,
     // 8=amortización, 11+12=otros resultados (bloque A: Resultado de explotación); 13+15+17=resultado
     // financiero (bloque B); 19=impuestos (bloque D: Resultado del ejercicio).
+    // Igual que resumenAnio(): usa importe_acumulado del ÚLTIMO período cargado del año (lo que trae el
+    // propio fichero), no la suma de importe (delta) mes a mes -- así el total de este puente ("Resultado
+    // del ejercicio") siempre coincide con el beneficio mostrado en los KPI de arriba.
     private function waterfallPyg(int $anio, ?array $idsPropiedades): array
     {
-        $q = DB::table('vm_pyg_valores as v')
-            ->join('vm_pyg_cuentas as c', 'c.id', '=', 'v.id_cuenta')
-            ->whereRaw('EXTRACT(year FROM v.periodo) = ?', [$anio])
-            ->whereIn('v.periodo', function ($sub) {
-                $sub->select('periodo')->from('vm_pyg')->where('deleted', 0);
-            });
+        $ultimoPeriodo = DB::table('vm_pyg_valores')
+            ->whereRaw('EXTRACT(year FROM periodo) = ?', [$anio])
+            ->max('periodo');
 
-        if ($idsPropiedades !== null) {
-            $q->whereIn('v.id_propiedades', $idsPropiedades);
+        if (!$ultimoPeriodo) {
+            $porEpigrafe = collect();
+        } else {
+            $q = DB::table('vm_pyg_valores as v')
+                ->join('vm_pyg_cuentas as c', 'c.id', '=', 'v.id_cuenta')
+                ->where('v.periodo', $ultimoPeriodo);
+
+            if ($idsPropiedades !== null) {
+                $q->whereIn('v.id_propiedades', $idsPropiedades);
+            }
+
+            $porEpigrafe = $q->selectRaw('c.epigrafe_codigo, SUM(v.importe_acumulado) as importe')
+                ->groupBy('c.epigrafe_codigo')
+                ->pluck('importe', 'epigrafe_codigo');
         }
 
-        $porEpigrafe = $q->selectRaw('c.epigrafe_codigo, SUM(v.importe) as importe')
-            ->groupBy('c.epigrafe_codigo')
-            ->pluck('importe', 'epigrafe_codigo');
-
         $valor = fn(string ...$codigos) => array_sum(array_map(fn($cod) => (float) ($porEpigrafe[$cod] ?? 0), $codigos));
+        $codigosConocidos = ['1', '2', '4', '6', '7', '8', '11', '12', '13', '15', '17', '19'];
 
         $ingresos     = $valor('1');
+        $variacionExis = $valor('2');
         $aprovisiona  = $valor('4');
         $personal     = $valor('6');
         $otrosGastos  = $valor('7');
         $amortizacion = $valor('8');
         $otrosResult  = $valor('11', '12');
-        $resultExplot = $ingresos + $aprovisiona + $personal + $otrosGastos + $amortizacion + $otrosResult;
+        $resultExplot = $ingresos + $variacionExis + $aprovisiona + $personal + $otrosGastos + $amortizacion + $otrosResult;
 
         $financiero      = $valor('13', '15', '17');
         $impuestos       = $valor('19');
         $resultEjercicio = $resultExplot + $financiero + $impuestos;
 
-        return [
-            ['label' => 'Ingresos',                   'valor' => round($ingresos, 2),     'tipo' => 'total'],
+        // Salvaguarda: si vm_pyg_cuentas trae algún epígrafe nuevo que no está en la lista de arriba
+        // (como pasó con el 2, "Variación de existencias", que faltaba y descuadraba este puente
+        // frente al beneficio de los KPI), se agrupa aquí en vez de desaparecer en silencio.
+        $sinClasificar = round($porEpigrafe->reject(fn($v, $cod) => in_array((string) $cod, $codigosConocidos, true))->sum(), 2);
+
+        $filas = [
+            ['label' => 'Ingresos',                   'valor' => round($ingresos, 2),      'tipo' => 'total'],
+            ['label' => 'Variación de existencias',   'valor' => round($variacionExis, 2), 'tipo' => 'delta'],
             ['label' => 'Aprovisionamientos',          'valor' => round($aprovisiona, 2),  'tipo' => 'delta'],
             ['label' => 'Gastos de personal',          'valor' => round($personal, 2),     'tipo' => 'delta'],
             ['label' => 'Otros gastos de explotación', 'valor' => round($otrosGastos, 2),  'tipo' => 'delta'],
@@ -136,18 +151,24 @@ class InformeFinancieroController extends Controller
             ['label' => 'Resultado de explotación',    'valor' => round($resultExplot, 2), 'tipo' => 'subtotal'],
             ['label' => 'Resultado financiero',        'valor' => round($financiero, 2),   'tipo' => 'delta'],
             ['label' => 'Impuestos',                   'valor' => round($impuestos, 2),    'tipo' => 'delta'],
-            ['label' => 'Resultado del ejercicio',      'valor' => round($resultEjercicio, 2), 'tipo' => 'final'],
         ];
+        if ($sinClasificar !== 0.0) {
+            $filas[] = ['label' => 'Otros epígrafes sin clasificar', 'valor' => $sinClasificar, 'tipo' => 'delta'];
+            $resultEjercicio += $sinClasificar;
+        }
+        $filas[] = ['label' => 'Resultado del ejercicio', 'valor' => round($resultEjercicio, 2), 'tipo' => 'final'];
+
+        return $filas;
     }
 
     // ───────────────────────── Filtro de propiedades: Todas / Constantes / Altas / Bajas ─────────────────────────
-    // Clasificación calculada sobre los períodos activos de vm_pyg (deleted=0) DENTRO del ejercicio
+    // Clasificación calculada sobre los períodos con datos en vm_pyg_valores DENTRO del ejercicio
     // seleccionado — dinámica por año, no una foto fija a fecha de hoy.
     private function clasificarPropiedades(int $anio): array
     {
-        $periodosActivos = DB::table('vm_pyg')
-            ->where('deleted', 0)
+        $periodosActivos = DB::table('vm_pyg_valores')
             ->whereRaw('EXTRACT(year FROM periodo) = ?', [$anio])
+            ->distinct()
             ->orderBy('periodo')
             ->pluck('periodo');
 
@@ -196,19 +217,24 @@ class InformeFinancieroController extends Controller
         ];
     }
 
-    // $idsPropiedades = null → "Todas" tal cual: totales de vm_pyg (incluye cecos).
-    // $idsPropiedades = [...] → solo esas propiedades, sumando vm_pyg_valores.importe (sin cecos).
+    // $idsPropiedades = null → "Todas": último período cargado del año (incluye cecos).
+    // $idsPropiedades = [...] → solo esas propiedades (sin cecos).
+    //
+    // Los KPI (ingresos/gastos/beneficio) se leen del importe_acumulado del ÚLTIMO período cargado del
+    // año, no de resumar el importe (delta) mes a mes -- importe_acumulado es el valor literal que trae
+    // el propio fichero para ese período (acumulado desde enero), así que esto es justo lo que se ve al
+    // abrir el Excel de ese mes. Sumar deltas puede divergir si el cliente reclasifica cuentas entre
+    // ficheros de meses distintos (visto realmente: mismo total neto, pero ingresos/gastos repartidos
+    // de otra forma entre epígrafes).
     private function resumenAnio(int $anio, ?array $idsPropiedades): array
     {
-        if ($idsPropiedades === null) {
-            $r = DB::table('vm_pyg')
-                ->where('deleted', 0)
-                ->whereRaw('EXTRACT(year FROM periodo) = ?', [$anio])
-                ->selectRaw('COALESCE(SUM(importe_ingresos),0) as ingresos, COALESCE(SUM(importe_gastos),0) as gastos')
-                ->first();
-        } else {
-            $r = $this->sumarValoresPropiedades($idsPropiedades, $anio, null);
-        }
+        $ultimoPeriodo = DB::table('vm_pyg_valores')
+            ->whereRaw('EXTRACT(year FROM periodo) = ?', [$anio])
+            ->max('periodo');
+
+        $r = $ultimoPeriodo
+            ? $this->sumarAcumulado($idsPropiedades, $ultimoPeriodo)
+            : (object) ['ingresos' => 0.0, 'gastos' => 0.0];
 
         return [
             'ingresos'  => (float) $r->ingresos,
@@ -218,56 +244,49 @@ class InformeFinancieroController extends Controller
         ];
     }
 
-    private function sumarValoresPropiedades(array $ids, int $anio, ?array $meses): object
+    // Ingresos/gastos "tal cual el fichero" de un período concreto: importe_acumulado (no importe),
+    // clasificado por el prefijo del código contable (7xx = ingresos, 6xx = gastos). $idsPropiedades =
+    // null → sin filtrar por propiedad (incluye también los cecos); [] → ningún resultado; [...] → solo
+    // esas propiedades.
+    private function sumarAcumulado(?array $idsPropiedades, string $periodo): object
     {
-        if (empty($ids)) return (object) ['ingresos' => 0.0, 'gastos' => 0.0];
+        if ($idsPropiedades !== null && empty($idsPropiedades)) {
+            return (object) ['ingresos' => 0.0, 'gastos' => 0.0];
+        }
 
         $q = DB::table('vm_pyg_valores as v')
             ->join('vm_pyg_cuentas as c', 'c.id', '=', 'v.id_cuenta')
-            ->whereIn('v.id_propiedades', $ids)
-            ->whereRaw('EXTRACT(year FROM v.periodo) = ?', [$anio])
-            // Solo períodos activos de vm_pyg — vm_pyg_valores puede tener filas huérfanas
-            // de períodos ya marcados deleted=1 (reimportaciones) que no deben sumar aquí.
-            ->whereIn('v.periodo', function ($sub) {
-                $sub->select('periodo')->from('vm_pyg')->where('deleted', 0);
-            });
+            ->where('v.periodo', $periodo);
 
-        if ($meses !== null) {
-            $q->whereRaw('EXTRACT(month FROM v.periodo) IN (' . implode(',', array_fill(0, count($meses), '?')) . ')', $meses);
+        if ($idsPropiedades !== null) {
+            $q->whereIn('v.id_propiedades', $idsPropiedades);
         }
 
         return $q->selectRaw("
-                COALESCE(SUM(v.importe) FILTER (WHERE c.codigo LIKE '7%'), 0) as ingresos,
-                COALESCE(SUM(v.importe) FILTER (WHERE c.codigo LIKE '6%'), 0) as gastos
+                COALESCE(SUM(v.importe_acumulado) FILTER (WHERE c.codigo LIKE '7%'), 0) as ingresos,
+                COALESCE(SUM(v.importe_acumulado) FILTER (WHERE c.codigo LIKE '6%'), 0) as gastos
             ")
             ->first();
     }
 
     private function mesesConDatos(int $anio): array
     {
-        return DB::table('vm_pyg')
-            ->where('deleted', 0)
+        return DB::table('vm_pyg_valores')
             ->whereRaw('EXTRACT(year FROM periodo) = ?', [$anio])
             ->selectRaw('DISTINCT EXTRACT(month FROM periodo)::int as mes')
             ->pluck('mes')
             ->all();
     }
 
-    // Agregado de un año restringido a un conjunto concreto de meses (para comparar año a año en igualdad de condiciones)
+    // Comparación año a año en igualdad de condiciones: acumulado del ÚLTIMO mes común entre ambos años
+    // (p.ej. si 2026 solo tiene hasta junio, compara acumulado-a-junio-2026 vs acumulado-a-junio-2025),
+    // no la suma de los meses comunes por separado -- mismo criterio que resumenAnio().
     private function resumenAnioMeses(int $anio, array $meses, ?array $idsPropiedades): array
     {
         if (empty($meses)) return ['ingresos' => 0.0, 'gastos' => 0.0, 'beneficio' => 0.0];
 
-        if ($idsPropiedades === null) {
-            $r = DB::table('vm_pyg')
-                ->where('deleted', 0)
-                ->whereRaw('EXTRACT(year FROM periodo) = ?', [$anio])
-                ->whereRaw('EXTRACT(month FROM periodo) IN (' . implode(',', array_fill(0, count($meses), '?')) . ')', $meses)
-                ->selectRaw('COALESCE(SUM(importe_ingresos),0) as ingresos, COALESCE(SUM(importe_gastos),0) as gastos')
-                ->first();
-        } else {
-            $r = $this->sumarValoresPropiedades($idsPropiedades, $anio, $meses);
-        }
+        $periodo = sprintf('%04d-%02d-01', $anio, max($meses));
+        $r = $this->sumarAcumulado($idsPropiedades, $periodo);
 
         return [
             'ingresos'  => (float) $r->ingresos,
@@ -282,31 +301,26 @@ class InformeFinancieroController extends Controller
         return round((($actual - $anterior) / abs($anterior)) * 100, 1);
     }
 
-    // $idsPropiedades = null → "Todas": vm_pyg tal cual (incluye cecos).
+    // $idsPropiedades = null → "Todas": vm_pyg_valores agrupado por periodo (incluye cecos).
     // $idsPropiedades = [...] → solo esas propiedades, vm_pyg_valores agrupado por periodo (sin cecos).
     // Un período sin ninguna fila para el grupo simplemente no aparece (no se rellena con 0).
     private function periodosParaGrafico(?array $idsPropiedades)
     {
-        if ($idsPropiedades === null) {
-            $rows = DB::table('vm_pyg')
-                ->where('deleted', 0)
-                ->orderBy('periodo')
-                ->get(['periodo', 'importe_ingresos as ingresos', 'importe_gastos as gastos', 'num_propiedades']);
-        } elseif (empty($idsPropiedades)) {
+        if ($idsPropiedades !== null && empty($idsPropiedades)) {
             $rows = collect();
         } else {
-            $rows = DB::table('vm_pyg_valores as v')
-                ->join('vm_pyg_cuentas as c', 'c.id', '=', 'v.id_cuenta')
-                ->whereIn('v.id_propiedades', $idsPropiedades)
-                ->whereIn('v.periodo', function ($sub) {
-                    $sub->select('periodo')->from('vm_pyg')->where('deleted', 0);
-                })
-                ->groupBy('v.periodo')
+            $q = DB::table('vm_pyg_valores as v')
+                ->join('vm_pyg_cuentas as c', 'c.id', '=', 'v.id_cuenta');
+            if ($idsPropiedades !== null) {
+                $q->whereIn('v.id_propiedades', $idsPropiedades);
+            }
+            $rows = $q->groupBy('v.periodo')
                 ->orderBy('v.periodo')
                 ->selectRaw("
                     v.periodo,
                     COALESCE(SUM(v.importe) FILTER (WHERE c.codigo LIKE '7%'), 0) as ingresos,
                     COALESCE(SUM(v.importe) FILTER (WHERE c.codigo LIKE '6%'), 0) as gastos,
+                    COALESCE(SUM(v.importe_acumulado), 0) as acumulado,
                     COUNT(DISTINCT v.id_propiedades) as num_propiedades
                 ")
                 ->get();
@@ -317,6 +331,11 @@ class InformeFinancieroController extends Controller
             'mes'         => (int) substr($r->periodo, 5, 2),
             'ingresos'    => (float) $r->ingresos,
             'gastos'      => (float) $r->gastos,
+            // Suma de importe_acumulado sin distinguir 7xx/6xx: cada cuenta ya trae su propio signo
+            // (ingresos positivos, gastos negativos), así que la suma total ya es el neto/beneficio
+            // acumulado tal cual lo reporta el fichero de ese período -- no una resta que podamos
+            // descuadrar nosotros mismos.
+            'acumulado'   => (float) $r->acumulado,
             'propiedades' => (int) $r->num_propiedades,
         ]);
     }
@@ -339,8 +358,8 @@ class InformeFinancieroController extends Controller
             ];
         }
 
-        $lineaActual   = $this->acumuladoHastaUltimoDato($actual);
-        $lineaAnterior = $this->acumuladoHastaUltimoDato($anterior);
+        $lineaActual   = $this->lineaAcumulado($actual);
+        $lineaAnterior = $this->lineaAcumulado($anterior);
 
         return $this->renderizarGrafico(
             categorias: self::MESES,
@@ -356,10 +375,11 @@ class InformeFinancieroController extends Controller
         );
     }
 
-    // Acumula ingresos+gastos mes a mes hasta el último mes con dato real; los meses intermedios sin
-    // dato suman 0 pero NO cortan la acumulación (un subgrupo de propiedades sí puede tener huecos,
-    // a diferencia de "Todas" donde nunca los había).
-    private function acumuladoHastaUltimoDato($mesesKeyed): array
+    // Línea de acumulado mes a mes hasta el último mes con dato real: usa el importe_acumulado que
+    // trae el propio fichero de cada mes (no una resuma de deltas), para que el punto final de la
+    // línea coincida siempre con el beneficio de los KPI de arriba. Un mes intermedio sin dato
+    // mantiene el último valor conocido (no corta la línea ni la hace bajar a 0).
+    private function lineaAcumulado($mesesKeyed): array
     {
         if ($mesesKeyed->isEmpty()) return [];
         $ultimoMes = max($mesesKeyed->keys()->all());
@@ -368,7 +388,7 @@ class InformeFinancieroController extends Controller
         $run = 0.0;
         foreach (range(1, $ultimoMes) as $m) {
             if ($mesesKeyed->has($m)) {
-                $run += $mesesKeyed[$m]->ingresos + $mesesKeyed[$m]->gastos;
+                $run = $mesesKeyed[$m]->acumulado;
             }
             $linea[$m - 1] = $run;
         }
@@ -422,7 +442,7 @@ class InformeFinancieroController extends Controller
             ];
 
             if ($actualP) {
-                $run += $actualP->ingresos + $actualP->gastos;
+                $run = $actualP->acumulado;
             }
             $lineaValores[$i] = $run; // aunque no haya dato ese mes, se marca el punto (sin cambio) para no romper la línea
         }
