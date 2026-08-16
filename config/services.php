@@ -41,4 +41,11 @@ return [
         'model'   => env('ANTHROPIC_MODEL', 'claude-opus-4-8'),
     ],
 
+    'powerbi' => [
+        'username'      => env('POWERBI_USERNAME'),
+        'password'      => env('POWERBI_PASSWORD'),
+        'client_id'     => env('POWERBI_CLIENT_ID'),
+        'client_secret' => env('POWERBI_CLIENT_SECRET'),
+    ],
+
 ];

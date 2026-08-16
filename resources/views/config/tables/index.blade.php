@@ -3,6 +3,14 @@
     ['label' => $project->name, 'url' => ''],
 ]">
 
+    <x-slot name="actions">
+        <a href="{{ route('config.projects.powerbi.index', $project) }}"
+           class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+            <i class="fa-solid fa-chart-column text-orange-400"></i>
+            Power BI
+        </a>
+    </x-slot>
+
     @if(session('success'))
         <div class="mb-4 px-4 py-3 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg">
             {{ session('success') }}

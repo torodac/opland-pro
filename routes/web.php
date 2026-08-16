@@ -102,6 +102,17 @@ Route::middleware('auth')->group(function () {
             Route::post('projects/{project}/import-excel/confirm', [ExcelController::class, 'createFromExcel'])
                 ->name('projects.import-excel.confirm');
 
+            // Power BI: informes embebidos por proyecto (antes del catch-all de Campos de abajo,
+            // que interpretaria "powerbi" como nombre de tabla).
+            Route::get('projects/{project}/powerbi', [App\Http\Controllers\Admin\PowerBiReportController::class, 'index'])
+                ->name('projects.powerbi.index');
+            Route::post('projects/{project}/powerbi', [App\Http\Controllers\Admin\PowerBiReportController::class, 'store'])
+                ->name('projects.powerbi.store');
+            Route::patch('projects/{project}/powerbi/{report}', [App\Http\Controllers\Admin\PowerBiReportController::class, 'update'])
+                ->name('projects.powerbi.update');
+            Route::delete('projects/{project}/powerbi/{report}', [App\Http\Controllers\Admin\PowerBiReportController::class, 'destroy'])
+                ->name('projects.powerbi.destroy');
+
             // Campos
             Route::get('projects/{project}/{table}',
                 [App\Http\Controllers\Admin\FieldController::class, 'index'])
@@ -363,6 +374,15 @@ Route::middleware('auth')->group(function () {
             Route::get('pagos_list/{mes?}', [\App\Http\Controllers\Nf\FitnessController::class, 'pagosList'])->where(['project' => 'nf', 'mes' => '\d{4}-(0[1-9]|1[0-2])'])->name('nf.pagos_list');
             Route::get('dashboard/{ejercicio?}', [\App\Http\Controllers\Nf\FitnessController::class, 'dashboard'])->where(['project' => 'nf', 'ejercicio' => '\d{4}'])->name('nf.dashboard');
         }); // fin nf.only
+
+        // Embed de Power BI: generico, disponible para cualquier proyecto con fila(s) en
+        // admin_pbi_reports (controller devuelve 404 si no la tiene). Segmento "powerbi_report"
+        // (no "powerbi" a secas) porque el proyecto opland ya tenia una tabla generica real
+        // llamada "powerbi" (CRM de solicitudes de info, admin_project_tables.id=124, nada que
+        // ver con esto) registrada en /opland/powerbi -- un nombre literal aqui la habria tapado.
+        // {informe} identifica CUAL informe del proyecto (slug de admin_pbi_reports), ya que un
+        // proyecto puede tener varios (p.ej. vm: operaciones/gerencia/gobernanta).
+        Route::get('powerbi_report/{informe}', [\App\Http\Controllers\PowerBiController::class, 'show'])->where('informe', '[a-z0-9_-]+')->name('powerbi');
 
         Route::get('{table}', [ListadoController::class, 'index'])->name('listado');
         Route::get('{table}/ids', [ListadoController::class, 'ids'])->name('listado.ids');
