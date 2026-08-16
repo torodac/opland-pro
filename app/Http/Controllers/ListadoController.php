@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Project;
 use App\Models\ProjectTable;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
@@ -133,7 +134,7 @@ class ListadoController extends Controller
             $ejercicioActualDefault = $this->ejercicioActualCuotas();
             $sumSuperficieViviendas = (float) DB::table('mb_viviendas')->where('deleted', 0)->sum(DB::raw('COALESCE(superf_calculada_cuota,0)'));
             $countViviendasActivas  = DB::table('mb_viviendas')->where('deleted', 0)->count();
-            $aDemandarTooltip       = $this->aDemandarPorAnio($ejercicioActualDefault);
+            $aDemandarTooltip       = $this->aDemandarPorAnio($ejercicioCuotasSel);
         }
 
         $nfClientesTelefono = null;
@@ -218,6 +219,133 @@ class ListadoController extends Controller
         return response()->json(['ids' => $ids, 'count' => $ids->count()]);
     }
 
+    // Informe PDF de cuotas (mb): importe pendiente según el último fichero importado, clasificación
+    // Opland (pendiente/incobrable/demandada), gráfico apilado por ejercicio y el listado "A demandar"
+    // (mismo agrupamiento que el tooltip del stat).
+    public function cuotasInformePdf(Request $request, Project $project)
+    {
+        abort_unless(Auth::user()?->canViewTable($project, 'cuotas'), 403);
+
+        $ejercicioActual = $this->ejercicioActualCuotas();
+        $sinInformativos = fn() => DB::table('mb_cuotas')->whereNotIn('tipo_cuota', self::TIPOS_CUOTA_INFORMATIVOS);
+
+        // 1) Importe pendiente según el fichero importado más reciente.
+        $ultimaExportacion = DB::table('mb_cuotas_exportaciones')->max('fecha_exportacion');
+        $ficherosUltima = $ultimaExportacion
+            ? DB::table('mb_cuotas_exportaciones')
+                ->where('fecha_exportacion', $ultimaExportacion)
+                ->whereNotNull('fichero_origen')
+                ->distinct()->pluck('fichero_origen')->values()
+            : collect();
+        $pendienteFichero = $ultimaExportacion
+            ? (float) DB::table('mb_cuotas_exportaciones')
+                ->where('fecha_exportacion', $ultimaExportacion)
+                ->whereNotIn('tipo_cuota', self::TIPOS_CUOTA_INFORMATIVOS)
+                ->sum('pendiente')
+            : 0.0;
+
+        // 2) Importe según clasificación Opland (estado actual de mb_cuotas).
+        $pendienteTotalOpland  = (float) $sinInformativos()->where('estado', '!=', 'Anulada')->where('pendiente', '>', 0)->sum('pendiente');
+        $incobrableOpland      = (float) $sinInformativos()->where('estado', 'Incobrable')->where('pendiente', '>', 0)->sum('pendiente');
+        $demandadaOpland       = (float) $sinInformativos()->where('estado', 'Demandada')->where('pendiente', '>', 0)->sum('pendiente');
+        $pendienteEstadoOpland = (float) $sinInformativos()->where('estado', 'Pendiente')->where('pendiente', '>', 0)->sum('pendiente');
+
+        // 3) Gráfico apilado por ejercicio: total pendiente + demandado.
+        $porEjercicio = $sinInformativos()
+            ->whereIn('estado', ['Pendiente', 'Demandada'])
+            ->where('pendiente', '>', 0)
+            ->groupBy('ejercicio', 'estado')
+            ->select('ejercicio', 'estado', DB::raw('SUM(pendiente) as total'))
+            ->get();
+
+        $grafico = [];
+        foreach ($porEjercicio as $row) {
+            $grafico[$row->ejercicio]['pendiente'] ??= 0.0;
+            $grafico[$row->ejercicio]['demandado'] ??= 0.0;
+            if ($row->estado === 'Pendiente') {
+                $grafico[$row->ejercicio]['pendiente'] = (float) $row->total;
+            } else {
+                $grafico[$row->ejercicio]['demandado'] = (float) $row->total;
+            }
+        }
+        ksort($grafico);
+
+        // El gráfico solo tiene ancho de página para ~12 columnas legibles -- si hay más ejercicios
+        // (mb_cuotas tiene histórico desde 2002), se agrupan los más antiguos en una única barra
+        // "Anteriores" para no cortar ni desbordar los ejercicios recientes, que son los relevantes.
+        $maxColumnas = 12;
+        if (count($grafico) > $maxColumnas) {
+            $claves = array_keys($grafico);
+            $antiguas = array_slice($claves, 0, count($claves) - $maxColumnas);
+            $recientes = array_slice($claves, -$maxColumnas);
+            $bucket = ['pendiente' => 0.0, 'demandado' => 0.0];
+            foreach ($antiguas as $k) {
+                $bucket['pendiente'] += $grafico[$k]['pendiente'];
+                $bucket['demandado'] += $grafico[$k]['demandado'];
+            }
+            $ultimaAntigua = end($antiguas);
+            $nuevoGrafico = ['Hasta ' . $ultimaAntigua => $bucket];
+            foreach ($recientes as $k) $nuevoGrafico[$k] = $grafico[$k];
+            $grafico = $nuevoGrafico;
+        }
+
+        // La escala del gráfico se calcula SIN el ejercicio en curso: ese ejercicio acumula toda su
+        // emisión anual recién generada (todavía no vencida), así que su "pendiente" es naturalmente
+        // enorme frente a la deuda ya vencida de años anteriores -- si entrara en el cálculo del
+        // máximo, dejaría el resto de barras en 0-1px. Su barra se dibuja igualmente, pero recortada
+        // (capada) a la altura máxima si se sale de escala; el valor real sigue mostrado en la etiqueta.
+        $maxBarra = 0.0;
+        foreach ($grafico as $ejercicio => $g) {
+            if ($ejercicio === $ejercicioActual) continue;
+            $maxBarra = max($maxBarra, $g['pendiente'] + $g['demandado']);
+        }
+        if ($maxBarra <= 0.0) {
+            foreach ($grafico as $g) $maxBarra = max($maxBarra, $g['pendiente'] + $g['demandado']);
+        }
+
+        $maxAlturaPx = 150;
+        $escala = fn($v) => $maxBarra > 0 ? min($maxAlturaPx, (int) round($v / $maxBarra * $maxAlturaPx)) : 0;
+        $graficoBarras = [];
+        foreach ($grafico as $ejercicio => $vals) {
+            $pendPx = $escala($vals['pendiente']);
+            $demPx  = min($maxAlturaPx - $pendPx, $escala($vals['demandado']));
+            $graficoBarras[] = [
+                'ejercicio'    => $ejercicio,
+                'pendiente'    => $vals['pendiente'],
+                'demandado'    => $vals['demandado'],
+                'pendiente_px' => $pendPx,
+                'demandado_px' => $demPx,
+                'fuera_escala' => ($vals['pendiente'] + $vals['demandado']) > $maxBarra,
+            ];
+        }
+
+        // 4) Listado "A demandar" (mismo agrupamiento que el tooltip del stat).
+        $aDemandarGrupos = $this->aDemandarGrupos($ejercicioActual);
+        $totalPerdidoADemandar = 0.0;
+        foreach ($aDemandarGrupos as $viviendas) {
+            foreach ($viviendas as $v) $totalPerdidoADemandar += $v['perdido'];
+        }
+
+        $pdf = Pdf::loadView('mb.cuotas-informe-pdf', [
+            'project'               => $project,
+            'fechaGeneracion'       => now(),
+            'ejercicioActual'       => $ejercicioActual,
+            'ultimaExportacion'     => $ultimaExportacion,
+            'ficherosUltima'        => $ficherosUltima,
+            'pendienteFichero'      => $pendienteFichero,
+            'pendienteTotalOpland'  => $pendienteTotalOpland,
+            'incobrableOpland'      => $incobrableOpland,
+            'demandadaOpland'       => $demandadaOpland,
+            'pendienteEstadoOpland' => $pendienteEstadoOpland,
+            'graficoBarras'         => $graficoBarras,
+            'maxAlturaPx'           => $maxAlturaPx,
+            'aDemandarGrupos'       => $aDemandarGrupos,
+            'totalPerdidoADemandar' => $totalPerdidoADemandar,
+        ])->setPaper('a4', 'portrait');
+
+        return $pdf->download('informe_cuotas_mb_' . now()->format('Y-m-d') . '.pdf');
+    }
+
     // Construye la query de listado con todos los filtros (stat, borrados/ocultos, búsqueda,
     // filtros por campo, control_user) y la ordenación aplicados, sin paginar.
     // Compartido entre index() (paginado) e ids() (todos los IDs, para "Copiar IDs").
@@ -269,7 +397,7 @@ class ListadoController extends Controller
                 'cobrado_anteriores' => $query->whereRaw('CAST(LEFT(ejercicio, 4) AS INTEGER) < ?', [$anioSel])->where('estado', 'Pagada')->whereBetween('fecha_pago', $rangoSel),
                 'pendiente_total'    => $query->where('estado', '!=', 'Anulada')->where('pendiente', '>', 0),
                 'demandado_total'    => $query->where('estado', 'Demandada'),
-                'a_demandar'         => $query->whereIn('id_viviendas', $this->viviendasProximasAPrescribir())->where('estado', 'Pendiente')->where('pendiente', '>', 0),
+                'a_demandar'         => $query->whereIn('id_viviendas', $this->viviendasProximasAPrescribir($ejercicioSel))->where('estado', 'Pendiente')->where('pendiente', '>', 0),
                 default              => null,
             };
         } else {
@@ -477,19 +605,20 @@ class ListadoController extends Controller
         return $anio . '-' . ($anio + 1);
     }
 
-    // Viviendas con alguna cuota pendiente (no demandada/anulada) cuya antigüedad desde fecha_emision
-    // cumple 5 años dentro del PRÓXIMO ejercicio -- último momento para reclamarla antes de prescribir.
-    private function viviendasProximasAPrescribir(): array
+    // Viviendas con alguna cuota Pendiente cuya fecha_emision es anterior al corte de 5 años desde
+    // el FIN del ejercicio dado (fin_ejercicio - 5 años) -- ya está o entra en plazo de prescribir
+    // dentro de ese ejercicio, hay que demandarla ya. Misma regla que
+    // Mb\CuotasImportController::demandasEjercicioActualDetalle() (duplicación aceptada).
+    private function viviendasProximasAPrescribir(string $ejercicioActual): array
     {
-        $anioActual = (int) substr($this->ejercicioActualCuotas(), 0, 4);
-        $nextStart  = ($anioActual + 1) . '-07-01';
-        $nextEnd    = ($anioActual + 2) . '-06-30';
+        [, $finActual] = $this->ejercicioRango($ejercicioActual);
+        $cutoff = \Carbon\Carbon::parse($finActual)->subYears(5)->toDateString();
 
         return DB::table('mb_cuotas')
             ->where('estado', 'Pendiente')
             ->where('pendiente', '>', 0)
             ->whereNotIn('tipo_cuota', self::TIPOS_CUOTA_INFORMATIVOS)
-            ->whereRaw("(fecha_emision + INTERVAL '5 years') BETWEEN ? AND ?", [$nextStart, $nextEnd])
+            ->where('fecha_emision', '<', $cutoff)
             ->distinct()
             ->pluck('id_viviendas')
             ->filter()
@@ -512,19 +641,28 @@ class ListadoController extends Controller
         return $anio . '-' . ($anio + 1);
     }
 
-    // Agrupa por "año de demanda" (ejercicio en que la cuota Pendiente más antigua de cada
-    // vivienda cumple 5 años de antigüedad) las viviendas con deuda pendiente, mostrando para
-    // cada una su deuda cobrable (fecha_emision dentro de los últimos 5 años desde el inicio
-    // del ejercicio actual) y, si la hay, la deuda ya perdida (prescrita, fuera de esos 5 años).
-    // Solo se incluyen años de demanda hasta el próximo ejercicio (pasados + actual + próximo).
-    private function aDemandarPorAnio(string $ejercicioActual): string
+    // Agrupa por "primer año de demanda" (ejercicio en que la cuota Pendiente más antigua de cada
+    // vivienda cumple 5 años de antigüedad -- p.ej. una cuota de octubre de 2015 cumple 5 años en
+    // octubre de 2020, que cae en el ejercicio "2020-21") las viviendas devueltas por
+    // viviendasProximasAPrescribir() para ESTE ejercicio, mostrando para cada una su deuda cobrable
+    // (fecha_emision dentro de los últimos 5 años desde el fin del ejercicio) y, si la hay, la deuda
+    // ya perdida (prescrita, fuera de esos 5 años).
+    // Viviendas próximas a demandar, agrupadas por "primer año de demanda" (ejercicio en el que la
+    // cuota pendiente más antigua de esa vivienda cumple 5 años). Compartido entre el tooltip de
+    // texto (aDemandarPorAnio) y el listado del informe PDF (cuotasInformePdf).
+    private function aDemandarGrupos(string $ejercicioActual): array
     {
-        $anioActual        = (int) substr($ejercicioActual, 0, 4);
-        [$inicioActual]    = $this->ejercicioRango($ejercicioActual);
-        $cutoff            = \Carbon\Carbon::parse($inicioActual)->subYears(5)->toDateString();
+        $viviendasIds = $this->viviendasProximasAPrescribir($ejercicioActual);
+        if (empty($viviendasIds)) {
+            return [];
+        }
+
+        [, $finActual] = $this->ejercicioRango($ejercicioActual);
+        $cutoff = \Carbon\Carbon::parse($finActual)->subYears(5)->toDateString();
 
         $rows = DB::table('mb_cuotas as c')
             ->join('mb_viviendas as v', 'v.id', '=', 'c.id_viviendas')
+            ->whereIn('c.id_viviendas', $viviendasIds)
             ->where('c.estado', 'Pendiente')
             ->where('c.pendiente', '>', 0)
             ->whereNotIn('c.tipo_cuota', self::TIPOS_CUOTA_INFORMATIVOS)
@@ -536,11 +674,9 @@ class ListadoController extends Controller
             $nombre = $cuotas->first()->nombre;
             $oldest = $cuotas->min('fecha_emision');
 
+            // Primer año de demanda de esta vivienda: ejercicio en el que su cuota pendiente más
+            // antigua (no necesariamente la que dispara la inclusión) cumple 5 años.
             $ejercicioDemanda = $this->ejercicioDeFecha(\Carbon\Carbon::parse($oldest)->addYears(5));
-            $anioDemanda      = (int) substr($ejercicioDemanda, 0, 4);
-            if ($anioDemanda > $anioActual + 1) {
-                continue; // aún no urgente
-            }
 
             $recuperable = (float) $cuotas->filter(fn ($c) => $c->fecha_emision >= $cutoff)->sum('pendiente');
             $perdido     = (float) $cuotas->filter(fn ($c) => $c->fecha_emision < $cutoff)->sum('pendiente');
@@ -548,26 +684,36 @@ class ListadoController extends Controller
             $grupos[$ejercicioDemanda][] = ['nombre' => $nombre, 'recuperable' => $recuperable, 'perdido' => $perdido];
         }
 
+        ksort($grupos);
+        foreach ($grupos as &$viviendas) {
+            usort($viviendas, fn ($a, $b) => strcmp($a['nombre'], $b['nombre']));
+        }
+        unset($viviendas);
+
+        return $grupos;
+    }
+
+    private function aDemandarPorAnio(string $ejercicioActual): string
+    {
+        $grupos = $this->aDemandarGrupos($ejercicioActual);
         if (empty($grupos)) {
             return 'No hay viviendas próximas a demandar.';
         }
 
-        ksort($grupos);
-
-        $lineas = [];
+        $bloques = [];
         foreach ($grupos as $ejercicio => $viviendas) {
-            usort($viviendas, fn ($a, $b) => strcmp($a['nombre'], $b['nombre']));
-            $partes = array_map(function ($v) {
+            $lineas = [$ejercicio . ':'];
+            foreach ($viviendas as $v) {
                 $txt = number_format($v['recuperable'], 2, ',', '.') . '€';
                 if ($v['perdido'] > 0) {
                     $txt .= ', perdido: ' . number_format($v['perdido'], 2, ',', '.') . '€';
                 }
-                return $v['nombre'] . ' (' . $txt . ')';
-            }, $viviendas);
-            $lineas[] = $ejercicio . ': ' . implode(', ', $partes);
+                $lineas[] = '  ' . $v['nombre'] . ' (' . $txt . ')';
+            }
+            $bloques[] = implode("\n", $lineas);
         }
 
-        return implode("\n", $lineas);
+        return implode("\n\n", $bloques);
     }
 
     private function cuotasStats(string $ejercicioActual): array
@@ -583,7 +729,7 @@ class ListadoController extends Controller
 
         $demandadoSum = (float) $sinInformativos()->where('estado', 'Demandada')->sum('pendiente');
 
-        $viviendasIds   = $this->viviendasProximasAPrescribir();
+        $viviendasIds   = $this->viviendasProximasAPrescribir($ejercicioActual);
         $aDemandarBase  = fn() => $sinInformativos()->whereIn('id_viviendas', $viviendasIds)->where('estado', 'Pendiente')->where('pendiente', '>', 0);
         $aDemandarSum   = (float) $aDemandarBase()->sum('pendiente');
 

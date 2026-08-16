@@ -332,6 +332,7 @@ Route::middleware('auth')->group(function () {
             Route::get('propietarios', [\App\Http\Controllers\Mb\PropietariosController::class, 'index'])->where('project', 'mb')->name('mb.propietarios');
 
             Route::post('cuotas/generar', [\App\Http\Controllers\Mb\GenerarCuotasController::class, 'store'])->where('project', 'mb')->name('mb.cuotas.generar');
+            Route::get('cuotas/informe', [ListadoController::class, 'cuotasInformePdf'])->where('project', 'mb')->name('mb.cuotas.informe');
 
             Route::post('viviendas/{vivienda}/entregas-cuenta', [\App\Http\Controllers\Mb\EntregasCuentaController::class, 'store'])->where(['project' => 'mb', 'vivienda' => '[0-9]+'])->name('mb.entregas-cuenta.store');
             Route::post('entregas-cuenta/{entrega}/aplicar', [\App\Http\Controllers\Mb\EntregasCuentaController::class, 'aplicar'])->where(['project' => 'mb', 'entrega' => '[0-9]+'])->name('mb.entregas-cuenta.aplicar');

@@ -48,20 +48,145 @@ class CuotasImportController extends Controller
     private const TIPOS_SELECCIONABLES = ['C-I', 'C-II', 'C-I_Derrama', 'G.dev.', 'Dudoso', 'Entrega a cuenta'];
     private const FECHA_CORTE_RUIDO_HISTORICO = '2010-01-01'; // por debajo de esto, solo se procesa si reconcilia con mb_cuotas real
     private const ESTADOS_PROTEGIDOS = ['Demandada', 'Incobrable', 'Anulada'];
+    private const TIPOS_CUOTA_INFORMATIVOS = ['G.dev.', 'Dudoso', 'Entrega a cuenta'];
 
     public function index(Project $project)
     {
         $ultimasCargas = DB::table('mb_cuotas')->selectRaw('COUNT(*) as n, MAX(updatedat) as ultima')->first();
+        $demandasDetalle = $this->demandasEjercicioActualDetalle();
 
         return view('mb.cuotas-import', [
             'project'      => $project,
             'totalProvisional' => $ultimasCargas->n ?? 0,
             'ultimaCarga'  => $ultimasCargas->ultima ?? null,
+            'demandasEjercicioActual' => $demandasDetalle->count(),
+            'demandasEjercicioActualDetalle' => $demandasDetalle,
             'breadcrumb'   => [
                 ['label' => 'Cuotas', 'url' => route('listado', [$project->slug, 'cuotas'])],
                 ['label' => 'Carga de recibos', 'url' => ''],
             ],
         ]);
+    }
+
+    // Ejercicio actual de cuotas (formato "YYYY-YYYY", julio a junio) -- misma regla que
+    // ListadoController/ViviendasController/EntregasCuentaController (duplicación aceptada).
+    private function ejercicioActualCuotas(): string
+    {
+        $hoy  = now();
+        $anio = (int) $hoy->format('n') >= 7 ? (int) $hoy->format('Y') : (int) $hoy->format('Y') - 1;
+        return $anio . '-' . ($anio + 1);
+    }
+
+    private function ejercicioRango(string $ejercicio): array
+    {
+        [$y1, $y2] = explode('-', $ejercicio);
+        return [$y1 . '-07-01', $y2 . '-06-30'];
+    }
+
+    // Viviendas con alguna cuota Pendiente cuya fecha_emision es anterior al corte de 5 años desde
+    // el FIN del ejercicio en curso (fin_ejercicio - 5 años) -- es decir, ya está o entra en plazo
+    // de prescribir dentro de este ejercicio, hay que demandarla ya. El importe mostrado es TODO lo
+    // pendiente de esa vivienda (no solo la parte que cruza el corte).
+    //
+    // Si se pasa $simulado (el resultado de calcularResultado() sobre un fichero aún no confirmado),
+    // se superpone sobre el estado real de mb_cuotas antes de aplicar el filtro/agrupación -- así el
+    // listado que se ve durante la evaluación (antes de confirmar) refleja lo que el fichero va a
+    // dejar, no solo el estado actual de Opland (p.ej. si el fichero trae el cobro de una de estas
+    // cuotas, esa vivienda deja de aparecer o reduce su importe pendiente en la vista previa).
+    private function demandasEjercicioActualDetalle(array $simulado = []): \Illuminate\Support\Collection
+    {
+        [, $finActual] = $this->ejercicioRango($this->ejercicioActualCuotas());
+        $cutoff = \Illuminate\Support\Carbon::parse($finActual)->subYears(5)->toDateString();
+
+        $filtroBase = fn ($q, $alias) => $q
+            ->where("{$alias}.estado", 'Pendiente')
+            ->where("{$alias}.pendiente", '>', 0)
+            ->whereNotIn("{$alias}.tipo_cuota", self::TIPOS_CUOTA_INFORMATIVOS);
+
+        if (empty($simulado)) {
+            return $filtroBase(DB::table('mb_cuotas as c'), 'c')
+                ->join('mb_viviendas as v', 'v.id', '=', 'c.id_viviendas')
+                ->where('v.deleted', 0)
+                ->whereIn('c.id_viviendas', function ($q) use ($cutoff, $filtroBase) {
+                    $filtroBase($q->select('c2.id_viviendas')->from('mb_cuotas as c2'), 'c2')
+                        ->join('mb_viviendas as v2', 'v2.id', '=', 'c2.id_viviendas')
+                        ->where('v2.deleted', 0)
+                        ->where('c2.fecha_emision', '<', $cutoff);
+                })
+                ->groupBy('v.id', 'v.nombre')
+                ->orderBy('v.nombre')
+                ->get(['v.nombre', DB::raw('SUM(c.pendiente) as pendiente')]);
+        }
+
+        // Con simulación: trae las cuotas ya pendientes en BD más todas las de las viviendas tocadas
+        // por el fichero (para poder detectar tanto las que dejan de estar pendientes como las que
+        // pasan a estarlo), superpone encima el resultado simulado y repite en PHP la misma lógica
+        // de filtro/agrupación/corte que la consulta SQL de arriba.
+        $idViviendasSimulado = collect($simulado)->pluck('id_viviendas')->unique()->values()->all();
+
+        $cuotas = DB::table('mb_cuotas as c')
+            ->join('mb_viviendas as v', 'v.id', '=', 'c.id_viviendas')
+            ->where('v.deleted', 0)
+            ->where(function ($q) use ($idViviendasSimulado) {
+                $q->where(function ($q2) {
+                    $q2->where('c.estado', 'Pendiente')
+                        ->where('c.pendiente', '>', 0)
+                        ->whereNotIn('c.tipo_cuota', self::TIPOS_CUOTA_INFORMATIVOS);
+                });
+                if (!empty($idViviendasSimulado)) $q->orWhereIn('c.id_viviendas', $idViviendasSimulado);
+            })
+            ->get(['c.id_viviendas', 'v.nombre', 'c.concepto', 'c.fecha_emision', 'c.tipo_cuota', 'c.estado', 'c.pendiente']);
+
+        $porClave = $cuotas->keyBy(fn($c) => $c->id_viviendas . '|' . $this->normalize($c->concepto) . '|' . $c->fecha_emision);
+
+        $nombresPorVivienda = $cuotas->pluck('nombre', 'id_viviendas');
+        $viviendasFaltantes = collect($idViviendasSimulado)->diff($nombresPorVivienda->keys())->values();
+        if ($viviendasFaltantes->isNotEmpty()) {
+            DB::table('mb_viviendas')->whereIn('id', $viviendasFaltantes)->pluck('nombre', 'id')
+                ->each(function ($nombre, $id) use (&$nombresPorVivienda) { $nombresPorVivienda[$id] = $nombre; });
+        }
+
+        foreach ($simulado as $key => $sim) {
+            if (isset($porClave[$key])) {
+                $c = $porClave[$key];
+                $c->estado = $sim['estado'];
+                $c->pendiente = $sim['pendiente'];
+                $c->tipo_cuota = $sim['tipo_cuota'];
+            } else {
+                $porClave[$key] = (object) [
+                    'id_viviendas'  => $sim['id_viviendas'],
+                    'nombre'        => $nombresPorVivienda[$sim['id_viviendas']] ?? null,
+                    'concepto'      => $sim['concepto'],
+                    'fecha_emision' => $sim['fecha_emision'],
+                    'tipo_cuota'    => $sim['tipo_cuota'],
+                    'estado'        => $sim['estado'],
+                    'pendiente'     => $sim['pendiente'],
+                ];
+            }
+        }
+
+        $filtroPhp = fn ($c) => trim((string) $c->estado) === 'Pendiente'
+            && (float) $c->pendiente > 0
+            && !in_array($c->tipo_cuota, self::TIPOS_CUOTA_INFORMATIVOS, true);
+
+        $pendientes = $porClave->filter($filtroPhp);
+        $idViviendasIncluir = $pendientes->filter(fn($c) => $c->fecha_emision < $cutoff)
+            ->pluck('id_viviendas')->unique();
+
+        return $pendientes
+            ->whereIn('id_viviendas', $idViviendasIncluir)
+            ->groupBy('id_viviendas')
+            ->map(fn($grupo) => (object) [
+                'nombre'    => $grupo->first()->nombre,
+                'pendiente' => round($grupo->sum('pendiente'), 2),
+            ])
+            ->sortBy('nombre')
+            ->values();
+    }
+
+    private function demandasEjercicioActual(): int
+    {
+        return $this->demandasEjercicioActualDetalle()->count();
     }
 
     // Paso 1: recibe el fichero (o continúa uno ya subido vía tmp_id tras resolver el mapeo) y
@@ -98,11 +223,15 @@ class CuotasImportController extends Controller
 
         $resultado = $this->calcularResultado($clavesTocadas, $snapshotsNuevos, $fechaExportacion, $now, escribir: false);
         $cambiosPropietario = $this->resolverPropietarios($ultimoPorVivienda, $fechaExportacion, $now, escribir: false);
+        $demandasDetalle = $this->demandasEjercicioActualDetalle($resultado['simulado']);
+        unset($resultado['simulado']); // solo interno, no hace falta mandarlo al frontend
 
         return response()->json(array_merge(['ok' => true, 'tmp_id' => $tmpId], $resultado, [
-            'sin_vivienda'             => array_keys($sinVivienda),
-            'omitidas_ruido_historico' => $omitidasRuido,
-            'cambios_propietario'      => $cambiosPropietario,
+            'sin_vivienda'                     => array_keys($sinVivienda),
+            'omitidas_ruido_historico'         => $omitidasRuido,
+            'cambios_propietario'              => $cambiosPropietario,
+            'demandas_ejercicio_actual'        => $demandasDetalle->count(),
+            'demandas_ejercicio_actual_detalle'=> $demandasDetalle->values(),
         ]));
         // OJO: no se borra el fichero temporal aquí -- se necesita para confirmar() o cancelar().
     }
@@ -153,6 +282,12 @@ class CuotasImportController extends Controller
         });
 
         Storage::disk('local')->delete(["cuotas_tmp/{$tmpId}.xls", "cuotas_tmp/{$tmpId}.name"]);
+
+        // Se recalcula fuera de la transaccion, ya con los estados de mb_cuotas actualizados.
+        $demandasDetalle = $this->demandasEjercicioActualDetalle();
+        $resultado['demandas_ejercicio_actual'] = $demandasDetalle->count();
+        $resultado['demandas_ejercicio_actual_detalle'] = $demandasDetalle->values();
+        unset($resultado['simulado']); // solo interno, no hace falta mandarlo al frontend
 
         return response()->json(array_merge(['ok' => true], $resultado));
     }
@@ -359,6 +494,10 @@ class CuotasImportController extends Controller
                 'nuevas' => 0, 'pendiente_a_pagada' => 0, 'pagada_a_pendiente' => 0,
                 'actualizadas_otros_datos' => 0, 'sin_cambios' => 0,
                 'importe_recien_cobrado' => 0.0, 'estado_historico' => 0, 'avisos_demandas' => [],
+                'demandas_a_cobradas' => 0,
+                'importe_pendiente_fichero' => 0.0, 'importe_incobrable' => 0.0,
+                'importe_demandado' => 0.0, 'importe_pendiente_real' => 0.0,
+                'simulado' => [],
             ];
         }
 
@@ -382,6 +521,15 @@ class CuotasImportController extends Controller
 
         $nuevas = 0; $pendienteAPagada = 0; $pagadaAPendiente = 0; $actualizadasOtros = 0; $sinCambios = 0;
         $eventosHistorico = 0; $importeRecienCobrado = 0.0; $avisosDemandas = [];
+        // Importe "pendiente" que trae el fichero para las cuotas tocadas en esta carga, desglosado
+        // por lo que ese importe va a QUEDAR en Opland: si la cuota ya está protegida (Demandada/
+        // Incobrable/Anulada) su estado no se toca pase lo que pase en el fichero, así que ese
+        // importe no pasa a "pendiente real" -- se queda en su cajón correspondiente.
+        $importePendienteFichero = 0.0; $importeIncobrable = 0.0; $importeDemandado = 0.0;
+        $importeAnulado = 0.0; $importePendienteReal = 0.0;
+        // Estado "resultante" (post-fichero) de cada cuota tocada, aunque no se escriba en BD
+        // todavía (evaluar() usa esto para simular el efecto del fichero sobre "a demandar").
+        $simulado = [];
         $userId = Auth::id();
 
         foreach ($clavesTocadas as $key => $meta) {
@@ -440,6 +588,21 @@ class CuotasImportController extends Controller
                 ];
             }
 
+            $pendienteFichero = (float) ($ultimo->pendiente ?? 0);
+            if ($pendienteFichero > 0.005) {
+                $importePendienteFichero += $pendienteFichero;
+                $estadoExistente = $cuotaExistente ? trim((string) $cuotaExistente->estado) : null;
+                if ($estadoExistente === 'Incobrable') {
+                    $importeIncobrable += $pendienteFichero;
+                } elseif ($estadoExistente === 'Demandada') {
+                    $importeDemandado += $pendienteFichero;
+                } elseif ($estadoExistente === 'Anulada') {
+                    $importeAnulado += $pendienteFichero;
+                } else {
+                    $importePendienteReal += $pendienteFichero;
+                }
+            }
+
             $datos = [
                 'id_viviendas'    => $ultimo->id_viviendas,
                 'nombre'          => $nombreCuota,
@@ -482,6 +645,7 @@ class CuotasImportController extends Controller
                     DB::table('mb_cuotas')->where('id', $cuotaExistente->id)->update(array_merge($datos, ['updateuser' => $userId]));
                 }
                 $idCuota = $cuotaExistente->id;
+                $estadoFinal = $estadoDespues;
             } else {
                 $datos['estado']     = $datos['estado'] ?? $ultimo->estado;
                 $datos['fecha_pago'] = $datos['fecha_pago'] ?? $fechaCobroActual;
@@ -498,7 +662,20 @@ class CuotasImportController extends Controller
                 } else {
                     $idCuota = null;
                 }
+                $estadoFinal = $datos['estado'];
             }
+
+            // Estado "resultante" de esta cuota tras aplicar el fichero -- se usa para simular en
+            // memoria (sin escribir) que efecto tendria la carga sobre "viviendas a demandar",
+            // incluso durante la evaluacion (escribir:false).
+            $simulado[$key] = [
+                'id_viviendas'  => $datos['id_viviendas'],
+                'concepto'      => $datos['concepto'],
+                'fecha_emision' => $datos['fecha_emision'],
+                'tipo_cuota'    => $datos['tipo_cuota'],
+                'estado'        => $estadoFinal,
+                'pendiente'     => (float) $datos['pendiente'],
+            ];
 
             if ($escribir && $idCuota) {
                 DB::table('mb_cuotas_estado_historico')->where('id_cuota', $idCuota)->delete();
@@ -511,6 +688,14 @@ class CuotasImportController extends Controller
             $eventosHistorico += count($eventos);
         }
 
+        // De los avisos (cuotas con demanda activa que el fichero tocaría pero que se protegen y
+        // NO se escriben), cuántas son concretamente demandas que el fichero marca como cobradas
+        // -- informativo, para que se revisen y liquiden a mano si procede.
+        $demandasACobradas = collect($avisosDemandas)
+            ->where('estado_actual', 'Demandada')
+            ->where('estado_fichero', 'Pagada')
+            ->count();
+
         return [
             'fecha_exportacion'         => $fechaExportacion,
             'nuevas'                    => $nuevas,
@@ -521,6 +706,12 @@ class CuotasImportController extends Controller
             'importe_recien_cobrado'    => round($importeRecienCobrado, 2),
             'estado_historico'          => $eventosHistorico,
             'avisos_demandas'           => $avisosDemandas,
+            'demandas_a_cobradas'       => $demandasACobradas,
+            'importe_pendiente_fichero' => round($importePendienteFichero, 2),
+            'importe_incobrable'        => round($importeIncobrable, 2),
+            'importe_demandado'         => round($importeDemandado, 2),
+            'importe_pendiente_real'    => round($importePendienteReal, 2),
+            'simulado'                  => $simulado,
         ];
     }
 
@@ -558,7 +749,35 @@ class CuotasImportController extends Controller
             $activo = $activos[$idViv] ?? null;
             if (!$activo || $this->normalize($activo->propietario) === $this->normalize($info['propietario'])) continue;
 
+            // Protección contra ficheros procesados fuera de orden cronológico (o "solo pendientes"
+            // cuya última cuota es una deuda antigua que aún arrastra el propietario ANTERIOR al
+            // cambio real -- el campo propietario de una cuota refleja quién la emitió, no quién es
+            // el dueño ahora). Si ya existe un tramo de historico que empieza DESPUÉS de esta fecha
+            // de exportación, o si cerrar el tramo activo aquí generaría un rango invertido
+            // (fecha_hasta < fecha_desde), esta carga no es fiable para inferir un cambio de
+            // propietario -- se ignora en vez de corromper el historico ya conocido (bug real
+            // detectado y corregido en BD el 2026-08-14, ver DOC_TECNICO).
+            $hayTramoPosterior = DB::table('mb_propietarios_historico')
+                ->where('id_viviendas', $idViv)
+                ->where('fecha_desde', '>', $fechaExportacion)
+                ->exists();
+            $nuevaFechaHasta = Carbon::parse($fechaExportacion)->subDay();
+            if ($hayTramoPosterior || $nuevaFechaHasta->lt(Carbon::parse($activo->fecha_desde))) {
+                continue;
+            }
+
+            // Protección adicional: si el "nuevo" propietario que trae el fichero coincide con un
+            // propietario YA SUPERADO de esta misma vivienda (un tramo anterior al activo), es casi
+            // seguro que es el mismo dato viejo arrastrado por una cuota antigua sin cobrar, no un
+            // cambio de titularidad real -- la propiedad no suele "volver" al dueño anterior.
             $normNuevo = $this->normalize($info['propietario']);
+            $esRetrocesoAOwnerAnterior = DB::table('mb_propietarios_historico')
+                ->where('id_viviendas', $idViv)
+                ->where('fecha_desde', '<', $activo->fecha_desde)
+                ->whereRaw('upper(propietario) = ?', [$normNuevo])
+                ->exists();
+            if ($esRetrocesoAOwnerAnterior) continue;
+
             $idPropietarios = DB::table('mb_propietarios')->whereRaw('upper(nombre) = ?', [$normNuevo])->value('id');
             $esNuevo = $idPropietarios === null;
 

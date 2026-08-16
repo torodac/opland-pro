@@ -19,7 +19,7 @@
 .ci-result{display:none;background:#fff;border:1px solid #dce6ee;border-radius:12px;padding:20px;margin-top:16px}
 .ci-result.show{display:block}
 .ci-result h3{font-size:14px;margin:0 0 12px}
-.ci-result-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.ci-result-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
 .ci-result-item{background:#f7fafc;border-radius:10px;padding:10px 12px;text-align:center}
 .ci-result-item .n{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
 .ci-result-item .l{font-size:11px;color:#7e93a1}
@@ -27,6 +27,8 @@
 .ci-result-item.cobradas .n{color:#166534}
 .ci-result-item.devueltas .n{color:#b91c1c}
 .ci-result-item.otros .n{color:#a15c07}
+.ci-result-item.demandadas-cobradas .n{color:#b91c1c}
+.ci-result-item.demandas-ejercicio .n{color:#b91c1c}
 .ci-cobrado-total{font-size:12.5px;color:#166534;font-weight:600;margin:0 0 14px}
 .ci-list{font-size:12px;color:#374151;max-height:220px;overflow-y:auto;background:#f7fafc;border-radius:8px;padding:10px 12px;margin-top:6px}
 .ci-list div{padding:3px 0;border-bottom:1px solid #eaf1f6}
@@ -87,12 +89,20 @@
   <div class="ci-result-grid">
     <div class="ci-result-item nuevas"><div class="n" id="r-nuevas">0</div><div class="l">cuotas nuevas</div></div>
     <div class="ci-result-item cobradas"><div class="n" id="r-cobradas">0</div><div class="l">pasan a cobradas</div></div>
+    <div class="ci-result-item demandadas-cobradas"><div class="n" id="r-demandadas-cobradas">0</div><div class="l">demandadas que pasan a cobradas</div></div>
     <div class="ci-result-item devueltas"><div class="n" id="r-devueltas">0</div><div class="l">recibos devueltos</div></div>
     <div class="ci-result-item otros"><div class="n" id="r-otros">0</div><div class="l">actualizan otros datos</div></div>
     <div class="ci-result-item"><div class="n" id="r-sin-cambios">0</div><div class="l">sin cambios</div></div>
+    <div class="ci-result-item demandas-ejercicio"><div class="n" id="r-demandas-ejercicio">{{ $demandasEjercicioActual }}</div><div class="l">demandas a interponer este ejercicio</div></div>
     <div class="ci-result-item"><div class="n" id="r-omitidas">0</div><div class="l">omitidas (ruido &lt;2010)</div></div>
   </div>
   <p class="ci-cobrado-total">Importe que pasaría a cobrado: <strong id="r-importe-cobrado">0,00 €</strong></p>
+  <p style="font-size:12.5px;color:#7e93a1;margin:0 0 14px">
+    Importe pendiente que trae el fichero: <strong id="r-importe-pendiente-fichero" style="color:#1B1B18">0,00 €</strong>
+    · de ese, incobrable: <strong id="r-importe-incobrable" style="color:#374151">0,00 €</strong>
+    · demandado: <strong id="r-importe-demandado" style="color:#b91c1c">0,00 €</strong>
+    · pendiente real en Opland: <strong id="r-importe-pendiente-real" style="color:#a15c07">0,00 €</strong>
+  </p>
   <p style="font-size:12.5px;color:#7e93a1">Eventos que se registrarían en el histórico de estado: <strong id="r-historico">0</strong></p>
 
   <div id="r-avisos-demandas-wrap" class="ci-aviso-demandas" style="display:none">
@@ -108,6 +118,15 @@
   <div id="r-propietarios-wrap" style="display:none">
     <p style="font-size:12.5px;font-weight:600;margin:14px 0 4px">Cambios de propietario que se aplicarían:</p>
     <div class="ci-list" id="r-propietarios"></div>
+  </div>
+
+  <div id="r-demandas-wrap" style="display:{{ $demandasEjercicioActualDetalle->isNotEmpty() ? 'block' : 'none' }}">
+    <p style="font-size:12.5px;font-weight:600;margin:14px 0 4px">Viviendas a demandar este ejercicio:</p>
+    <div class="ci-list" id="r-demandas">
+      @foreach($demandasEjercicioActualDetalle as $d)
+        <div>{{ $d->nombre }} <strong style="float:right">{{ number_format($d->pendiente, 2, ',', '.') }} €</strong></div>
+      @endforeach
+    </div>
   </div>
 
   <div class="ci-actions" id="ci-actions-evaluar">
@@ -258,13 +277,20 @@ function mostrarEvaluacion(data) {
   document.getElementById('r-titulo').textContent = 'Evaluación de la carga (todavía no se ha aplicado nada)';
   document.getElementById('r-nuevas').textContent = data.nuevas;
   document.getElementById('r-cobradas').textContent = data.pendiente_a_pagada;
+  document.getElementById('r-demandadas-cobradas').textContent = data.demandas_a_cobradas;
   document.getElementById('r-devueltas').textContent = data.pagada_a_pendiente;
   document.getElementById('r-otros').textContent = data.actualizadas_otros_datos;
   document.getElementById('r-sin-cambios').textContent = data.sin_cambios;
+  document.getElementById('r-demandas-ejercicio').textContent = data.demandas_ejercicio_actual;
   document.getElementById('r-omitidas').textContent = data.omitidas_ruido_historico.length;
   document.getElementById('r-fecha-exportacion').textContent = data.fecha_exportacion;
   document.getElementById('r-historico').textContent = data.estado_historico;
   document.getElementById('r-importe-cobrado').textContent = Number(data.importe_recien_cobrado).toLocaleString('es-ES', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €';
+  const euros = (v) => Number(v).toLocaleString('es-ES', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €';
+  document.getElementById('r-importe-pendiente-fichero').textContent = euros(data.importe_pendiente_fichero);
+  document.getElementById('r-importe-incobrable').textContent = euros(data.importe_incobrable);
+  document.getElementById('r-importe-demandado').textContent = euros(data.importe_demandado);
+  document.getElementById('r-importe-pendiente-real').textContent = euros(data.importe_pendiente_real);
 
   const ad = document.getElementById('r-avisos-demandas-wrap');
   if (data.avisos_demandas.length) {
@@ -295,6 +321,16 @@ function mostrarEvaluacion(data) {
     }).join('');
   } else {
     pw.style.display = 'none';
+  }
+
+  const dw = document.getElementById('r-demandas-wrap');
+  if (data.demandas_ejercicio_actual_detalle && data.demandas_ejercicio_actual_detalle.length) {
+    dw.style.display = 'block';
+    document.getElementById('r-demandas').innerHTML = data.demandas_ejercicio_actual_detalle.map(d =>
+      `<div>${d.nombre} <strong style="float:right">${euros(d.pendiente)}</strong></div>`
+    ).join('');
+  } else {
+    dw.style.display = 'none';
   }
 
   document.getElementById('ci-actions-evaluar').style.display = 'flex';

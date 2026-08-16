@@ -82,6 +82,11 @@
             <i class="fa-solid fa-file-invoice-dollar text-orange-400"></i>
             Generar cuotas
         </button>
+        <a href="{{ route('mb.cuotas.informe', $project->slug) }}"
+           class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+            <i class="fa-solid fa-file-pdf text-orange-400"></i>
+            Informe PDF
+        </a>
         @endif
 
         {{-- Generar pagos del mes (solo nf_pagos): modal pidiendo el mes --}}
@@ -221,7 +226,11 @@
                     @if(!empty($stat['tooltip']))
                     <span class="app-tooltip" onclick="event.preventDefault()">
                         <span style="font-size:0.7rem;flex-shrink:0">&#9432;</span>
-                        <span class="app-tooltip-box" style="{{ $key === 'a_demandar' ? 'width:26rem;text-align:left;white-space:pre-line' : '' }}">{{ $stat['tooltip'] }}</span>
+                        {{-- a_demandar: la caja es ancha y esta fila de stats vive pegada arriba de la
+                             pagina, asi que abrirla hacia arriba (comportamiento por defecto de
+                             .app-tooltip-box) la deja tapada por la cabecera fija -- se abre hacia
+                             abajo solo para esta. --}}
+                        <span class="app-tooltip-box" style="{{ $key === 'a_demandar' ? 'width:26rem;text-align:left;white-space:pre-line;top:100%;bottom:auto;margin-top:6px;margin-bottom:0' : '' }}">{{ $stat['tooltip'] }}</span>
                     </span>
                     @endif
                 </div>
