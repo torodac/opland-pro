@@ -128,6 +128,12 @@ class FacturaFormController extends Controller
         $iva = $baseNeta * (($f->iva ?? 21) / 100);
         $total = $baseNeta + $iva;
 
+        // Para el resumen en pantalla: base bruta (antes de dto. de linea) y dto. total
+        // (linea + cabecera), asi el desglose visual cuadra. La "base imponible" fiscal
+        // del PDF sigue siendo $base/$baseNeta (ya neta de dto. de linea), sin tocar.
+        $dtoLineas = $lineasOut->sum(fn ($l) => $l['descuentoe']);
+        $baseBruta = $base + $dtoLineas;
+
         return response()->json([
             'factura' => [
                 'id' => $f->id, 'nombre' => $f->nombre, 'num_fact' => $f->num_fact,
@@ -139,7 +145,11 @@ class FacturaFormController extends Controller
             ],
             'lineas' => $lineasOut,
             'imputaciones_pool' => $pool->values(),
-            'totales' => ['base' => round($base, 2), 'dto_factura' => round($dtoFactura, 2), 'base_neta' => round($baseNeta, 2), 'iva' => round($iva, 2), 'total' => round($total, 2)],
+            'totales' => [
+                'base' => round($base, 2), 'dto_factura' => round($dtoFactura, 2),
+                'base_neta' => round($baseNeta, 2), 'iva' => round($iva, 2), 'total' => round($total, 2),
+                'base_bruta' => round($baseBruta, 2), 'dto_total' => round($dtoLineas + $dtoFactura, 2),
+            ],
         ]);
     }
 

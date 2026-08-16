@@ -17,13 +17,13 @@
   .doc-meta{padding:20px 22px 20px 0; text-align:right; width:150px; vertical-align:top}
   .doc-meta-lbl{font-size:9px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; color:#3f5a6b}
   .doc-meta-val{font-weight:bold; font-size:14px; color:#16232b; margin:2px 0 12px}
-  .doc-body{padding:22px 26px 26px}
+  .doc-body{padding:22px 26px 260px}
   .doc-service-title{font-weight:bold; font-size:14px; color:#16232b; margin-bottom:16px; padding-bottom:10px; border-bottom:1.5px solid #16232b}
   .doc-table{width:100%; border-collapse:collapse; margin-bottom:22px; table-layout:fixed}
   .doc-table th{font-size:9px; text-transform:uppercase; letter-spacing:1px; color:#7e93a1; text-align:left; padding:4px; line-height:1.2; vertical-align:middle; border-bottom:1.5px solid #16232b; white-space:nowrap}
   .doc-table td{padding:9px 4px; font-size:11px; border-bottom:1px solid #eaf1f6; word-wrap:break-word}
   .doc-table td.num{text-align:right; white-space:nowrap}
-  .doc-table tr.doc-base-row td{border-bottom:none; border-top:1.5px solid #16232b; font-weight:bold; padding-top:11px; white-space:nowrap}
+  .doc-table tr.doc-base-row td{border-bottom:none; border-top:1.5px solid #16232b; padding-top:11px; white-space:nowrap}
   .doc-col-concepto{width:50%}
   .doc-col-precio{width:14%}
   .doc-col-dtop{width:8%}
@@ -42,6 +42,8 @@
 
 @php
   $fmt = fn($v) => number_format((float)$v, 2, ',', '.') . ' €';
+  $hayDescuento = collect($lineas)->contains(fn($l) => ($l->descuentoe ?? 0) > 0);
+  $totalDescuento = collect($lineas)->sum(fn($l) => $l->descuentoe ?: 0);
 @endphp
 
 <table class="doc-header" cellpadding="0" cellspacing="0">
@@ -85,15 +87,20 @@
 
   <table class="doc-table">
     <colgroup>
-      <col class="doc-col-concepto">
-      <col class="doc-col-precio"><col class="doc-col-dtop"><col class="doc-col-dtoe"><col class="doc-col-total">
+      <col style="{{ $hayDescuento ? '' : 'width:82%' }}" class="{{ $hayDescuento ? 'doc-col-concepto' : '' }}">
+      @if($hayDescuento)
+        <col class="doc-col-precio"><col class="doc-col-dtop"><col class="doc-col-dtoe">
+      @endif
+      <col class="{{ $hayDescuento ? 'doc-col-total' : '' }}" style="{{ $hayDescuento ? '' : 'width:18%' }}">
     </colgroup>
     <thead>
       <tr>
         <th class="doc-col-concepto">Concepto</th>
-        <th class="doc-col-precio" style="text-align:right">Precio</th>
-        <th class="doc-col-dtop" style="text-align:right">Dto. %</th>
-        <th class="doc-col-dtoe" style="text-align:right">Dto. €</th>
+        @if($hayDescuento)
+          <th class="doc-col-precio" style="text-align:right">Precio</th>
+          <th class="doc-col-dtop" style="text-align:right">Dto. %</th>
+          <th class="doc-col-dtoe" style="text-align:right">Dto. €</th>
+        @endif
         <th class="doc-col-total" style="text-align:right">Total</th>
       </tr>
     </thead>
@@ -101,15 +108,23 @@
       @foreach($lineas as $l)
         <tr>
           <td class="doc-col-concepto">{{ $l->nombre }}</td>
-          <td class="num doc-col-precio">{{ $fmt($l->precio) }}</td>
-          <td class="num doc-col-dtop">{{ $l->descuentoporc ?: 0 }}%</td>
-          <td class="num doc-col-dtoe">{{ $fmt($l->descuentoe ?: 0) }}</td>
+          @if($hayDescuento)
+            <td class="num doc-col-precio">{{ $fmt($l->precio) }}</td>
+            <td class="num doc-col-dtop">{{ $l->descuentoporc ?: 0 }}%</td>
+            <td class="num doc-col-dtoe">{{ $fmt($l->descuentoe ?: 0) }}</td>
+          @endif
           <td class="num doc-col-total"><strong>{{ $fmt($l->precio - ($l->descuentoe ?: 0)) }}</strong></td>
         </tr>
       @endforeach
       <tr class="doc-base-row">
-        <td colspan="4" style="text-align:right">Base imponible</td>
-        <td style="text-align:right">{{ $fmt($base) }}</td>
+        @if($hayDescuento)
+          <td colspan="2"></td>
+          <td class="num doc-col-dtop"></td>
+          <td class="num doc-col-dtoe">{{ $fmt($totalDescuento) }}</td>
+        @else
+          <td></td>
+        @endif
+        <td class="num doc-col-total"><strong>{{ $fmt($base) }}</strong></td>
       </tr>
     </tbody>
   </table>

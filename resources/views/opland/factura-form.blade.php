@@ -138,11 +138,11 @@
           <table class="doc-table">
             <colgroup>
               <col style="width:auto">
-              <col style="width:80px"><col style="width:56px"><col style="width:64px"><col style="width:92px">
+              <col id="pv-col-precio" style="width:80px"><col id="pv-col-dtop" style="width:56px"><col id="pv-col-dtoe" style="width:64px"><col style="width:92px">
             </colgroup>
-            <thead><tr><th>Concepto</th><th style="text-align:right;white-space:nowrap">Precio</th><th style="text-align:right;white-space:nowrap">Dto. %</th><th style="text-align:right;white-space:nowrap">Dto. €</th><th style="text-align:right;white-space:nowrap">Total</th></tr></thead>
+            <thead><tr><th>Concepto</th><th id="pv-th-precio" style="text-align:right;white-space:nowrap">Precio</th><th id="pv-th-dtop" style="text-align:right;white-space:nowrap">Dto. %</th><th id="pv-th-dtoe" style="text-align:right;white-space:nowrap">Dto. €</th><th style="text-align:right;white-space:nowrap">Total</th></tr></thead>
             <tbody id="pv-lineas"></tbody>
-            <tfoot><tr class="doc-base-row"><td colspan="4" style="text-align:right">Base imponible</td><td style="text-align:right" id="pv-base-row"></td></tr></tfoot>
+            <tfoot id="pv-tfoot"></tfoot>
           </table>
 
           <div class="doc-totals-grid">
@@ -244,7 +244,7 @@
 .doc-table th{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:#7e93a1;text-align:left;padding:6px 4px;border-bottom:1.5px solid #16232b}
 .doc-table td{padding:9px 4px;font-size:11.5px;border-bottom:1px solid #eaf1f6;vertical-align:top}
 .doc-table td.num{text-align:right;white-space:nowrap}
-.doc-table tr.doc-base-row td{border-bottom:none;border-top:1.5px solid #16232b;font-weight:800;padding-top:11px;white-space:nowrap}
+.doc-table tr.doc-base-row td{border-bottom:none;border-top:1.5px solid #16232b;padding-top:11px;white-space:nowrap}
 .doc-totals-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
 .doc-total-box{border:1px solid #dce6ee;border-radius:6px;padding:12px 14px;text-align:left}
 .doc-total-box .val{display:block;font-size:16px;font-weight:800;color:#16232b;white-space:nowrap}
@@ -338,8 +338,8 @@ function pintarTodo(){
   document.getElementById('badge-imputaciones').textContent = STATE.imputaciones_pool.length + ' pendientes';
 
   const t = STATE.totales;
-  document.getElementById('sum-base').textContent = fmtEUR(t.base);
-  document.getElementById('sum-dtofactura').textContent = '-' + fmtEUR(t.dto_factura);
+  document.getElementById('sum-base').textContent = fmtEUR(t.base_bruta);
+  document.getElementById('sum-dtofactura').textContent = '-' + fmtEUR(t.dto_total);
   document.getElementById('sum-iva-label').textContent = 'IVA (' + (f.iva ?? 21) + '%)';
   document.getElementById('sum-iva').textContent = fmtEUR(t.iva);
   document.getElementById('sum-total').textContent = fmtEUR(t.total);
@@ -545,20 +545,28 @@ function abrirPreview(){
   document.getElementById('pv-fecha').textContent = fmtDate(document.getElementById('in-fecha').value);
   document.getElementById('pv-descripcion').textContent = document.getElementById('in-descripcion').value || '—';
 
+  const hayDescuento = STATE.lineas.some(l => (l.descuentoe || 0) > 0);
+  ['pv-col-precio','pv-col-dtop','pv-col-dtoe','pv-th-precio','pv-th-dtop','pv-th-dtoe'].forEach(id => {
+    document.getElementById(id).style.display = hayDescuento ? '' : 'none';
+  });
+
   document.getElementById('pv-lineas').innerHTML = STATE.lineas.map(l => {
     const dtoEur = l.descuentoe || 0;
     const total = l.precio - dtoEur;
+    const colsDescuento = hayDescuento
+      ? `<td class="num">${fmtEUR(l.precio)}</td><td class="num">${l.descuentoporc||0}%</td><td class="num">${fmtEUR(dtoEur)}</td>`
+      : '';
     return `<tr>
       <td>${l.nombre}</td>
-      <td class="num">${fmtEUR(l.precio)}</td>
-      <td class="num">${l.descuentoporc||0}%</td>
-      <td class="num">${fmtEUR(dtoEur)}</td>
+      ${colsDescuento}
       <td class="num" style="font-weight:700">${fmtEUR(total)}</td>
     </tr>`;
   }).join('');
 
   const t = STATE.totales;
-  document.getElementById('pv-base-row').textContent = fmtEUR(t.base);
+  document.getElementById('pv-tfoot').innerHTML = hayDescuento
+    ? `<tr class="doc-base-row"><td colspan="2"></td><td class="num"></td><td class="num">${fmtEUR(t.dto_total - t.dto_factura)}</td><td class="num" style="font-weight:800">${fmtEUR(t.base)}</td></tr>`
+    : `<tr class="doc-base-row"><td></td><td class="num" style="font-weight:800">${fmtEUR(t.base)}</td></tr>`;
   document.getElementById('pv-total-base').textContent = fmtEUR(t.base_neta);
   document.getElementById('pv-total-iva').textContent = fmtEUR(t.iva);
   document.getElementById('pv-total-factura').textContent = fmtEUR(t.total);
