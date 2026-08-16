@@ -25,9 +25,6 @@ class PygController extends Controller
                 COALESCE(SUM(v.importe) FILTER (WHERE c.codigo LIKE '6%'), 0) AS importe_gastos
             FROM vm_pyg_valores v
             JOIN vm_pyg_cuentas c ON c.id = v.id_cuenta
-            WHERE EXISTS (
-                SELECT 1 FROM vm_pyg g WHERE g.periodo = v.periodo AND g.deleted = 0
-            )
             GROUP BY v.periodo
             ORDER BY v.periodo DESC
         ");
@@ -330,7 +327,7 @@ class PygController extends Controller
             $valoresInsertados += $this->insertarValores($periodo, $cid, $acc['row'], $resolved, $acumuladoPrevio);
         }
 
-        $this->guardarResumenPeriodo($periodo, $filePath, $originalName);
+        $this->guardarFicheroPermanente($periodo, $filePath, $originalName);
 
         return [
             'periodo'    => $periodo,
@@ -341,10 +338,10 @@ class PygController extends Controller
     }
 
     // Suma, por cada (cuenta, propiedad|ceco), lo ya guardado en `importe` (delta aislado) en los
-    // meses ANTERIORES del mismo año -- solo entre periodos activos (vm_pyg.deleted=0), para no
-    // arrastrar valores huérfanos de una re-importación. En enero (o el primer mes con datos del
-    // año) el mapa sale vacío y el cálculo posterior se reduce a "importe = acumulado del fichero",
-    // igual que el comportamiento de siempre.
+    // meses ANTERIORES del mismo año -- vm_pyg_valores siempre refleja solo la última importación de
+    // cada periodo (runImportInTransaction borra el periodo entero antes de reinsertar), así que no
+    // hace falta filtrar nada más. En enero (o el primer mes con datos del año) el mapa sale vacío y
+    // el cálculo posterior se reduce a "importe = acumulado del fichero", igual que siempre.
     private function mapaAcumuladoPrevio(string $periodo): array
     {
         $anio = (int) substr($periodo, 0, 4);
@@ -352,9 +349,6 @@ class PygController extends Controller
         $filas = DB::table('vm_pyg_valores as v')
             ->whereRaw('EXTRACT(year FROM v.periodo) = ?', [$anio])
             ->where('v.periodo', '<', $periodo)
-            ->whereIn('v.periodo', function ($sub) {
-                $sub->select('periodo')->from('vm_pyg')->where('deleted', 0);
-            })
             ->selectRaw('v.id_cuenta, v.id_propiedades, v.ceco, SUM(v.importe) as acumulado')
             ->groupBy('v.id_cuenta', 'v.id_propiedades', 'v.ceco')
             ->get();
@@ -368,44 +362,14 @@ class PygController extends Controller
         return $mapa;
     }
 
-    // Guarda el fichero de forma permanente y calcula/actualiza el resumen del periodo en vm_pyg.
-    // Si ya habia un resumen activo para este periodo, lo marca como deleted=1 (se conserva el historico).
-    private function guardarResumenPeriodo(string $periodo, string $filePath, string $originalName): void
+    // Guarda el fichero de forma permanente en storage/app/public/vm/pyg/ (auditoría/histórico de
+    // ficheros subidos). Los totales del periodo ya no se precalculan ni se guardan en ningún sitio --
+    // se calculan al vuelo desde vm_pyg_valores + vm_pyg_cuentas cada vez que se necesitan (index() de
+    // este controller, InformeFinancieroController).
+    private function guardarFicheroPermanente(string $periodo, string $filePath, string $originalName): void
     {
-        DB::table('vm_pyg')
-            ->where('periodo', $periodo)
-            ->where('deleted', 0)
-            ->update(['deleted' => 1, 'updatedat' => now()]);
-
         $destino = 'vm/pyg/' . $periodo . '_' . uniqid() . '_' . $originalName;
         Storage::disk('public')->put($destino, file_get_contents($filePath));
-
-        $agregado = DB::table('vm_pyg_valores as v')
-            ->join('vm_pyg_cuentas as c', 'c.id', '=', 'v.id_cuenta')
-            ->where('v.periodo', $periodo)
-            ->selectRaw("
-                COALESCE(SUM(v.importe) FILTER (WHERE c.codigo LIKE '7%'), 0) AS importe_ingresos,
-                COALESCE(SUM(v.importe) FILTER (WHERE c.codigo LIKE '6%'), 0) AS importe_gastos,
-                COUNT(DISTINCT v.id_propiedades) AS num_propiedades,
-                COUNT(DISTINCT v.ceco) AS num_cecos,
-                COUNT(DISTINCT v.id_cuenta) AS num_cuentas,
-                COUNT(*) AS num_registros
-            ")
-            ->first();
-
-        DB::table('vm_pyg')->insert([
-            'periodo'          => $periodo,
-            'fichero'          => $destino,
-            'fichero_nombre'   => $originalName,
-            'importe_ingresos' => $agregado->importe_ingresos ?? 0,
-            'importe_gastos'   => $agregado->importe_gastos ?? 0,
-            'num_propiedades'  => $agregado->num_propiedades ?? 0,
-            'num_cecos'        => $agregado->num_cecos ?? 0,
-            'num_cuentas'      => $agregado->num_cuentas ?? 0,
-            'num_registros'    => $agregado->num_registros ?? 0,
-            'createdat'        => now(),
-            'updatedat'        => now(),
-        ]);
     }
 
     // Da de alta o actualiza una cuenta en vm_pyg_cuentas. Devuelve [id, esNueva]
@@ -439,7 +403,13 @@ class PygController extends Controller
     // acumulado desde enero; aquí se resta lo ya guardado en meses anteriores del mismo año (mapa
     // precalculado en mapaAcumuladoPrevio()) para obtener el delta aislado de ESTE mes, que es lo
     // que se guarda en `importe` (el acumulado bruto del fichero se guarda aparte, en
-    // `importe_acumulado`, solo a efectos de auditoría). Devuelve cuantos valores insertó.
+    // `importe_acumulado`). Devuelve cuantos valores insertó.
+    //
+    // Se inserta SIEMPRE una fila por cuenta/propiedad presente en el fichero, aunque el delta de
+    // este mes sea 0 -- si no, una cuenta cuyo acumulado no cambia de un mes a otro (p.ej. un seguro
+    // anual pagado una vez) desaparece silenciosamente de ese periodo, y cualquier informe que sume
+    // "las filas de este periodo" (en vez de reconstruir el último valor conocido de cada cuenta)
+    // se deja esa cuenta fuera del total aunque su importe siga siendo real y vigente.
     //
     // Una celda en blanco cuenta como acumulado 0 (no como "sin dato"): así se detecta correctamente
     // una reversión, p.ej. una cuenta con 500€ acumulados hasta mayo que en el fichero de junio
@@ -454,7 +424,6 @@ class PygController extends Controller
             $clave  = $cuentaId . '|' . (isset($ref['id_propiedades']) ? 'p' . $ref['id_propiedades'] : 'c' . $ref['ceco']);
             $previo = $acumuladoPrevio[$clave] ?? 0.0;
             $importe = round($acumuladoActual - $previo, 2);
-            if ($importe === 0.0) continue;
 
             DB::table('vm_pyg_valores')->insert([
                 'periodo'           => $periodo,
