@@ -196,9 +196,9 @@ input[type="date"].date-empty:not(:focus)::-webkit-datetime-edit { color: transp
   </div>
 </form>
 
-<div id="badge-revision" style="{{ $tarea_revision ? '' : 'display:none;' }} margin-bottom:14px;">
+<div id="badge-revision" style="{{ $tareas_revision->isNotEmpty() ? '' : 'display:none;' }} margin-bottom:14px;">
   <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 14px;font-size:.83rem;color:#9a3412;display:flex;align-items:center;gap:8px;">
-    ⚠️ <span>Los importes de <strong>{{ $mes_anterior_label }}</strong> han cambiado desde que se documentó la novación — hay una tarea de revisión abierta para Contabilidad.</span>
+    ⚠️ <span>Los importes de <strong id="txt-meses-revision">{{ $tareas_revision->pluck('mes_label')->implode(', ') }}</strong> han cambiado desde que se documentó la novación — hay {{ $tareas_revision->count() > 1 ? 'tareas de revisión abiertas' : 'una tarea de revisión abierta' }} para Contabilidad.</span>
   </div>
 </div>
 
@@ -693,7 +693,7 @@ async function sincronizar() {
         + (data.errores > 0 ? ` (${data.errores} reserva(s) con error)` : '');
       // recarga la reserva abierta, si hay alguna, para reflejar los importes ya sincronizados
       if (currentBookingId) loadImportes(currentBookingId);
-      if (data.tarea_revision && data.tarea_revision.creada) {
+      if (data.tareas_revision && data.tareas_revision.length > 0) {
         document.getElementById('badge-revision').style.display = '';
       }
     } else {
