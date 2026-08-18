@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Project;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use App\Services\InformeAprobacionGuard;
 use App\Services\VmHorasService;
 use Illuminate\Support\Facades\DB;
 
@@ -70,7 +71,7 @@ class DashboardController extends Controller
         $fechaFin = end($grupo)->toDateString();
         $usuario  = DB::table('vm_usuarios')->where('id', $idUsuario)->value('nombre');
 
-        DB::table('vm_ausencias')->insert([
+        $ausId = DB::table('vm_ausencias')->insertGetId([
             'nombre'       => Carbon::parse($fechaIni)->format('Y.m.d') . '_' . $usuario,
             'id_usuarios'  => $idUsuario,
             'tipo'         => $tipoAus,
@@ -82,18 +83,27 @@ class DashboardController extends Controller
             'updatedat'    => now(),
         ]);
 
-        return response()->json(['ok' => true, 'fecha_inicio' => $fechaIni, 'fecha_fin' => $fechaFin]);
+        $aviso = InformeAprobacionGuard::checkAndLog($idUsuario, $fechaIni, 'vm_ausencias', 'insert', $ausId, $request);
+
+        return response()->json(['ok' => true, 'fecha_inicio' => $fechaIni, 'fecha_fin' => $fechaFin, 'aviso_aprobacion' => $aviso]);
     }
 
     public function validarFichaje(Request $request, Project $project)
     {
         $fichajeId = (int) $request->id;
         $user = $this->vmUsuarioActual();
+        $fichaje = DB::table('vm_fichaje')->where('id', $fichajeId)->first(['control_user', 'fecha_fichaje']);
+
         DB::table('vm_fichaje')->where('id', $fichajeId)->update([
             'validado'     => true,
             'validado_por' => $user->id ?? null,
         ]);
-        return response()->json(['ok' => true]);
+
+        $aviso = $fichaje
+            ? InformeAprobacionGuard::checkAndLog((int) $fichaje->control_user, $fichaje->fecha_fichaje, 'vm_fichaje', 'update', $fichajeId, $request)
+            : null;
+
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $aviso]);
     }
 
     public function validarTarea(Request $request, Project $project)
@@ -107,6 +117,31 @@ class DashboardController extends Controller
             'validado'     => true,
             'validado_por' => $user->id ?? null,
         ]);
+        return response()->json(['ok' => true]);
+    }
+
+    // Botón "Hecho" del recordatorio SSCC: la marca como propia (control_user = yo) y la
+    // pasa a Finalizada, sin tocar imputaciones/fichaje -- no repercute en el informe mensual.
+    public function marcarSsccHecho(Request $request, Project $project, int $id)
+    {
+        $user = $this->vmUsuarioActual();
+        if (!$user) {
+            return response()->json(['error' => 'No se pudo identificar tu usuario en este proyecto.'], 403);
+        }
+
+        $updated = DB::table('vm_tareas_sscc')
+            ->where('id', $id)
+            ->where('deleted', 0)
+            ->update([
+                'control_user' => json_encode([$user->id]),
+                'estado'       => 'Finalizada',
+                'updateuser'   => auth()->id(),
+                'updatedat'    => now(),
+            ]);
+        if (!$updated) {
+            return response()->json(['error' => 'Tarea no encontrada.'], 404);
+        }
+
         return response()->json(['ok' => true]);
     }
 
@@ -294,7 +329,7 @@ class DashboardController extends Controller
         // vm_usuarios del usuario web autenticado (para widget de fichaje)
         $vmUsuario = DB::table('vm_usuarios')
             ->where('admin_user_id', auth()->id())
-            ->first(['id', 'nombre', 'id_rol']);
+            ->first(['id', 'nombre', 'id_rol', 'id_departamento']);
 
         // Visibilidad por rol
         $rolId = (int) ($vmUsuario->id_rol ?? 0);
@@ -316,11 +351,32 @@ class DashboardController extends Controller
                 ->get(['id', 'tipo', 'fecha_inicio', 'fecha_fin', 'comentario'])
             : collect();
 
+        // ── Recordatorios SSCC asignados a mí, mi rol o mi departamento ──────
+        // vm_tareas_sscc no repercute en el informe mensual (no toca imputaciones/fichaje/
+        // ausencias/horarios) -- son simples recordatorios visibles a quien corresponda.
+        $recordatoriosSscc = collect();
+        if ($vmUsuario) {
+            $recordatoriosSscc = DB::table('vm_tareas_sscc')
+                ->where('deleted', 0)
+                ->where('hidden', 0)
+                ->whereNotIn('estado', ['Finalizada', 'Completada', 'Cancelada', 'Descartada'])
+                ->orderBy('fecha_planificada')
+                ->get(['id', 'nombre', 'fecha_planificada', 'control_user', 'id_rol', 'id_departamento'])
+                ->filter(function ($t) use ($vmUsuario) {
+                    $ids = json_decode($t->control_user ?? '[]', true) ?? [];
+                    if (in_array($vmUsuario->id, $ids)) return true;
+                    if ($t->id_rol && (int) $t->id_rol === (int) $vmUsuario->id_rol) return true;
+                    if ($t->id_departamento && $vmUsuario->id_departamento && (int) $t->id_departamento === (int) $vmUsuario->id_departamento) return true;
+                    return false;
+                })
+                ->values();
+        }
+
         return view('dashboard', compact(
             'project',
             'conciliaciones',
             'tareasLimpieza', 'tareasMantPisc', 'breezewayPendientes',
-            'turnoSinFichaje', 'desviaciones',
+            'turnoSinFichaje', 'desviaciones', 'recordatoriosSscc',
             'conflictosFichaje',
             'vmUsuario', 'proximasAusencias',
             'verReservas', 'verRRHH', 'verAusenciasSin', 'verLimpSinImp', 'verMantSinImp'
@@ -521,13 +577,15 @@ class DashboardController extends Controller
 
         $hora   = now()->format('H:i:s');
         $nombre = now()->format('Y.m.d') . '_' . $user->nombre;
-        DB::table('vm_fichaje')->insert([
+        $fichajeId = DB::table('vm_fichaje')->insertGetId([
             'fecha_fichaje' => $hoy, 'control_user' => $user->id, 'nombre' => $nombre,
             'hora_inicio'   => $hora, 'hora_ini_auto' => $hora,
             'createuser'    => $user->id, 'createdat' => now(),
         ]);
 
-        return response()->json(['ok' => true, 'hora' => now()->format('H:i')]);
+        $aviso = InformeAprobacionGuard::checkAndLog((int) $user->id, $hoy, 'vm_fichaje', 'insert', $fichajeId, $request);
+
+        return response()->json(['ok' => true, 'hora' => now()->format('H:i'), 'aviso_aprobacion' => $aviso]);
     }
 
     public function fichajePausa(Request $request, Project $project)
@@ -552,7 +610,10 @@ class DashboardController extends Controller
         }
 
         DB::table('vm_fichaje')->where('id', $fichaje->id)->update($update);
-        return response()->json(['ok' => true]);
+
+        $aviso = InformeAprobacionGuard::checkAndLog((int) $user->id, $fichaje->fecha_fichaje, 'vm_fichaje', 'update', $fichaje->id, $request);
+
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $aviso]);
     }
 
     public function fichajeSalida(Request $request, Project $project)
@@ -570,6 +631,8 @@ class DashboardController extends Controller
         DB::table('vm_fichaje')->where('id', $fichaje->id)
             ->update(['hora_fin' => $hora, 'hora_fin_auto' => $hora, 'updateuser' => $user->id, 'updatedat' => now()]);
 
-        return response()->json(['ok' => true, 'hora' => now()->format('H:i')]);
+        $aviso = InformeAprobacionGuard::checkAndLog((int) $user->id, $fichaje->fecha_fichaje, 'vm_fichaje', 'update', $fichaje->id, $request);
+
+        return response()->json(['ok' => true, 'hora' => now()->format('H:i'), 'aviso_aprobacion' => $aviso]);
     }
 }

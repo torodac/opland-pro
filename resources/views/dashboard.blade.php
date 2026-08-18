@@ -57,6 +57,38 @@
     @endif
   </div>
 
+  {{-- Recordatorios SSCC (asignados a mí, mi rol o mi departamento) --}}
+  @if($vmUsuario)
+  <div class="db-card" style="margin-bottom:12px;">
+    <p class="db-title"><i class="ti ti-list-check"></i> Mis tareas <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Tareas SSCC asignadas a ti, a tu rol o a tu departamento. No repercuten en el informe mensual.</span></span></p>
+    @if($recordatoriosSscc->isEmpty())
+      <p class="db-empty">Sin tareas pendientes.</p>
+    @else
+    <table class="db-table" id="tbl-recordatorios-sscc">
+      <thead><tr><th>Tarea</th><th>Planificada</th><th></th></tr></thead>
+      <tbody>
+        @foreach($recordatoriosSscc as $t)
+        <tr data-id="{{ $t->id }}">
+          <td style="font-weight:500;">{{ $t->nombre }}</td>
+          <td style="color:#888;">{{ $t->fecha_planificada ? \Carbon\Carbon::parse($t->fecha_planificada)->translatedFormat('d M') : '—' }}</td>
+          <td style="white-space:nowrap;">
+            <a href="{{ route('ficha', [$project->slug, 'tareas_sscc', $t->id]) }}" target="_blank"
+               class="badge-sm" style="background:#E6F1FB;color:#0C447C;text-decoration:none;padding:3px 8px;border-radius:4px;display:inline-block;">
+              Ver
+            </a>
+            <button class="badge-sm" style="background:#EAF3DE;color:#27500A;border:none;cursor:pointer;padding:3px 8px;border-radius:4px;"
+                    onclick="marcarSsccHecho(this, {{ $t->id }})">
+              Hecho
+            </button>
+          </td>
+        </tr>
+        @endforeach
+      </tbody>
+    </table>
+    @endif
+  </div>
+  @endif
+
   {{-- Fila 1: contadores hoy -----------------------------------------------}}
   @if($verReservas)
   <div class="db-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:12px;">
@@ -463,6 +495,25 @@ async function validarTarea(btn, id, tipo) {
         btn.disabled = false;
         btn.textContent = 'Validar';
         alert('Error al validar');
+    }
+}
+
+async function marcarSsccHecho(btn, id) {
+    btn.disabled = true;
+    btn.textContent = '…';
+
+    const r = await fetch(BASE_DB + '/sscc/' + id + '/hecho', {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': CSRF_DB, 'Accept': 'application/json' },
+    });
+    const data = await r.json().catch(() => ({}));
+
+    if (r.ok && data.ok) {
+        btn.closest('tr').remove();
+    } else {
+        btn.disabled = false;
+        btn.textContent = 'Hecho';
+        alert(data.error || 'Error al marcar como hecho');
     }
 }
 </script>
