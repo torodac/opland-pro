@@ -48,11 +48,24 @@ class NovacionesController extends Controller
 
         $historial = $propId ? $this->historialDocumentos($propId, $year, $month) : collect();
 
-        [$yAnterior, $mAnterior] = $this->mesAnterior($year, $month);
-        $tareaRevision = $propId ? $this->tareaRevisionPendiente($propId, $yAnterior, $mAnterior) : null;
-
         $meses_es = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
                      'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+        // Tareas de revisión pendientes en cualquiera de los últimos 6 meses (no solo el
+        // mes inmediatamente anterior), ya que sincronizar() ahora revisa ese rango completo.
+        $tareasRevision = collect();
+        if ($propId) {
+            $yAct = $year;
+            $mAct = $month;
+            for ($i = 0; $i < 6; $i++) {
+                [$yAct, $mAct] = $this->mesAnterior($yAct, $mAct);
+                $tarea = $this->tareaRevisionPendiente($propId, $yAct, $mAct);
+                if ($tarea) {
+                    $tarea->mes_label = $meses_es[$mAct] . ' ' . $yAct;
+                    $tareasRevision->push($tarea);
+                }
+            }
+        }
 
         return view('novaciones', [
             'project'     => $project,
@@ -64,8 +77,7 @@ class NovacionesController extends Controller
             'month'       => $month,
             'reservas'    => $reservas,
             'historial'   => $historial,
-            'tarea_revision' => $tareaRevision,
-            'mes_anterior_label' => $meses_es[$mAnterior] . ' ' . $yAnterior,
+            'tareas_revision' => $tareasRevision,
             'meses_es'    => $meses_es,
             'breadcrumb'  => [['label' => 'Novaciones', 'url' => '']],
         ]);
@@ -216,24 +228,33 @@ class NovacionesController extends Controller
         $resultadoMesActual = $this->reconciliarMes($propId, $year, $month);
         $this->marcarSincronizado($propId, $hasta);
 
-        // Mes anterior — se re-sincroniza siempre de paso, y si los subtotales que
-        // ya se documentaron (vm_novaciones_documentos) dejan de coincidir con los
+        // 6 meses anteriores — se resincronizan siempre de paso, y por cada uno cuyos
+        // subtotales ya documentados (vm_novaciones_documentos) dejen de coincidir con los
         // recién recalculados, se abre una tarea de revisión para Contabilidad.
-        [$yAnt, $mAnt] = $this->mesAnterior($year, $month);
-        $resultadoMesAnterior = $this->reconciliarMes($propId, $yAnt, $mAnt);
-        $this->marcarSincronizado($propId, Carbon::create($yAnt, $mAnt)->endOfMonth()->toDateString());
+        $erroresAnteriores = 0;
+        $tareasCreadas = [];
+        $yAct = $year;
+        $mAct = $month;
+        for ($i = 0; $i < 6; $i++) {
+            [$yAct, $mAct] = $this->mesAnterior($yAct, $mAct);
+            $resultadoMes = $this->reconciliarMes($propId, $yAct, $mAct);
+            $this->marcarSincronizado($propId, Carbon::create($yAct, $mAct)->endOfMonth()->toDateString());
+            $erroresAnteriores += $resultadoMes['errores'];
 
-        $tareaCreada = $this->comprobarDiferenciaYCrearTarea($propId, $yAnt, $mAnt);
+            $tarea = $this->comprobarDiferenciaYCrearTarea($propId, $yAct, $mAct);
+            if ($tarea && ($tarea['creada'] ?? false)) {
+                $tareasCreadas[] = ['year' => $yAct, 'month' => $mAct] + $tarea;
+            }
+        }
 
         $ahora = now();
 
         return response()->json([
             'ok'                    => true,
             'procesadas'            => $resultadoMesActual['procesadas'],
-            'errores'               => $resultadoMesActual['errores'] + $resultadoMesAnterior['errores'],
+            'errores'               => $resultadoMesActual['errores'] + $erroresAnteriores,
             'ultima_sincronizacion' => $ahora->format('d/m/Y H:i'),
-            'mes_anterior'          => ['year' => $yAnt, 'month' => $mAnt],
-            'tarea_revision'        => $tareaCreada,
+            'tareas_revision'       => $tareasCreadas,
         ]);
     }
 
@@ -276,6 +297,10 @@ class NovacionesController extends Controller
                 }
                 foreach ($detail as $linea) {
                     $texto = trim($linea['text'] ?? '');
+                    // Icnea devuelve el catalan "allotjament" para el concepto de alojamiento.
+                    if (strcasecmp($texto, 'allotjament') === 0) {
+                        $texto = 'alojamiento';
+                    }
                     if ($texto !== '') {
                         $lineas[$texto] = (float) ($linea['import'] ?? 0);
                     }

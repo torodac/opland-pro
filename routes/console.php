@@ -112,3 +112,9 @@ Schedule::call(function () {
         }
     }
 })->dailyAt('08:00')->name('vm:cierre-fichajes')->withoutOverlapping();
+
+// Sincroniza vm_reservas_importes (incluida "Comisión canal") para reservas con
+// checkout reciente -- antes no se ejecutaba nunca de forma automática.
+Schedule::command('icnea:sync-importes', ['--meses' => 6])
+    ->dailyAt('06:00')
+    ->withoutOverlapping();

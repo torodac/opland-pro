@@ -41,6 +41,7 @@ class LiquidacionController extends Controller
         $importesProp = DB::table('vm_reservas_importes')
             ->whereIn('booking_id', $bookingIds)
             ->where('propietario', 1)
+            ->where('deleted', 0)
             ->groupBy('booking_id')
             ->selectRaw('booking_id, SUM(importe) as total')
             ->pluck('total', 'booking_id');
@@ -49,6 +50,7 @@ class LiquidacionController extends Controller
         $comisionCanal = DB::table('vm_reservas_importes')
             ->whereIn('booking_id', $bookingIds)
             ->where('texto', 'Comisión canal')
+            ->where('deleted', 0)
             ->pluck('importe', 'booking_id');
 
         $byPropiedad = $reservas->groupBy('propiedad');
@@ -91,8 +93,8 @@ class LiquidacionController extends Controller
             ->get(['r.id', 'r.booking_id', 'r.guest_name', 'r.check_in_date', 'r.check_out_date', 'r.liquidado', 'p.id as propiedad_id', 'p.nombre as propiedad']);
 
         $bookingIds    = $reservas->pluck('booking_id');
-        $importesProp  = DB::table('vm_reservas_importes')->whereIn('booking_id', $bookingIds)->where('propietario', 1)->groupBy('booking_id')->selectRaw('booking_id, SUM(importe) as total')->pluck('total', 'booking_id');
-        $comisionCanal = DB::table('vm_reservas_importes')->whereIn('booking_id', $bookingIds)->where('texto', 'Comisión canal')->pluck('importe', 'booking_id');
+        $importesProp  = DB::table('vm_reservas_importes')->whereIn('booking_id', $bookingIds)->where('propietario', 1)->where('deleted', 0)->groupBy('booking_id')->selectRaw('booking_id, SUM(importe) as total')->pluck('total', 'booking_id');
+        $comisionCanal = DB::table('vm_reservas_importes')->whereIn('booking_id', $bookingIds)->where('texto', 'Comisión canal')->where('deleted', 0)->pluck('importe', 'booking_id');
         $byPropiedad   = $reservas->groupBy('propiedad');
 
         $meses = [1=>'Enero',2=>'Febrero',3=>'Marzo',4=>'Abril',5=>'Mayo',6=>'Junio',7=>'Julio',8=>'Agosto',9=>'Septiembre',10=>'Octubre',11=>'Noviembre',12=>'Diciembre'];
