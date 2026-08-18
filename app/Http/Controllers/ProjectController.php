@@ -48,10 +48,17 @@ class ProjectController extends Controller
             return route('listado', [$project->slug, $tabla]);
         }
 
-        // 3. Fallback: primer ítem del menú del proyecto
-        $first = $project->menuItems()->whereHas('projectTable', fn($q) => $q->where('admin_only', false))->first();
-        if ($first?->projectTable) {
-            return route('listado', [$project->slug, $first->projectTable->name]);
+        // 3. Fallback: primer ítem del menú del proyecto -- incluye tanto los basados en tabla
+        // (admin_only=false) como los de URL directa (ej. Dashboard, Power BI embebido), usando
+        // resolveUrl() para que se resuelvan exactamente igual que en el sidebar.
+        $first = $project->menuItems()
+            ->where(function ($q) {
+                $q->whereNull('project_table_id')
+                  ->orWhereHas('projectTable', fn($q2) => $q2->where('admin_only', false));
+            })
+            ->first();
+        if ($first) {
+            return $first->resolveUrl();
         }
 
         return url('/');
