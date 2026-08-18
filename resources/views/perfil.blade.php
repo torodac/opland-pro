@@ -83,6 +83,80 @@
                 </button>
             </div>
         </form>
+
+        {{-- Firma manuscrita: se usa para validar informes mensuales --}}
+        <div class="bg-white rounded-xl border border-gray-200 p-5 mt-4">
+            <label class="block text-sm text-gray-400 mb-3">Firma</label>
+
+            <div style="position:relative;width:110px;height:64px;">
+                <div style="width:110px;height:64px;border:1px solid #e5e7eb;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fafafa;">
+                    @if($signature_url)
+                        <img src="{{ $signature_url }}" alt="Firma actual" style="max-width:100%;max-height:100%;">
+                    @else
+                        <span class="text-xs text-gray-300">Sin firma</span>
+                    @endif
+                </div>
+                <button type="button" onclick="toggleFirmaEdit()" title="Editar firma"
+                        style="position:absolute;bottom:-4px;right:-4px;width:28px;height:28px;border-radius:50%;background:#fff;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#555;padding:0;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>
+                </button>
+            </div>
+
+            <div id="firma-edit-block" style="display:none;margin-top:14px;">
+                <canvas id="signature-pad" width="400" height="150" style="border:1px solid #d1d5db;border-radius:8px;width:100%;max-width:400px;touch-action:none;"></canvas>
+
+                <div class="mt-3 flex gap-2">
+                    <button type="button" onclick="window.__sigPad.clear()"
+                            class="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">
+                        Borrar
+                    </button>
+                    <button type="button" onclick="guardarFirma()"
+                            class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors">
+                        Guardar firma
+                    </button>
+                    <button type="button" onclick="toggleFirmaEdit()"
+                            class="px-3 py-1.5 text-gray-500 hover:text-gray-700 text-sm font-medium transition-colors">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4/dist/signature_pad.umd.min.js"></script>
+    <script>
+        function toggleFirmaEdit() {
+            const block = document.getElementById('firma-edit-block');
+            const show = block.style.display === 'none';
+            block.style.display = show ? 'block' : 'none';
+            if (show) {
+                if (!window.__sigPad) {
+                    window.__sigPad = new SignaturePad(document.getElementById('signature-pad'));
+                }
+                window.__sigPad.clear();
+            }
+        }
+
+        function guardarFirma() {
+            if (!window.__sigPad || window.__sigPad.isEmpty()) {
+                alert('Dibuja tu firma antes de guardar.');
+                return;
+            }
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '{{ route('perfil.firma') }}';
+
+            const csrf = document.createElement('input');
+            csrf.type = 'hidden'; csrf.name = '_token'; csrf.value = '{{ csrf_token() }}';
+            form.appendChild(csrf);
+
+            const sig = document.createElement('input');
+            sig.type = 'hidden'; sig.name = 'signature'; sig.value = window.__sigPad.toDataURL('image/png');
+            form.appendChild(sig);
+
+            document.body.appendChild(form);
+            form.submit();
+        }
+    </script>
 
 </x-app-layout>

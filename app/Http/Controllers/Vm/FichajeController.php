@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Vm;
 
 use App\Http\Controllers\Controller;
 use App\Models\Project;
+use App\Services\InformeAprobacionGuard;
 use App\Services\VmHorasService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -139,7 +140,9 @@ class FichajeController extends Controller
             'createdat'      => now(),
         ]);
 
-        return redirect()->route('vm.fichaje_form', [$project->slug, $id]);
+        $aviso = InformeAprobacionGuard::checkAndLog((int) $data['control_user'], $data['fecha_fichaje'], 'vm_fichaje', 'insert', $id, $request);
+
+        return redirect()->route('vm.fichaje_form', [$project->slug, $id])->with('aviso_aprobacion', $aviso);
     }
 
     public function show(Project $project, int $id)
@@ -314,6 +317,8 @@ class FichajeController extends Controller
 
         DB::table('vm_fichaje')->where('id', $id)->update($data);
 
-        return response()->json(['ok' => true]);
+        $aviso = InformeAprobacionGuard::checkAndLog((int) $data['control_user'], $data['fecha_fichaje'], 'vm_fichaje', 'update', $id, $request);
+
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $aviso]);
     }
 }

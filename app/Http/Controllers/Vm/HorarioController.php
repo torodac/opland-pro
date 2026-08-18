@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Vm;
 use App\Http\Controllers\Controller;
 
 use App\Models\Project;
+use App\Services\InformeAprobacionGuard;
 use App\Services\VmHorasService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -141,6 +142,7 @@ class HorarioController extends Controller
     public function store(Request $request, Project $project)
     {
         $entries = $request->input('entries', []);
+        $avisos = [];
 
         foreach ($entries as $entry) {
             DB::table('vm_horarios')->upsert([
@@ -152,22 +154,33 @@ class HorarioController extends Controller
                 'updatedat'   => now(),
                 'createdat'   => now(),
             ], ['id_usuario', 'fecha'], ['tipo', 'hora_inicio', 'hora_fin', 'updatedat']);
+
+            $aviso = InformeAprobacionGuard::checkAndLog(
+                (int) $entry['id_usuario'], $entry['fecha'], 'vm_horarios', 'update', null, $request
+            );
+            if ($aviso) $avisos[] = $aviso;
         }
 
-        return response()->json(['ok' => true]);
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $avisos[0] ?? null]);
     }
 
     public function destroy(Request $request, Project $project)
     {
         $entries = $request->input('entries', []);
+        $avisos = [];
 
         foreach ($entries as $entry) {
             DB::table('vm_horarios')
                 ->where('id_usuario', (int) $entry['id_usuario'])
                 ->where('fecha', $entry['fecha'])
                 ->delete();
+
+            $aviso = InformeAprobacionGuard::checkAndLog(
+                (int) $entry['id_usuario'], $entry['fecha'], 'vm_horarios', 'delete', null, $request
+            );
+            if ($aviso) $avisos[] = $aviso;
         }
 
-        return response()->json(['ok' => true]);
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $avisos[0] ?? null]);
     }
 }

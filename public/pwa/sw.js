@@ -1,4 +1,4 @@
-const CACHE = 'vm-pwa-v3';
+const CACHE = 'vm-pwa-v8';
 const ASSETS = [
   '/pwa/',
   '/pwa/app.js',

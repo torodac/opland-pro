@@ -1049,6 +1049,7 @@ async function guardarImp() {
       document.getElementById('imp-usuario').value = '';
       document.getElementById('imp-dur').value = '00:00';
       document.getElementById('imp-obs').value = '';
+      if (data.aviso_aprobacion) alert(data.aviso_aprobacion);
     }
   } catch(e) { alert('Error al guardar la imputación.'); }
   btn.disabled = false; btn.textContent = 'Guardar';
@@ -1099,6 +1100,7 @@ async function guardarEditImp() {
       impTotal = impTotal - oldDur + imp.duracion;
       updateImpBadge();
       closeModal('modal-edit-imp');
+      if (data.aviso_aprobacion) alert(data.aviso_aprobacion);
     }
   } catch(e) { alert('Error al guardar.'); }
   btn.disabled = false; btn.textContent = 'Guardar';

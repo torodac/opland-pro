@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Vm;
 
 use App\Http\Controllers\Controller;
 use App\Models\Project;
+use App\Services\InformeAprobacionGuard;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
@@ -227,8 +228,13 @@ class TareaController extends Controller
 
         $usuario = DB::table('vm_usuarios')->where('id', $request->id_usuario)->value('nombre');
 
+        $aviso = InformeAprobacionGuard::checkAndLog(
+            (int) $request->id_usuario, $request->fecha_imputacion, 'vm_imputaciones', 'insert', $impId, $request
+        );
+
         return response()->json([
             'ok'  => true,
+            'aviso_aprobacion' => $aviso,
             'imp' => [
                 'id'               => $impId,
                 'id_usuario'       => (int) $request->id_usuario,
@@ -269,7 +275,11 @@ class TareaController extends Controller
             ->first(['i.id', 'i.id_usuario', 'u.nombre as usuario_nombre',
                      'i.duracion', 'i.fecha_imputacion', 'i.observacion']);
 
-        return response()->json(['ok' => true, 'imp' => [
+        $aviso = InformeAprobacionGuard::checkAndLog(
+            (int) $imp->id_usuario, $imp->fecha_imputacion, 'vm_imputaciones', 'update', $impId, $request
+        );
+
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $aviso, 'imp' => [
             'id'               => $imp->id,
             'id_usuario'       => $imp->id_usuario,
             'usuario_nombre'   => $imp->usuario_nombre,
@@ -305,13 +315,19 @@ class TareaController extends Controller
         $tableName = 'tareas_' . $this->tableSuffix($tipo);
         abort_unless(auth()->user()->canEditTable($project, $tableName), 403);
 
+        $imp = DB::table('vm_imputaciones')->where('id', $impId)->first(['id_usuario', 'fecha_imputacion']);
+
         DB::table('vm_imputaciones')
             ->where('id', $impId)
             ->where('tipo', $tipo)
             ->where('id_tarea', $id)
             ->delete();
 
-        return response()->json(['ok' => true]);
+        $aviso = $imp
+            ? InformeAprobacionGuard::checkAndLog((int) $imp->id_usuario, $imp->fecha_imputacion, 'vm_imputaciones', 'delete', $impId, $request)
+            : null;
+
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $aviso]);
     }
 
     public function storeFoto(Request $req, Project $project, string $tipo, int $id): JsonResponse

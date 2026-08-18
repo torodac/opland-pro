@@ -135,10 +135,90 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
         Ficha usuario
     </a>
+
     @endif
 
 </div>
 </form>
+
+@php
+$paso_labels = ['rrhh' => 'RRHH', 'coordinador' => 'Coordinador', 'trabajador' => 'Trabajador', 'direccion' => 'Dirección', 'completado' => 'Completado'];
+@endphp
+
+@if($en_aprobacion || $can_select_todos || $puede_firmar_coordinador || $puede_firmar_trabajador || $puede_firmar_direccion)
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fff;padding:10px 14px;border-radius:8px;box-shadow:0 1px 6px rgba(0,0,0,.07);margin-top:10px;">
+
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 {{ $paso_actual === 'completado' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-200' }} text-sm font-medium rounded-lg border">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+        @if($paso_actual === 'completado')
+            Aprobación completa
+        @elseif($en_aprobacion)
+            Pendiente: {{ $paso_labels[$paso_actual] ?? $paso_actual }}
+        @else
+            Sin iniciar
+        @endif
+    </span>
+
+    @foreach($aprobaciones as $ap)
+        <span class="inline-flex items-center gap-1 px-2 py-1 bg-gray-50 text-gray-500 text-xs rounded-lg border border-gray-200"
+              title="{{ $ap->aprobado_por_nombre }} — {{ \Carbon\Carbon::parse($ap->aprobado_at)->format('d/m/Y H:i') }}">
+            {{ $paso_labels[$ap->step] ?? $ap->step }} ✓
+        </span>
+    @endforeach
+
+    @if($can_select_todos && $paso_actual === 'rrhh' && !$en_aprobacion)
+        <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 text-sm font-medium rounded-lg transition-colors border border-orange-200"
+            onclick="firmarPaso('{{ route('informe-imputaciones.validar', $project->slug) }}')">
+            Validar informe (RRHH)
+        </button>
+    @endif
+
+    @if($puede_firmar_coordinador)
+        <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 text-sm font-medium rounded-lg transition-colors border border-orange-200"
+            onclick="firmarPaso('{{ route('informe-imputaciones.firmar-coordinador', $project->slug) }}')">
+            Firmar como coordinador
+        </button>
+    @endif
+
+    @if($puede_firmar_trabajador)
+        <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 text-sm font-medium rounded-lg transition-colors border border-orange-200"
+            onclick="firmarPaso('{{ route('informe-imputaciones.firmar-trabajador', $project->slug) }}')">
+            Firmar mi informe
+        </button>
+    @endif
+
+    @if($puede_firmar_direccion)
+        <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 text-sm font-medium rounded-lg transition-colors border border-orange-200"
+            onclick="firmarPaso('{{ route('informe-imputaciones.firmar-direccion', $project->slug) }}')">
+            Firmar como Dirección
+        </button>
+    @endif
+
+    @if($can_select_todos && $en_aprobacion)
+        <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-medium rounded-lg transition-colors border border-red-200"
+            onclick="firmarPaso('{{ route('informe-imputaciones.anular-validacion', $project->slug) }}', '¿Reiniciar todo el flujo de aprobación de este informe? Se perderán las firmas ya dadas y los avisos de edición dejarán de mostrarse hasta que se vuelva a validar.')">
+            Reiniciar flujo
+        </button>
+    @endif
+
+</div>
+@endif
+
+<script>
+function firmarPaso(url, confirmMsg) {
+    if (confirmMsg && !confirm(confirmMsg)) return;
+    fetch(url + '?year={{ $year }}&month={{ $month }}&user_id={{ $user_id }}', {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' },
+    })
+    .then(async r => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || data.message || 'No se pudo completar la acción.');
+        location.reload();
+    })
+    .catch(e => alert(e.message || 'No se pudo completar la acción.'));
+}
+</script>
 
 @if(!empty($ajustes_anio) && $ajustes_anio->isNotEmpty())
 <div style="margin-bottom:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;">

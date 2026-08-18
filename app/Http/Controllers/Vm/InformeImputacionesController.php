@@ -42,6 +42,24 @@ class InformeImputacionesController extends Controller
             ? $allUsuarios
             : collect();
 
+        $estadoAprobacion = DB::table('vm_informes_estado')
+            ->where('id_usuario', $userId)->where('anio', $year)->where('mes', $month)
+            ->first();
+        $pasoActual = $estadoAprobacion->paso_actual ?? 'rrhh';
+
+        $aprobaciones = DB::table('vm_informes_aprobaciones as a')
+            ->join('admin_users as u', 'u.id', '=', 'a.aprobado_por')
+            ->where('a.id_usuario', $userId)->where('a.anio', $year)->where('a.mes', $month)
+            ->orderByRaw("array_position(array['rrhh','coordinador','trabajador','direccion'], a.step)")
+            ->get(['a.step', 'a.aprobado_at', 'u.name as aprobado_por_nombre']);
+
+        $currentVmUserId = $user->projectUserId($project);
+        $authRol         = $currentVmUserId ? DB::table('vm_usuarios')->where('id', $currentVmUserId)->value('id_rol') : null;
+        $puedeFirmarCoordinador = $pasoActual === 'coordinador' && ($isAdmin || (int) $authRol === 10);
+        $puedeFirmarDireccion   = $pasoActual === 'direccion'   && ($isAdmin || (int) $authRol === 3);
+        $puedeFirmarTrabajador  = $pasoActual === 'trabajador'
+            && (int) DB::table('vm_usuarios')->where('id', $userId)->value('admin_user_id') === (int) auth()->id();
+
         return view('informe-imputaciones', array_merge($data, [
             'project'            => $project,
             'year'               => $year,
@@ -52,10 +70,220 @@ class InformeImputacionesController extends Controller
             'can_select_todos'   => $canSelectTodos,
             'sin_contrato'       => $sinContrato,
             'fecha_fin_contrato' => $fechaFinContrato,
+            'en_aprobacion'      => (bool) ($estadoAprobacion->en_aprobacion ?? false),
+            'validado_at'        => $estadoAprobacion->marcado_at ?? null,
+            'paso_actual'        => $pasoActual,
+            'aprobaciones'       => $aprobaciones,
+            'puede_firmar_coordinador' => $puedeFirmarCoordinador,
+            'puede_firmar_direccion'   => $puedeFirmarDireccion,
+            'puede_firmar_trabajador'  => $puedeFirmarTrabajador,
             'breadcrumb' => [
                 ['label' => 'Informe mensual', 'url' => ''],
             ],
         ]));
+    }
+
+    // Paso 1/4 del flujo de aprobación: RRHH (o Dirección general/admin) firma. A partir de
+    // ahí, cualquier edición de ausencias/fichaje/horarios/imputaciones de ese usuario+mes
+    // muestra un aviso, queda registrada en vm_informes_ediciones_log y reinicia todo el
+    // flujo (InformeAprobacionGuard) -- nunca bloquea el guardado, solo avisa y reinicia.
+    public function validar(Request $request, Project $project)
+    {
+        $user    = auth()->user();
+        $isAdmin = $user->isProjectAdmin($project);
+        [$year, $month, $userId, , , $canSelectTodos] = $this->resolveParams($request, $project, $user, $isAdmin);
+        if (!$canSelectTodos) {
+            return response()->json(['error' => 'No tienes permiso para validar este informe.'], 403);
+        }
+
+        return $this->responderFirma($this->firmarPaso($userId, $year, $month, 'rrhh', (int) auth()->id(), $request));
+    }
+
+    // Paso 2/4: el coordinador del equipo (rol 10, Dirección de Operaciones) firma.
+    public function firmarCoordinador(Request $request, Project $project)
+    {
+        $user    = auth()->user();
+        $isAdmin = $user->isProjectAdmin($project);
+        [$year, $month, $userId] = $this->resolveParams($request, $project, $user, $isAdmin);
+
+        $currentVmUserId = $user->projectUserId($project);
+        $authRol         = $currentVmUserId ? DB::table('vm_usuarios')->where('id', $currentVmUserId)->value('id_rol') : null;
+        if (!($isAdmin || (int) $authRol === 10)) {
+            return response()->json(['error' => 'Solo el coordinador (Dirección de Operaciones) puede firmar este paso.'], 403);
+        }
+
+        return $this->responderFirma($this->firmarPaso($userId, $year, $month, 'coordinador', (int) auth()->id(), $request));
+    }
+
+    // Paso 3/4: el propio trabajador firma su informe (autofirma, sin rol especial).
+    // Accesible desde backoffice y desde la PWA (VacationmarbellaPwaController delega aquí).
+    public function firmarTrabajador(Request $request, Project $project)
+    {
+        $user    = auth()->user();
+        $isAdmin = $user->isProjectAdmin($project);
+        [$year, $month, $userId] = $this->resolveParams($request, $project, $user, $isAdmin);
+
+        $ownerAdminUserId = DB::table('vm_usuarios')->where('id', $userId)->value('admin_user_id');
+        if (!($ownerAdminUserId && (int) $ownerAdminUserId === (int) auth()->id())) {
+            return response()->json(['error' => 'Solo puedes firmar tu propio informe.'], 403);
+        }
+
+        return $this->responderFirma($this->firmarPaso($userId, $year, $month, 'trabajador', (int) auth()->id(), $request));
+    }
+
+    // Paso 4/4: Dirección general (rol 3) firma y el flujo queda completo.
+    public function firmarDireccion(Request $request, Project $project)
+    {
+        $user    = auth()->user();
+        $isAdmin = $user->isProjectAdmin($project);
+        [$year, $month, $userId] = $this->resolveParams($request, $project, $user, $isAdmin);
+
+        $currentVmUserId = $user->projectUserId($project);
+        $authRol         = $currentVmUserId ? DB::table('vm_usuarios')->where('id', $currentVmUserId)->value('id_rol') : null;
+        if (!($isAdmin || (int) $authRol === 3)) {
+            return response()->json(['error' => 'Solo Dirección general puede firmar este paso.'], 403);
+        }
+
+        return $this->responderFirma($this->firmarPaso($userId, $year, $month, 'direccion', (int) auth()->id(), $request));
+    }
+
+    // Traduce el resultado de firmarPaso() (que nunca lanza abort(), para que el error real
+    // llegue como JSON al fetch() -- esta app renderiza abort() como página HTML incluso
+    // cuando se pide Accept: application/json) a la respuesta HTTP correspondiente.
+    private function responderFirma(array $result)
+    {
+        if (isset($result['error'])) {
+            return response()->json(['error' => $result['error']], $result['status'] ?? 400);
+        }
+        return response()->json($result);
+    }
+
+    // Reinicia el flujo completo (las 4 firmas) al principio. Mismo gate que el paso 1
+    // (RRHH/Dirección general/admin), pensado para corregir una validación errónea.
+    public function anularValidacion(Request $request, Project $project)
+    {
+        $user    = auth()->user();
+        $isAdmin = $user->isProjectAdmin($project);
+        [$year, $month, $userId, , , $canSelectTodos] = $this->resolveParams($request, $project, $user, $isAdmin);
+        if (!$canSelectTodos) {
+            return response()->json(['error' => 'No tienes permiso para reiniciar este flujo.'], 403);
+        }
+
+        DB::table('vm_informes_estado')
+            ->where('id_usuario', $userId)->where('anio', $year)->where('mes', $month)
+            ->update(['en_aprobacion' => false, 'paso_actual' => 'rrhh', 'updatedat' => now()]);
+
+        DB::table('vm_informes_aprobaciones')
+            ->where('id_usuario', $userId)->where('anio', $year)->where('mes', $month)
+            ->delete();
+
+        return response()->json(['ok' => true, 'en_aprobacion' => false, 'paso_actual' => 'rrhh']);
+    }
+
+    // Registra la firma de $step (validando que sea justo el paso en curso y que quien firma
+    // tenga su firma manuscrita guardada), calcula el hash del informe en ese instante y avanza
+    // al siguiente paso (o a 'completado' si era el último). Compartido por los 4 métodos de
+    // firma de arriba y por VacationmarbellaPwaController::firmarInformeTrabajador().
+    public function firmarPaso(int $userId, int $year, int $month, string $step, int $aprobadoPor, Request $request): array
+    {
+        $siguientePaso = [
+            'rrhh'        => 'coordinador',
+            'coordinador' => 'trabajador',
+            'trabajador'  => 'direccion',
+            'direccion'   => 'completado',
+        ];
+        if (!isset($siguientePaso[$step])) {
+            return ['error' => 'Paso de aprobación desconocido.', 'status' => 400];
+        }
+
+        $pasoActual = DB::table('vm_informes_estado')
+            ->where('id_usuario', $userId)->where('anio', $year)->where('mes', $month)
+            ->value('paso_actual') ?? 'rrhh';
+        if ($pasoActual !== $step) {
+            return ['error' => "El informe no está en el paso '{$step}' (está en '{$pasoActual}').", 'status' => 409];
+        }
+
+        $signaturePath = DB::table('admin_users')->where('id', $aprobadoPor)->value('signature_path');
+        if (!$signaturePath) {
+            return ['error' => 'Debes registrar tu firma en tu perfil antes de continuar.', 'status' => 422];
+        }
+
+        $hash  = $this->contentHash($userId, $year, $month);
+        $ahora = now();
+
+        DB::table('vm_informes_aprobaciones')->upsert(
+            [[
+                'id_usuario' => $userId, 'anio' => $year, 'mes' => $month, 'step' => $step,
+                'aprobado_por' => $aprobadoPor, 'content_hash' => $hash, 'ip_address' => $request->ip(),
+                'aprobado_at' => $ahora, 'createdat' => $ahora, 'updatedat' => $ahora,
+            ]],
+            ['id_usuario', 'anio', 'mes', 'step'],
+            ['aprobado_por', 'content_hash', 'ip_address', 'aprobado_at', 'updatedat']
+        );
+
+        $nuevoPaso = $siguientePaso[$step];
+        DB::table('vm_informes_estado')->upsert(
+            [[
+                'id_usuario' => $userId, 'anio' => $year, 'mes' => $month,
+                'en_aprobacion' => true, 'paso_actual' => $nuevoPaso,
+                'marcado_por' => $aprobadoPor, 'marcado_at' => $ahora,
+                'createdat' => $ahora, 'updatedat' => $ahora,
+            ]],
+            ['id_usuario', 'anio', 'mes'],
+            ['en_aprobacion', 'paso_actual', 'marcado_por', 'marcado_at', 'updatedat']
+        );
+
+        return ['ok' => true, 'paso_actual' => $nuevoPaso];
+    }
+
+    // Resumen simplificado del informe mensual para la pantalla "Mi informe" de la PWA
+    // (sin la rejilla día a día, solo los totales que ya calcula getInformeData()/getYearStats()).
+    public function resumenParaPwa(int $userId, int $year, int $month): array
+    {
+        $data  = $this->getInformeData($userId, $year, $month);
+        $stats = $data['year_stats'][$month] ?? null;
+
+        $ausencias = collect($data['dias'])
+            ->filter(fn($d) => $d['tipo'])
+            ->groupBy(fn($d) => $d['tipo']->nombre)
+            ->map(fn($g) => $g->count());
+
+        return [
+            'usuario'               => $data['usuario']->nombre ?? null,
+            'dias_trabajados'       => $stats['dias_col']['T'] ?? 0,
+            'horas_extra_positivas' => $stats['ep'] ?? 0,
+            'horas_extra_negativas' => $stats['en'] ?? 0,
+            'ausencias'             => $ausencias,
+        ];
+    }
+
+    // Hash determinista del contenido de negocio del informe (fichajes/ausencias/imputaciones
+    // ya resueltos día a día), usado solo como evidencia adjunta a cada firma -- no bloquea nada.
+    private function contentHash(int $userId, int $year, int $month): string
+    {
+        $data = $this->getInformeData($userId, $year, $month);
+
+        $dias = array_map(fn($d) => [
+            'fecha'     => $d['fecha'],
+            'entrada'   => $d['entrada'],
+            'salida'    => $d['salida'],
+            'tf_min'    => $d['tf_min'],
+            'p_min'     => $d['p_min'],
+            'he_min'    => $d['he_min'],
+            'ajuste_he' => $d['ajuste_he'],
+            'ht_min'    => $d['ht_min'],
+            'tipo'      => $d['tipo']->nombre ?? null,
+        ], $data['dias']);
+
+        $stats   = $data['year_stats'][$month] ?? null;
+        $resumen = $stats ? [
+            'ep'       => $stats['ep'],
+            'en'       => $stats['en'],
+            'total'    => $stats['total'],
+            'dias_col' => $stats['dias_col'],
+        ] : null;
+
+        return hash('sha256', json_encode(['dias' => $dias, 'resumen' => $resumen], JSON_UNESCAPED_UNICODE));
     }
 
     public function pdf(Request $request, Project $project)
@@ -65,13 +293,14 @@ class InformeImputacionesController extends Controller
 
         [$year, $month, $userId] = $this->resolveParams($request, $project, $user, $isAdmin);
 
+        return $this->buildPdf($userId, $year, $month)->download($this->pdfFilename($userId, $year, $month));
+    }
+
+    // Construye el PDF del informe (mismo documento tanto si lo pide el backoffice como la
+    // PWA -- VacationmarbellaPwaController::miInformePdf() reutiliza esto para su propio informe).
+    public function buildPdf(int $userId, int $year, int $month): \Barryvdh\DomPDF\PDF
+    {
         $data = $this->getInformeData($userId, $year, $month);
-
-        $meses = ['enero','febrero','marzo','abril','mayo','junio',
-                  'julio','agosto','septiembre','octubre','noviembre','diciembre'];
-
-        $nombre   = str_replace(' ', '_', $data['usuario']->nombre ?? 'usuario');
-        $filename = "informe_{$nombre}_{$meses[$month-1]}_{$year}.pdf";
 
         $hoy = date('Y-m-d');
         $contratosUsuario = DB::table('vm_contratos')
@@ -86,14 +315,48 @@ class InformeImputacionesController extends Controller
             ? $contratosUsuario->sortByDesc('fecha_baja')->first()?->fecha_baja
             : null;
 
-        $pdf = Pdf::loadView('informe-imputaciones-pdf', array_merge($data, [
+        return Pdf::loadView('informe-imputaciones-pdf', array_merge($data, [
             'year'             => $year,
             'month'            => $month,
             'sin_contrato'     => $sinContrato,
             'fecha_fin_contrato' => $fechaFinContrato,
+            'aprobaciones_firmadas' => $this->aprobacionesParaPdf($userId, $year, $month),
         ]))->setPaper('a4', 'portrait');
+    }
 
-        return $pdf->download($filename);
+    private function pdfFilename(int $userId, int $year, int $month): string
+    {
+        $meses = ['enero','febrero','marzo','abril','mayo','junio',
+                  'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+        $nombre = str_replace(' ', '_', DB::table('vm_usuarios')->where('id', $userId)->value('nombre') ?? 'usuario');
+        return "informe_{$nombre}_{$meses[$month-1]}_{$year}.pdf";
+    }
+
+    // Devuelve las 4 firmas (con la ruta absoluta de la imagen y el nombre del firmante) solo
+    // si el flujo de aprobación de ese usuario+mes está completo; null en cualquier otro caso.
+    private function aprobacionesParaPdf(int $userId, int $year, int $month): ?array
+    {
+        $pasoActual = DB::table('vm_informes_estado')
+            ->where('id_usuario', $userId)->where('anio', $year)->where('mes', $month)
+            ->value('paso_actual');
+        if ($pasoActual !== 'completado') return null;
+
+        $orden = ['rrhh' => 0, 'coordinador' => 1, 'trabajador' => 2, 'direccion' => 3];
+        $labels = ['rrhh' => 'RRHH', 'coordinador' => 'Coordinador', 'trabajador' => 'Trabajador', 'direccion' => 'Dirección'];
+
+        $rows = DB::table('vm_informes_aprobaciones as a')
+            ->join('admin_users as u', 'u.id', '=', 'a.aprobado_por')
+            ->where('a.id_usuario', $userId)->where('a.anio', $year)->where('a.mes', $month)
+            ->get(['a.step', 'a.aprobado_at', 'u.name as nombre', 'u.signature_path']);
+
+        if ($rows->count() !== 4) return null;
+
+        return $rows->sortBy(fn($r) => $orden[$r->step] ?? 99)->map(fn($r) => [
+            'step'           => $labels[$r->step] ?? $r->step,
+            'nombre'         => $r->nombre,
+            'aprobado_at'    => $r->aprobado_at,
+            'signature_path' => $r->signature_path ? storage_path('app/public/' . $r->signature_path) : null,
+        ])->values()->all();
     }
 
     public function pdfTodos(Request $request, Project $project)

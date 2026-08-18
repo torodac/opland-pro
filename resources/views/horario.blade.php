@@ -413,6 +413,7 @@ function doSave() {
                     td.innerHTML = cellHtml(selTipo, hi, hf);
                 }
             });
+            if (data.aviso_aprobacion) alert(data.aviso_aprobacion);
         }
         closePop();
     }).catch(() => closePop());
@@ -440,6 +441,7 @@ function doDelete() {
                     td.innerHTML = '<div class="hce"></div>';
                 }
             });
+            if (data.aviso_aprobacion) alert(data.aviso_aprobacion);
         }
         closePop();
     }).catch(() => closePop());

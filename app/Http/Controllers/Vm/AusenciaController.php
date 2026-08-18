@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Vm;
 
 use App\Http\Controllers\Controller;
 use App\Models\Project;
+use App\Services\InformeAprobacionGuard;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -129,7 +130,7 @@ class AusenciaController extends Controller
             $fichero = $request->file('fichero')->store('vm/ausencias/' . $request->id_usuarios, 'public');
         }
 
-        DB::table('vm_ausencias')->insert([
+        $id = DB::table('vm_ausencias')->insertGetId([
             'id_usuarios'  => $request->id_usuarios,
             'tipo'         => $request->tipo,
             'fecha_inicio' => $request->fecha_inicio,
@@ -144,7 +145,11 @@ class AusenciaController extends Controller
             'updatedat'    => now(),
         ]);
 
-        return response()->json(['ok' => true]);
+        $aviso = InformeAprobacionGuard::checkAndLog(
+            (int) $request->id_usuarios, $request->fecha_inicio, 'vm_ausencias', 'insert', $id, $request
+        );
+
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $aviso]);
     }
 
     public function update(Request $request, Project $project, int $ausId)
@@ -176,7 +181,11 @@ class AusenciaController extends Controller
 
         DB::table('vm_ausencias')->where('id', $ausId)->update($data);
 
-        return response()->json(['ok' => true]);
+        $aviso = InformeAprobacionGuard::checkAndLog(
+            (int) $request->id_usuarios, $request->fecha_inicio, 'vm_ausencias', 'update', $ausId, $request
+        );
+
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $aviso]);
     }
 
     public function destroy(Request $request, Project $project, int $ausId)
@@ -192,6 +201,10 @@ class AusenciaController extends Controller
             'updatedat'  => now(),
         ]);
 
-        return response()->json(['ok' => true]);
+        $aviso = InformeAprobacionGuard::checkAndLog(
+            (int) $ausencia->id_usuarios, $ausencia->fecha_inicio, 'vm_ausencias', 'delete', $ausId, $request
+        );
+
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $aviso]);
     }
 }

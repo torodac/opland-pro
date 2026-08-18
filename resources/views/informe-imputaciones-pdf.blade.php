@@ -274,6 +274,24 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
             </tbody>
         </table>
 
+        @if(!empty($aprobaciones_firmadas))
+        <div class="firma-sec" style="display:table;width:100%;">
+            @foreach($aprobaciones_firmadas as $ap)
+            <div style="display:table-cell;text-align:center;width:25%;padding:0 4pt;">
+                @if($ap['signature_path'] && file_exists($ap['signature_path']))
+                    <img src="{{ $ap['signature_path'] }}" style="max-width:80pt;max-height:36pt;">
+                @else
+                    <div class="firma-line" style="width:80pt;height:30pt;margin:0 auto 4pt;"></div>
+                @endif
+                <div style="font-size:7pt;margin-top:2pt;">
+                    <strong>{{ $ap['step'] }}</strong><br>
+                    {{ $ap['nombre'] }}<br>
+                    {{ \Carbon\Carbon::parse($ap['aprobado_at'])->format('d/m/Y H:i') }}
+                </div>
+            </div>
+            @endforeach
+        </div>
+        @else
         <div class="firma-sec">
             <strong>Firma:</strong>
             <div class="firma-line"></div>
@@ -282,6 +300,7 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                 @if(!empty($usuario->dni)) con NIF {{ $usuario->dni }} @endif
             </div>
         </div>
+        @endif
     </div>
 
 </div>

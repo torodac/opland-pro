@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Services\InformeAprobacionGuard;
 use App\Services\RoleHierarchy;
 use Illuminate\Support\Str;
 use Minishlink\WebPush\WebPush;
@@ -289,7 +290,11 @@ class VacationmarbellaPwaController extends Controller
             $request->input('lng') !== null ? (float) $request->input('lng') : null
         );
 
-        return response()->json(['ok' => true]);
+        $aviso = InformeAprobacionGuard::checkAndLog(
+            (int) $user->id, $fechaImputacion, 'vm_imputaciones', 'insert', null, $request, $user->admin_user_id
+        );
+
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $aviso]);
     }
 
     public function editarImputacion(Request $request, string $tipo, int $id, int $imputacionId)
@@ -327,7 +332,11 @@ class VacationmarbellaPwaController extends Controller
             $fechaImputacion
         );
 
-        return response()->json(['ok' => true]);
+        $aviso = InformeAprobacionGuard::checkAndLog(
+            (int) $imputacion->id_usuario, $fechaImputacion, 'vm_imputaciones', 'update', $imputacionId, $request, $user->admin_user_id
+        );
+
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $aviso]);
     }
 
     public function reportarTarea(Request $request, string $tipo, int $id)
@@ -505,6 +514,10 @@ class VacationmarbellaPwaController extends Controller
             ->orderByDesc('fecha_alta')
             ->first() : null;
 
+        $signaturePath = $row->admin_user_id
+            ? DB::table('admin_users')->where('id', $row->admin_user_id)->value('signature_path')
+            : null;
+
         return response()->json([
             'id'             => $user->id ?? null,
             'nombre'         => $user->nombre ?? $user->name ?? '',
@@ -513,6 +526,7 @@ class VacationmarbellaPwaController extends Controller
             'rol'            => $rol?->nombre,
             'horas_contrato' => $contrato ? (float) $contrato->horas_semana : null,
             'is_admin'       => $esAdmin,
+            'signature_url'  => $signaturePath ? asset('storage/' . $signaturePath) : null,
         ]);
     }
 
@@ -703,7 +717,7 @@ class VacationmarbellaPwaController extends Controller
 
         $hora   = now()->format('H:i:s');
         $nombre = now()->format('Y.m.d') . '_' . $user->nombre;
-        DB::table('vm_fichaje')->insert([
+        $fichajeId = DB::table('vm_fichaje')->insertGetId([
             'fecha_fichaje'  => $hoy,
             'control_user'   => $user->id,
             'nombre'         => $nombre,
@@ -713,7 +727,9 @@ class VacationmarbellaPwaController extends Controller
             'createdat'      => now(),
         ]);
 
-        return response()->json(['ok' => true, 'hora_inicio' => now()->format('H:i')]);
+        $aviso = InformeAprobacionGuard::checkAndLog((int) $user->id, $hoy, 'vm_fichaje', 'insert', $fichajeId, $request, $user->admin_user_id);
+
+        return response()->json(['ok' => true, 'hora_inicio' => now()->format('H:i'), 'aviso_aprobacion' => $aviso]);
     }
 
     public function fichajeSalida(Request $request)
@@ -739,7 +755,9 @@ class VacationmarbellaPwaController extends Controller
             ->where('id', $fichaje->id)
             ->update(['hora_fin' => $hora, 'hora_fin_auto' => $hora, 'updateuser' => $user->id, 'updatedat' => now()]);
 
-        return response()->json(['ok' => true, 'hora_fin' => now()->format('H:i')]);
+        $aviso = InformeAprobacionGuard::checkAndLog((int) $user->id, $hoy, 'vm_fichaje', 'update', $fichaje->id, $request, $user->admin_user_id);
+
+        return response()->json(['ok' => true, 'hora_fin' => now()->format('H:i'), 'aviso_aprobacion' => $aviso]);
     }
 
     public function fichajePausa(Request $request)
@@ -774,7 +792,9 @@ class VacationmarbellaPwaController extends Controller
 
         DB::table('vm_fichaje')->where('id', $fichaje->id)->update($update);
 
-        return response()->json(['ok' => true, 'msg' => $msg]);
+        $aviso = InformeAprobacionGuard::checkAndLog((int) $user->id, $hoy, 'vm_fichaje', 'update', $fichaje->id, $request, $user->admin_user_id);
+
+        return response()->json(['ok' => true, 'msg' => $msg, 'aviso_aprobacion' => $aviso]);
     }
 
     public function fichajeEditar(Request $request)
@@ -825,7 +845,9 @@ class VacationmarbellaPwaController extends Controller
 
         DB::table('vm_fichaje')->where('id', $fichaje->id)->update($update);
 
-        return response()->json(['ok' => true]);
+        $aviso = InformeAprobacionGuard::checkAndLog((int) $user->id, $fecha, 'vm_fichaje', 'update', $fichaje->id, $request, $user->admin_user_id);
+
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $aviso]);
     }
 
     public function fichajeCrear(Request $request)
@@ -861,7 +883,7 @@ class VacationmarbellaPwaController extends Controller
 
         $nombre = \Carbon\Carbon::parse($fecha)->format('Y.m.d') . '_' . $user->nombre;
 
-        DB::table('vm_fichaje')->insert([
+        $fichajeId = DB::table('vm_fichaje')->insertGetId([
             'fecha_fichaje' => $fecha,
             'control_user'  => $user->id,
             'nombre'        => $nombre,
@@ -876,7 +898,9 @@ class VacationmarbellaPwaController extends Controller
             'createdat'     => now(),
         ]);
 
-        return response()->json(['ok' => true]);
+        $aviso = InformeAprobacionGuard::checkAndLog((int) $user->id, $fecha, 'vm_fichaje', 'insert', $fichajeId, $request, $user->admin_user_id);
+
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $aviso]);
     }
 
     // Helpers
@@ -930,7 +954,7 @@ class VacationmarbellaPwaController extends Controller
         [$h, $m] = explode(':', $request->tiempo);
         $minutos = (int) $h * 60 + (int) $m;
 
-        \App\Services\ImputacionesSync::insertar(
+        $impId = \App\Services\ImputacionesSync::insertar(
             $tipoLabel,
             $idNueva,
             $user->id,
@@ -939,7 +963,11 @@ class VacationmarbellaPwaController extends Controller
             $fecha
         );
 
-        return response()->json(['ok' => true]);
+        $aviso = InformeAprobacionGuard::checkAndLog(
+            (int) $user->id, $fecha, 'vm_imputaciones', 'insert', $impId, $request, $user->admin_user_id
+        );
+
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $aviso]);
     }
 
     public function propiedades(Request $request)
@@ -1209,6 +1237,110 @@ class VacationmarbellaPwaController extends Controller
         ]);
 
         return response()->json(['ok' => true]);
+    }
+
+    // Firma manuscrita (canvas + signature_pad), enviada como PNG en base64. Se guarda en
+    // admin_users.signature_path -- misma columna que usa el perfil del backoffice, ya que
+    // la firma vive a nivel de login, no de perfil por proyecto.
+    public function guardarFirma(Request $request)
+    {
+        $user = $this->authenticate($request);
+        if (!$user->admin_user_id) {
+            return response()->json(['error' => 'No se pudo identificar la cuenta.'], 403);
+        }
+
+        $request->validate(['signature' => 'required|string']);
+
+        $base64 = preg_replace('#^data:image/\w+;base64,#', '', $request->signature);
+        $binary = base64_decode($base64, true);
+        if ($binary === false) {
+            return response()->json(['error' => 'Firma inválida.'], 422);
+        }
+
+        $destDir = storage_path('app/public/signatures');
+        if (!is_dir($destDir)) mkdir($destDir, 0775, true);
+
+        $path = 'signatures/' . $user->admin_user_id . '.png';
+        file_put_contents(storage_path('app/public/' . $path), $binary);
+
+        DB::table('admin_users')->where('id', $user->admin_user_id)->update(['signature_path' => $path]);
+
+        return response()->json(['ok' => true, 'path' => $path]);
+    }
+
+    // Pantalla "Mi informe" de la PWA: resumen del mes + estado del flujo de aprobación
+    // (RRHH -> coordinador -> trabajador -> dirección) + si el usuario puede firmar ya.
+    public function miInforme(Request $request)
+    {
+        $user = $this->authenticate($request);
+        if (!$user->id) {
+            return response()->json(['error' => 'No disponible para esta cuenta.'], 403);
+        }
+
+        $year  = max(2020, min(2040, (int) $request->input('year', now()->year)));
+        $month = max(1, min(12, (int) $request->input('month', now()->month)));
+
+        $estado = DB::table('vm_informes_estado')
+            ->where('id_usuario', $user->id)->where('anio', $year)->where('mes', $month)
+            ->first();
+        $pasoActual = $estado->paso_actual ?? 'rrhh';
+
+        $aprobaciones = DB::table('vm_informes_aprobaciones as a')
+            ->join('admin_users as u', 'u.id', '=', 'a.aprobado_por')
+            ->where('a.id_usuario', $user->id)->where('a.anio', $year)->where('a.mes', $month)
+            ->orderByRaw("array_position(array['rrhh','coordinador','trabajador','direccion'], a.step)")
+            ->get(['a.step', 'a.aprobado_at', 'u.name as aprobado_por_nombre']);
+
+        return response()->json([
+            'year'          => $year,
+            'month'         => $month,
+            'paso_actual'   => $pasoActual,
+            'en_aprobacion' => (bool) ($estado->en_aprobacion ?? false),
+            'puede_firmar'  => $pasoActual === 'trabajador',
+            'aprobaciones'  => $aprobaciones,
+            'resumen'       => (new \App\Http\Controllers\Vm\InformeImputacionesController())
+                ->resumenParaPwa((int) $user->id, $year, $month),
+        ]);
+    }
+
+    // PDF del informe mensual del propio usuario, para consultarlo desde la PWA en cualquier
+    // momento (no hace falta esperar a que el flujo de aprobación esté completo -- el PDF ya
+    // existe desde que RRHH inicia el proceso, igual que el que se descarga en backoffice).
+    public function miInformePdf(Request $request)
+    {
+        $user = $this->authenticate($request);
+        if (!$user->id) {
+            return response()->json(['error' => 'No disponible para esta cuenta.'], 403);
+        }
+
+        $year  = max(2020, min(2040, (int) $request->input('year', now()->year)));
+        $month = max(1, min(12, (int) $request->input('month', now()->month)));
+
+        $pdf = (new \App\Http\Controllers\Vm\InformeImputacionesController())
+            ->buildPdf((int) $user->id, $year, $month);
+
+        return response($pdf->output(), 200, ['Content-Type' => 'application/pdf']);
+    }
+
+    // Firma del paso "trabajador" del flujo de aprobación, delegando en la misma lógica
+    // que usa el backoffice (InformeImputacionesController::firmarPaso) para no duplicarla.
+    public function firmarInformeTrabajador(Request $request)
+    {
+        $user = $this->authenticate($request);
+        if (!$user->id || !$user->admin_user_id) {
+            return response()->json(['error' => 'No disponible para esta cuenta.'], 403);
+        }
+
+        $year  = max(2020, min(2040, (int) $request->input('year', now()->year)));
+        $month = max(1, min(12, (int) $request->input('month', now()->month)));
+
+        $result = (new \App\Http\Controllers\Vm\InformeImputacionesController())
+            ->firmarPaso((int) $user->id, $year, $month, 'trabajador', (int) $user->admin_user_id, $request);
+
+        if (isset($result['error'])) {
+            return response()->json(['error' => $result['error']], $result['status'] ?? 400);
+        }
+        return response()->json($result);
     }
 
     // Jerarquia de roles (delegado en App\Services\RoleHierarchy, compartido con el backoffice)

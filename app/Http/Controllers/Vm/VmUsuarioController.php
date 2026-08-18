@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Vm;
 use App\Http\Controllers\Controller;
 
 use App\Models\Project;
+use App\Services\InformeAprobacionGuard;
 use App\Services\VmHorasService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -373,7 +374,7 @@ class VmUsuarioController extends Controller
             $fichero = $request->file('fichero')->store('vm/ausencias/' . $id, 'public');
         }
 
-        DB::table('vm_ausencias')->insert([
+        $ausId = DB::table('vm_ausencias')->insertGetId([
             'id_usuarios'  => $id,
             'tipo'         => $request->tipo,
             'fecha_inicio' => $request->fecha_inicio,
@@ -386,7 +387,9 @@ class VmUsuarioController extends Controller
             'updatedat'    => now(),
         ]);
 
-        return response()->json(['ok' => true]);
+        $aviso = InformeAprobacionGuard::checkAndLog($id, $request->fecha_inicio, 'vm_ausencias', 'insert', $ausId, $request);
+
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $aviso]);
     }
 
     public function updateAusencia(Request $request, Project $project, int $id, int $ausId)
@@ -443,7 +446,9 @@ class VmUsuarioController extends Controller
 
         DB::table('vm_ausencias')->where('id', $ausId)->update($data);
 
-        return response()->json(['ok' => true]);
+        $aviso = InformeAprobacionGuard::checkAndLog($id, $request->fecha_inicio, 'vm_ausencias', 'update', $ausId, $request);
+
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $aviso]);
     }
 
     public function deleteAusencia(Request $request, Project $project, int $id, int $ausId)
@@ -454,7 +459,9 @@ class VmUsuarioController extends Controller
 
         DB::table('vm_ausencias')->where('id', $ausId)->update(['deleted' => 1, 'updatedat' => now()]);
 
-        return response()->json(['ok' => true]);
+        $aviso = InformeAprobacionGuard::checkAndLog($id, $ausencia->fecha_inicio, 'vm_ausencias', 'delete', $ausId, $request);
+
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $aviso]);
     }
 
     public function storeNomina(Request $request, Project $project, int $id)

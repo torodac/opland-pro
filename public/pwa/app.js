@@ -76,6 +76,11 @@ async function api(method, path, body) {
   }
 
   if (!res.ok) throw new Error(json.error || json.message || 'Error ' + res.status);
+
+  // El informe de ese mes ya está validado por RRHH: se avisa pero el guardado ya se hizo
+  // (InformeAprobacionGuard nunca bloquea, solo informa y deja constancia en el servidor).
+  if (json.aviso_aprobacion) toast(json.aviso_aprobacion, 4000);
+
   return json;
 }
 
@@ -1337,7 +1342,58 @@ function renderPerfil() {
     banner.style.display = 'none';
     block.style.display  = 'none';
   }
+
+  setFirmaThumb(u.signature_url || null);
+  document.getElementById('firma-edit-block').style.display = 'none';
 }
+
+function setFirmaThumb(url) {
+  const preview = document.getElementById('firma-preview');
+  const placeholder = document.getElementById('firma-thumb-placeholder');
+  if (url) {
+    preview.src = url;
+    preview.style.display = 'block';
+    placeholder.style.display = 'none';
+  } else {
+    preview.style.display = 'none';
+    placeholder.style.display = 'block';
+  }
+}
+
+let firmaPad;
+function initFirmaPad() {
+  const canvas = document.getElementById('firma-pad');
+  if (!canvas || firmaPad) return;
+  firmaPad = new SignaturePad(canvas);
+}
+
+document.getElementById('btn-firma-editar').addEventListener('click', () => {
+  const block = document.getElementById('firma-edit-block');
+  const show = block.style.display === 'none';
+  block.style.display = show ? 'block' : 'none';
+  if (show) {
+    initFirmaPad();
+    firmaPad.clear();
+  }
+});
+
+document.getElementById('btn-firma-borrar').addEventListener('click', () => {
+  firmaPad?.clear();
+});
+
+document.getElementById('btn-firma-guardar').addEventListener('click', async () => {
+  if (!firmaPad || firmaPad.isEmpty()) { toast('Dibuja tu firma primero'); return; }
+  try {
+    const dataUrl = firmaPad.toDataURL('image/png');
+    await api('POST', '/perfil/firma', { signature: dataUrl });
+    toast('Firma guardada');
+    setFirmaThumb(dataUrl);
+    document.getElementById('firma-edit-block').style.display = 'none';
+    if (state.user) state.user.signature_url = dataUrl;
+  } catch (e) {
+    toast(e.message || 'Error al guardar la firma');
+  }
+});
 
 async function cargarUsuariosImpersonar() {
   try {
@@ -1393,6 +1449,104 @@ document.getElementById('btn-actualizar-app').addEventListener('click', async ()
 });
 
 document.getElementById('btn-push-test').addEventListener('click', probarSuscripcionPush);
+
+// ── Mi informe mensual ───────────────────────────────────────────────────────
+const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const PASO_LABELS = { rrhh: 'RRHH', coordinador: 'Coordinador', trabajador: 'Trabajador', direccion: 'Dirección', completado: 'Completado' };
+let informeSel = { year: new Date().getFullYear(), month: new Date().getMonth() + 1 };
+
+function initInformeSelectores() {
+  const selMes = document.getElementById('informe-mes');
+  const selAnio = document.getElementById('informe-anio');
+  if (selMes.options.length) return;
+  MESES_ES.forEach((m, i) => selMes.add(new Option(m, i + 1)));
+  const anioActual = new Date().getFullYear();
+  for (let y = anioActual - 2; y <= anioActual; y++) selAnio.add(new Option(y, y));
+}
+
+async function loadInforme() {
+  initInformeSelectores();
+  document.getElementById('informe-mes').value = informeSel.month;
+  document.getElementById('informe-anio').value = informeSel.year;
+
+  const badge = document.getElementById('informe-estado-badge');
+  badge.textContent = 'Cargando…';
+  try {
+    const data = await api('GET', `/informe?year=${informeSel.year}&month=${informeSel.month}`);
+    renderInforme(data);
+  } catch (e) {
+    badge.textContent = e.message || 'No se pudo cargar el informe.';
+  }
+}
+
+function renderInforme(data) {
+  const badge = document.getElementById('informe-estado-badge');
+  const completado = data.paso_actual === 'completado';
+  badge.style.background = completado ? '#052e1a' : '#1e3a5f';
+  badge.style.color = completado ? '#4ade80' : '#7dd3fc';
+  badge.textContent = completado ? 'Aprobación completa' : (data.en_aprobacion ? `Pendiente: ${PASO_LABELS[data.paso_actual] || data.paso_actual}` : 'Sin iniciar');
+
+  const r = data.resumen || {};
+  const ausenciasHtml = Object.entries(r.ausencias || {}).map(([tipo, n]) => `<div>${tipo}: <strong>${n}</strong></div>`).join('') || '<div>Sin ausencias</div>';
+  document.getElementById('informe-resumen').innerHTML = `
+    <div class="agenda-dia">
+      <div>Días trabajados: <strong>${r.dias_trabajados ?? 0}</strong></div>
+      <div>Horas extra: <strong>${(r.horas_extra_positivas ?? 0).toFixed(1)}h</strong></div>
+      <div>Horas de menos: <strong>${(r.horas_extra_negativas ?? 0).toFixed(1)}h</strong></div>
+      ${ausenciasHtml}
+    </div>`;
+
+  document.getElementById('informe-aprobaciones').innerHTML = (data.aprobaciones || []).map(a =>
+    `<span style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:4px 10px;font-size:12px;color:var(--muted)">${PASO_LABELS[a.step] || a.step} ✓</span>`
+  ).join('');
+
+  const btnFirmar = document.getElementById('btn-informe-firmar');
+  btnFirmar.style.display = data.puede_firmar ? 'block' : 'none';
+}
+
+document.getElementById('btn-mi-informe').addEventListener('click', () => {
+  showScreen('informe');
+  loadInforme();
+});
+
+document.getElementById('informe-back').addEventListener('click', () => navTo('perfil'));
+
+document.getElementById('informe-mes').addEventListener('change', e => { informeSel.month = parseInt(e.target.value, 10); loadInforme(); });
+document.getElementById('informe-anio').addEventListener('change', e => { informeSel.year = parseInt(e.target.value, 10); loadInforme(); });
+
+document.getElementById('btn-informe-pdf').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-informe-pdf');
+  btn.disabled = true; btn.textContent = 'Cargando…';
+  try {
+    let url = `${API}/informe/pdf?year=${informeSel.year}&month=${informeSel.month}`;
+    if (state.asUser) url += '&as_user=' + state.asUser.id;
+    const res = await fetch(url, {
+      headers: { 'Authorization': 'Bearer ' + state.token },
+    });
+    if (!res.ok) throw new Error('No se pudo cargar el PDF.');
+    const blob = await res.blob();
+    window.open(URL.createObjectURL(blob), '_blank');
+  } catch (e) {
+    alert(e.message || 'No se pudo cargar el PDF.');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Ver PDF del informe';
+  }
+});
+
+document.getElementById('btn-informe-firmar').addEventListener('click', async () => {
+  if (!confirm('¿Firmar tu informe de este mes? A partir de aquí pasa a revisión de Dirección.')) return;
+  const btn = document.getElementById('btn-informe-firmar');
+  btn.disabled = true; btn.textContent = 'Firmando…';
+  try {
+    await api('POST', `/informe/firmar?year=${informeSel.year}&month=${informeSel.month}`);
+    toast('Informe firmado');
+    loadInforme();
+  } catch (e) {
+    alert(e.message || 'No se pudo firmar el informe.');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Firmar mi informe';
+  }
+});
 
 // ── Horario ───────────────────────────────────────────────────────────────────
 let horarioSemana = null; // ISO week string actual en vista agenda

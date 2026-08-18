@@ -8,6 +8,10 @@ use App\Http\Controllers\HealthController;
 Route::prefix('vm')->group(function () {
     Route::post('login',                        [VacationmarbellaPwaController::class, 'login']);
     Route::post('cambiar-password',                [VacationmarbellaPwaController::class, 'cambiarPassword']);
+    Route::post('perfil/firma',                    [VacationmarbellaPwaController::class, 'guardarFirma']);
+    Route::get('informe',                          [VacationmarbellaPwaController::class, 'miInforme']);
+    Route::get('informe/pdf',                       [VacationmarbellaPwaController::class, 'miInformePdf']);
+    Route::post('informe/firmar',                  [VacationmarbellaPwaController::class, 'firmarInformeTrabajador']);
     Route::post('logout',                       [VacationmarbellaPwaController::class, 'logout']);
     Route::get('me',                            [VacationmarbellaPwaController::class, 'me']);
     Route::get('duraciones',                    [VacationmarbellaPwaController::class, 'duraciones']);

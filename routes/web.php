@@ -137,6 +137,7 @@ Route::middleware('auth')->group(function () {
     // Perfil de usuario
     Route::get('perfil', [App\Http\Controllers\PerfilController::class, 'show'])->name('perfil');
     Route::patch('perfil', [App\Http\Controllers\PerfilController::class, 'update'])->name('perfil.update');
+    Route::post('perfil/firma', [App\Http\Controllers\PerfilController::class, 'updateSignature'])->name('perfil.firma');
 
     // Página de inicio → lista de proyectos
     Route::get('/', [ProjectController::class, 'index'])->name('proyectos');
@@ -155,6 +156,11 @@ Route::middleware('auth')->group(function () {
         Route::get('informe-imputaciones', [InformeImputacionesController::class, 'index'])->name('informe-imputaciones');
         Route::get('informe-imputaciones/pdf', [InformeImputacionesController::class, 'pdf'])->name('informe-imputaciones.pdf');
         Route::get('informe-imputaciones/pdf-todos', [InformeImputacionesController::class, 'pdfTodos'])->name('informe-imputaciones.pdf-todos');
+        Route::post('informe-imputaciones/validar', [InformeImputacionesController::class, 'validar'])->name('informe-imputaciones.validar');
+        Route::post('informe-imputaciones/anular-validacion', [InformeImputacionesController::class, 'anularValidacion'])->name('informe-imputaciones.anular-validacion');
+        Route::post('informe-imputaciones/firmar-coordinador', [InformeImputacionesController::class, 'firmarCoordinador'])->name('informe-imputaciones.firmar-coordinador');
+        Route::post('informe-imputaciones/firmar-trabajador', [InformeImputacionesController::class, 'firmarTrabajador'])->name('informe-imputaciones.firmar-trabajador');
+        Route::post('informe-imputaciones/firmar-direccion', [InformeImputacionesController::class, 'firmarDireccion'])->name('informe-imputaciones.firmar-direccion');
 
         Route::get('km',                   [KmController::class, 'index'])->name('km');
         Route::get('km/informe',           [KmController::class, 'informe'])->name('km.informe');
@@ -187,6 +193,7 @@ Route::middleware('auth')->group(function () {
         Route::post('dashboard/validar-conciliacion', [DashboardController::class, 'validarConciliacion'])->name('vm.dashboard.validar');
         Route::post('dashboard/validar-fichaje', [DashboardController::class, 'validarFichaje'])->name('vm.dashboard.validar-fichaje');
         Route::post('dashboard/validar-tarea',   [DashboardController::class, 'validarTarea'])->name('vm.dashboard.validar-tarea');
+        Route::post('dashboard/sscc/{id}/hecho', [DashboardController::class, 'marcarSsccHecho'])->where('id', '[0-9]+')->name('vm.dashboard.sscc-hecho');
         Route::get('dashboard/fichaje-hoy',      [DashboardController::class, 'fichajeHoy'])->name('vm.dashboard.fichaje-hoy');
         Route::get('dashboard/carga-semanal',    [DashboardController::class, 'cargaSemanal'])->name('vm.dashboard.carga-semanal');
         Route::post('dashboard/fichaje-entrada', [DashboardController::class, 'fichajeEntrada'])->name('vm.dashboard.fichaje-entrada');

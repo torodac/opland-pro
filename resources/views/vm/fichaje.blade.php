@@ -67,6 +67,12 @@ $heIcon   = $heMin === null ? 'ti-minus' : ($heMin > 0 ? 'ti-trending-up' : ($he
 
 @include('partials.role-badge', ['project' => $project, 'texto' => 'Solo Dirección general y Director RRHH (o admin) pueden ajustar las horas extra y editar fecha/horario sin el límite de 2 días.'])
 
+@if(session('aviso_aprobacion'))
+<div style="margin-bottom:12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 14px;color:#9a3412;font-size:.83rem;">
+    {{ session('aviso_aprobacion') }}
+</div>
+@endif
+
 <style>
 .section-card{background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px;padding:1.1rem 1.25rem;margin-bottom:12px}
 .dark .section-card{background:#1a1a1a;border-color:rgba(255,255,255,.08)}
@@ -104,6 +110,9 @@ $heIcon   = $heMin === null ? 'ti-minus' : ($heMin > 0 ? 'ti-trending-up' : ($he
 .dark .imp-row{border-bottom-color:rgba(255,255,255,.05)}
 .imp-row:last-child{border-bottom:none;padding-bottom:0}
 .imp-row:first-child{padding-top:0}
+a.imp-row{color:inherit;text-decoration:none;cursor:pointer}
+a.imp-row:hover{background:rgba(0,0,0,.03)}
+.dark a.imp-row:hover{background:rgba(255,255,255,.04)}
 .imp-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:5px;font-size:11px;font-weight:500;white-space:nowrap;flex-shrink:0}
 .imp-tarea{font-size:13px;color:#111;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dark .imp-tarea{color:#eee}
@@ -334,7 +343,7 @@ $heIcon   = $heMin === null ? 'ti-minus' : ($heMin > 0 ? 'ti-trending-up' : ($he
   </div>
   @forelse ($imputaciones as $imp)
     @php $c = $tipoColores[$imp->tipo] ?? $tipoColores['limpieza']; @endphp
-    <div class="imp-row">
+    <a class="imp-row" href="{{ route('vm.tarea', [$project->slug, $imp->tipo, $imp->id_tarea]) }}" target="_blank" title="Abrir tarea">
       <span class="imp-badge" style="background:{{ $c['bg'] }};color:{{ $c['tx'] }};border:0.5px solid {{ $c['bd'] }}">
         <i class="ti {{ $tipoIcon[$imp->tipo] ?? 'ti-clock' }}" style="font-size:10px"></i>
         {{ $tipoLabel[$imp->tipo] ?? $imp->tipo }}
@@ -346,7 +355,7 @@ $heIcon   = $heMin === null ? 'ti-minus' : ($heMin > 0 ? 'ti-trending-up' : ($he
         @endif
       </div>
       <span class="imp-dur" style="color:{{ $c['tx'] }}">{{ fmtMin2($imp->duracion) }}</span>
-    </div>
+    </a>
   @empty
     <div style="font-size:13px;color:#bbb;font-style:italic">Sin imputaciones este día.</div>
   @endforelse
@@ -628,6 +637,9 @@ async function guardar() {
       try { msg = JSON.parse(msg).error || msg; } catch {}
       throw new Error(msg);
     }
+    let data = {};
+    try { data = await r.json(); } catch {}
+    if (data.aviso_aprobacion) alert(data.aviso_aprobacion);
     location.reload();
   } catch (e) {
     alert('Error al guardar: ' + e.message);
@@ -641,8 +653,14 @@ async function borrar() {
     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' },
     body: JSON.stringify({ _method: 'PATCH', deleted: 1 }),
   });
-  if (r.ok) window.location.href = LIST_URL;
-  else alert('Error al borrar.');
+  if (r.ok) {
+    let data = {};
+    try { data = await r.json(); } catch {}
+    if (data.aviso_aprobacion) alert(data.aviso_aprobacion);
+    window.location.href = LIST_URL;
+  } else {
+    alert('Error al borrar.');
+  }
 }
 
 function openModal(id)  { document.getElementById(id).classList.add('open') }

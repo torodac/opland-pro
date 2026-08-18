@@ -343,6 +343,7 @@ function guardarAusencia() {
             errorEl.textContent = data.error;
             errorEl.style.display = 'block';
         } else {
+            if (data.aviso_aprobacion) alert(data.aviso_aprobacion);
             location.reload();
         }
     });
@@ -356,7 +357,10 @@ function borrarAusencia(id) {
     })
     .then(r => r.json())
     .then(data => {
-        if (data.error) { alert(data.error); } else { location.reload(); }
+        if (data.error) { alert(data.error); } else {
+            if (data.aviso_aprobacion) alert(data.aviso_aprobacion);
+            location.reload();
+        }
     });
 }
 
