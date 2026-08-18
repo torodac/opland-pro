@@ -329,7 +329,7 @@ class FacturaFormController extends Controller
         $cliente = $f->id_clientes ? DB::table('opland_clientes')->where('id', $f->id_clientes)->first() : null;
 
         $lineas = DB::table('opland_factura_lineas')
-            ->where('id_facturas', $factura)->where('deleted', false)->orderBy('id')->get();
+            ->where('id_facturas', $factura)->where('deleted', false)->orderBy('orden')->orderBy('id')->get();
 
         $base = $lineas->sum(fn ($l) => $l->precio - $l->descuentoe);
         $dtoFactura = (float) ($f->dtototae ?? 0);

@@ -7,17 +7,17 @@
   body{font-family:DejaVu Sans, sans-serif; color:#16232b; font-size:12px; margin:0}
   .doc-header{width:100%; background-color:#bfdaf2; border-collapse:collapse}
   .doc-blob-cell{width:220px; padding:0; vertical-align:top}
-  .doc-blob{background-color:#1b5d73; color:#fff; padding:20px 22px; min-height:150px; border-bottom-right-radius:140px}
+  .doc-blob{background-color:#1b5d73; color:#fff; padding:18px 22px; border-bottom-right-radius:140px}
   .doc-logo-img{height:22px}
-  .doc-company{font-size:9.5px; line-height:1.65; font-weight:bold; margin-top:12px}
-  .doc-client{padding:20px 22px; vertical-align:top}
+  .doc-company{font-size:9.5px; line-height:1.45; font-weight:bold; margin-top:8px}
+  .doc-client{padding:18px 22px; vertical-align:top}
   .doc-client-lbl{font-size:9px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; color:#3f5a6b; margin-bottom:6px}
   .doc-client-name{font-weight:bold; font-size:13px; color:#16232b; margin-bottom:6px}
   .doc-client-addr{color:#3f5a6b; font-size:10.5px; line-height:1.6}
-  .doc-meta{padding:20px 22px 20px 0; text-align:right; width:150px; vertical-align:top}
+  .doc-meta{padding:18px 22px 18px 0; text-align:right; width:150px; vertical-align:top}
   .doc-meta-lbl{font-size:9px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; color:#3f5a6b}
   .doc-meta-val{font-weight:bold; font-size:14px; color:#16232b; margin:2px 0 12px}
-  .doc-body{padding:22px 26px 260px}
+  .doc-body{padding:22px 26px 210px}
   .doc-service-title{font-weight:bold; font-size:14px; color:#16232b; margin-bottom:16px; padding-bottom:10px; border-bottom:1.5px solid #16232b}
   .doc-table{width:100%; border-collapse:collapse; margin-bottom:22px; table-layout:fixed}
   .doc-table th{font-size:9px; text-transform:uppercase; letter-spacing:1px; color:#7e93a1; text-align:left; padding:4px; line-height:1.2; vertical-align:middle; border-bottom:1.5px solid #16232b; white-space:nowrap}
@@ -29,12 +29,12 @@
   .doc-col-dtop{width:8%}
   .doc-col-dtoe{width:14%}
   .doc-col-total{width:14%}
-  .doc-totals-grid{width:100%; border-collapse:separate; border-spacing:8px 0; margin-bottom:18px}
+  .doc-totals-grid{width:100%; border-collapse:separate; border-spacing:8px 0; margin-bottom:9px}
   .doc-total-box{border:1px solid #dce6ee; padding:12px 14px; width:33%}
   .doc-total-box .val{display:block; font-size:15px; font-weight:bold; color:#16232b}
   .doc-total-box .lbl{font-size:10px; color:#7e93a1; margin-top:2px}
   .doc-payment-note{text-align:center; font-weight:bold; font-size:11px; margin-bottom:18px; line-height:1.6}
-  .doc-legal{padding-top:14px; border-top:1px solid #eaf1f6; font-size:8.5px; color:#8a9aa5; line-height:1.25; text-align:justify}
+  .doc-legal{padding-top:14px; border-top:1px solid #eaf1f6; font-size:8.5px; color:#8a9aa5; line-height:1.05; text-align:justify}
   .doc-footer-fixed{position:fixed; bottom:0; left:0; right:0; padding:0 26px}
 </style>
 </head>
@@ -57,8 +57,7 @@
           OPLAND ZERO PAPER S.L<br>
           B-10526911<br>
           Av. Aragón, 40<br>
-          46021 Valencia<br>
-          601 41 36 35
+          46021 Valencia
         </div>
       </div>
     </td>
