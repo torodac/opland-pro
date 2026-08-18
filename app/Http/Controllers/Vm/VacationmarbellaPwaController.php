@@ -325,10 +325,12 @@ class VacationmarbellaPwaController extends Controller
         [$h, $m] = explode(':', $request->tiempo);
         $minutos = (int) $h * 60 + (int) $m;
 
+        $observacionFinal = $this->componerObservacion($imputacion->observacion, $request->input('observacion'));
+
         \App\Services\ImputacionesSync::actualizar(
             $imputacionId,
             $minutos,
-            $request->input('observacion'),
+            $observacionFinal,
             $fechaImputacion
         );
 
@@ -337,6 +339,31 @@ class VacationmarbellaPwaController extends Controller
         );
 
         return response()->json(['ok' => true, 'aviso_aprobacion' => $aviso]);
+    }
+
+    /**
+     * Si la observación original lleva la etiqueta "[Breezeway] Importado automáticamente
+     * (tarea #N)", se conserva siempre al editar (el sync horario la usa para reconocer la
+     * fila y corregir la duración; si se pierde, el siguiente sync la duplicaría). Lo que
+     * escriba el usuario se concatena a continuación de la etiqueta, nunca la sustituye.
+     */
+    private function componerObservacion(?string $original, ?string $nuevaObservacion): ?string
+    {
+        $nuevaObservacion = trim((string) $nuevaObservacion);
+
+        if (!preg_match('/^\[Breezeway\] Importado automáticamente \(tarea #\d+\)/u', (string) $original, $m)) {
+            return $nuevaObservacion !== '' ? $nuevaObservacion : null;
+        }
+
+        $tag = $m[0];
+
+        // Por si el usuario ha vuelto a escribir la etiqueta en el textarea (se le muestra sin
+        // ella, pero por robustez ante llamadas directas a la API se limpia igualmente).
+        if (str_starts_with($nuevaObservacion, $tag)) {
+            $nuevaObservacion = trim(substr($nuevaObservacion, strlen($tag)), " \t\n\r\0\x0B—-|");
+        }
+
+        return $nuevaObservacion !== '' ? $tag . ' — ' . $nuevaObservacion : $tag;
     }
 
     public function reportarTarea(Request $request, string $tipo, int $id)

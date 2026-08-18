@@ -384,14 +384,14 @@ function imputacionesListHtml(tarea) {
     const editable = imp.fecha_imputacion >= minFecha;
     const horas    = sprintfHoras(imp.duracion);
     return `
-      <div class="imputacion-row${editable ? ' editable' : ''}" data-id="${imp.id}"
-           style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);${editable ? 'cursor:pointer' : 'opacity:.7'}">
+      <div class="imputacion-row${editable ? ' editable' : ' no-editable'}" data-id="${imp.id}"
+           style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;${editable ? '' : 'opacity:.7'}">
         <div style="width:54px;flex-shrink:0;font-size:13px;color:var(--muted)">${fmtFecha(imp.fecha_imputacion)}</div>
         <div style="flex:1;min-width:0">
           <div style="font-weight:600;font-size:14px">${horas}</div>
           ${imp.observacion ? `<div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(imp.observacion)}</div>` : ''}
         </div>
-        ${editable ? '<span style="font-size:16px;color:var(--muted)">›</span>' : ''}
+        <span style="font-size:16px;color:var(--muted)">${editable ? '›' : 'ⓘ'}</span>
       </div>`;
   }).join('');
 
@@ -482,10 +482,15 @@ function abrirDetalle(tarea) {
     content.querySelector('#btn-imputar-detalle').addEventListener('click', () => abrirModalImputar(null));
   }
 
-  content.querySelectorAll('.imputacion-row.editable').forEach(row => {
+  content.querySelectorAll('.imputacion-row').forEach(row => {
     row.addEventListener('click', () => {
       const imp = (tarea.mis_imputaciones || []).find(i => i.id === parseInt(row.dataset.id));
-      if (imp) abrirModalImputar(imp);
+      if (!imp) return;
+      if (row.classList.contains('editable')) {
+        abrirModalImputar(imp);
+      } else {
+        toast(mensajeNoEditable(imp), 5000);
+      }
     });
   });
 
@@ -547,12 +552,30 @@ function abrirModalImputar(imputacion) {
   fechaInput.value = imputacion ? imputacion.fecha_imputacion : hoy;
 
   document.getElementById('modal-tiempo').value = imputacion ? sprintfHM(imputacion.duracion) : '';
-  document.getElementById('modal-comentario').value = imputacion ? (imputacion.observacion || '') : '';
+  document.getElementById('modal-comentario').value = imputacion ? stripBreezewayTag(imputacion.observacion || '') : '';
   document.getElementById('modal-error').style.display = 'none';
   document.getElementById('modal-imputar-titulo').textContent = imputacion ? 'Editar imputación' : 'Imputar tiempo';
   document.getElementById('modal-confirmar').textContent = 'Guardar';
 
   document.getElementById('completar-overlay').classList.add('open');
+}
+
+const BREEZEWAY_TAG_RE = /^\[Breezeway\] Importado automáticamente \(tarea #\d+\)\s*(—\s*)?/;
+
+function esBreezeway(observacion) {
+  return BREEZEWAY_TAG_RE.test(observacion || '');
+}
+
+function stripBreezewayTag(observacion) {
+  return (observacion || '').replace(BREEZEWAY_TAG_RE, '');
+}
+
+function mensajeNoEditable(imp) {
+  let msg = `Esta imputación es del ${fmtFecha(imp.fecha_imputacion)} y ya no se puede editar: solo se pueden modificar imputaciones de los últimos 2 días.`;
+  if (esBreezeway(imp.observacion)) {
+    msg += ' Se importó automáticamente desde Breezeway; si el tiempo registrado allí cambia, se corrige solo en la siguiente sincronización.';
+  }
+  return msg;
 }
 
 function sprintfHM(minutos) {
