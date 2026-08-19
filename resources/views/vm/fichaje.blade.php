@@ -246,9 +246,9 @@ a.imp-row:hover{background:rgba(0,0,0,.03)}
       <span class="fbadge" style="background:#EAF3DE;border:0.5px solid #7BBF50;color:#27500A">
         <i class="ti ti-circle-check" style="font-size:11px"></i>Validado
       </span>
-    @else
-      <span class="fbadge" style="background:var(--surface-1);border:0.5px solid rgba(0,0,0,.12);color:#999">
-        <i class="ti ti-clock" style="font-size:11px"></i>Pendiente
+    @elseif ($pendienteValidar ?? false)
+      <span class="fbadge" style="background:#FDECEC;border:0.5px solid #E06666;color:#8A1F1F">
+        <i class="ti ti-clock" style="font-size:11px"></i>Pte validar
       </span>
     @endif
     @if ($fichaje->festivo)

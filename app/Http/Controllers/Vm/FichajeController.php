@@ -242,11 +242,22 @@ class FichajeController extends Controller
             || in_array((int) $authRol, [3, 11]);
         $puedeSinLimiteFecha = $puedeAjustar;
 
+        // "Pendiente" solo tiene sentido para el mismo caso que el bloque del dashboard
+        // "Fichaje vs imputaciones (diff > 30 min)": roles que imputan tiempo por tarea
+        // (Limpieza=1, Mantenimiento=4), fichaje ya cerrado y de un día pasado, con una
+        // desviación real de más de 30 min entre lo fichado y lo imputado ese día.
+        $pendienteValidar = !$fichaje->validado
+            && $fichaje->hora_fin
+            && $fichaje->fecha_fichaje < now()->toDateString()
+            && in_array((int) ($usuario->id_rol ?? 0), [1, 4], true)
+            && $efectivasMin !== null
+            && abs($efectivasMin - $totalImputado) > 30;
+
         return view('vm.fichaje', compact(
             'project', 'fichaje', 'usuario', 'usuarios',
             'imputaciones', 'totalImputado',
             'fichadoMin', 'esperadoMin', 'heMin', 'efectivasMin',
-            'puedeAjustar', 'puedeSinLimiteFecha'
+            'puedeAjustar', 'puedeSinLimiteFecha', 'pendienteValidar'
         ));
     }
 
