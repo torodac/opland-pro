@@ -500,6 +500,9 @@ class TareaController extends Controller
             $query->where('t.estado', 'Vencida');
         } elseif ($stat === 'no_imputadas') {
             $query->where('t.estado', 'Completada')->whereRaw('COALESCE(imp.total_min, 0) = 0');
+            if (Schema::hasColumn($tabla, 'validado')) {
+                $query->where(fn($q) => $q->whereNull('t.validado')->orWhere('t.validado', false));
+            }
         } elseif ($stat === 'propias' && Schema::hasColumn($tabla, 'breezeway_task_id')) {
             $query->whereNull('t.breezeway_task_id');
         }
@@ -533,7 +536,11 @@ class TareaController extends Controller
 
         $vigentes    = $statsBase()->where($noCerrada)->count();
         $vencidas    = $statsBase()->where('t.estado', 'Vencida')->count();
-        $noImputadas = $statsBase()->where('t.estado', 'Completada')->whereRaw('COALESCE(imp.total_min, 0) = 0')->count();
+        $noImputadasQ = $statsBase()->where('t.estado', 'Completada')->whereRaw('COALESCE(imp.total_min, 0) = 0');
+        if (Schema::hasColumn($tabla, 'validado')) {
+            $noImputadasQ->where(fn($q) => $q->whereNull('t.validado')->orWhere('t.validado', false));
+        }
+        $noImputadas = $noImputadasQ->count();
         // Piscinas no tiene breezeway_task_id (Breezeway nunca sincroniza ese departamento):
         // todas sus tareas son "propias" por definicion, sin necesidad de filtrar la columna.
         $propias = Schema::hasColumn($tabla, 'breezeway_task_id')

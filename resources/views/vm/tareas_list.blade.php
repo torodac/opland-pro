@@ -94,7 +94,7 @@
     <a href="{{ $listUrl(['stat' => $stat === 'no_imputadas' ? null : 'no_imputadas', 'page' => null]) }}"
        class="tl-stat {{ $stat === 'no_imputadas' ? 'active' : '' }}">
         <span class="tl-stat-num">{{ $noImputadas }}</span>
-        <span class="tl-stat-lbl">No imputadas <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Tareas en estado Completada sin ninguna imputación de tiempo registrada.</span></span></span>
+        <span class="tl-stat-lbl">No imputadas <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Tareas en estado Completada sin ninguna imputación de tiempo registrada. No incluye las ya marcadas como Validadas.</span></span></span>
     </a>
 
     <a href="{{ $listUrl(['stat' => $stat === 'propias' ? null : 'propias', 'page' => null]) }}"
