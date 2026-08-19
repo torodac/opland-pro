@@ -83,6 +83,226 @@ class InformeImputacionesController extends Controller
         ]));
     }
 
+    // Panel de aprobaciones: todos los usuarios visibles para el rol de quien entra, con sus
+    // métricas principales y el botón de firma correspondiente a su paso actual, sin tener que
+    // abrir la ficha completa de cada uno. El filtrado por paso (pestañas) es en el cliente
+    // (mismo patrón que el resto de listados con pestañas de esta app); aquí solo se decide qué
+    // usuarios puede ver quién entra y qué puede firmar.
+    public function listado(Request $request, Project $project)
+    {
+        $user    = auth()->user();
+        $isAdmin = $user->isProjectAdmin($project);
+
+        [$year, $month, , $allUsuarios, $canSelect, $canSelectTodos] = $this->resolveParams($request, $project, $user, $isAdmin);
+
+        $currentVmUserId = $user->projectUserId($project);
+        $authRol         = $currentVmUserId ? DB::table('vm_usuarios')->where('id', $currentVmUserId)->value('id_rol') : null;
+
+        // Mismos gates que cada botón de firma en la ficha individual (validar/firmarCoordinador/
+        // firmarDireccion) -- se reutilizan tal cual, no se inventa un permiso nuevo para esta vista.
+        $puedeFirmarRrhh        = $canSelectTodos; // isAdmin || authRol en [3,11]
+        $puedeFirmarCoordinador = $isAdmin || (int) $authRol === 10;
+        $puedeFirmarDireccion   = $isAdmin || (int) $authRol === 3;
+        $viewerSignaturePath    = DB::table('admin_users')->where('id', auth()->id())->value('signature_path');
+
+        // Pestaña inicial según el rol de quien entra: cada rol de aprobación aterriza
+        // directamente en su cola de trabajo, en vez de en "Todos".
+        $defaultTab = match (true) {
+            (int) $authRol === 11 => 'rrhh',
+            (int) $authRol === 10 => 'coordinador',
+            (int) $authRol === 3  => 'direccion',
+            $isAdmin               => 'todos',
+            $currentVmUserId       => 'trabajador',
+            default                 => 'todos',
+        };
+
+        // Si no puede seleccionar a nadie más, el listado se reduce a su propia fila (su
+        // "Informe mensual" personal, mismo caso que hoy al entrar en la ficha individual).
+        $usuarios = $canSelect ? $allUsuarios : DB::table('vm_usuarios')
+            ->where('id', $currentVmUserId)->where('deleted', 0)
+            ->get(['id', 'nombre', 'id_rol', 'admin_user_id']);
+
+        // Fuera de este panel: Santi Ramón-Llin (id 1, ficha de Dirección general que no pasa
+        // por el flujo de aprobación) y el rol "Proveedor limpieza" (6, externo, no informe
+        // mensual propio). Pedido explícitamente, no es un criterio genérico de vm_usuarios.
+        $usuarios = $usuarios->reject(fn($u) => (int) $u->id === 1 || (int) $u->id_rol === 6)->values();
+
+        // Pills de filtro por rol (limpiadora=1, mantenimiento=4, sscc=resto).
+        $rolFiltro = in_array($request->input('rol'), ['limpiadora', 'mantenimiento', 'sscc'], true) ? $request->input('rol') : null;
+        if ($rolFiltro === 'limpiadora') {
+            $usuarios = $usuarios->where('id_rol', 1)->values();
+        } elseif ($rolFiltro === 'mantenimiento') {
+            $usuarios = $usuarios->where('id_rol', 4)->values();
+        } elseif ($rolFiltro === 'sscc') {
+            $usuarios = $usuarios->reject(fn($u) => in_array((int) $u->id_rol, [1, 4], true))->values();
+        }
+
+        $userIds = $usuarios->pluck('id')->all();
+
+        $estados = DB::table('vm_informes_estado')
+            ->where('anio', $year)->where('mes', $month)
+            ->whereIn('id_usuario', $userIds)
+            ->pluck('paso_actual', 'id_usuario');
+
+        $editadosTrasInicio = DB::table('vm_informes_ediciones_log')
+            ->where('anio', $year)->where('mes', $month)
+            ->whereIn('id_usuario', $userIds)
+            ->distinct()->pluck('id_usuario')->flip();
+
+        $firmasPorUsuario = DB::table('vm_usuarios as u')
+            ->join('admin_users as a', 'a.id', '=', 'u.admin_user_id')
+            ->whereIn('u.id', $userIds)
+            ->pluck('a.signature_path', 'u.id');
+
+        $rolesMap      = DB::table('vm_roles')->pluck('nombre', 'id');
+        $claseAusencia = ['C' => 'Compensacion', 'V' => 'Vacaciones', 'B' => 'Baja', 'AA' => 'Asuntos', 'otro' => 'Absentismo'];
+
+        $filas = $usuarios->map(function ($u) use ($year, $month, $estados, $editadosTrasInicio, $firmasPorUsuario, $rolesMap, $claseAusencia) {
+            $paso     = $estados[$u->id] ?? 'rrhh';
+            $metricas = $this->metricasResumen($u->id, $year, $month);
+
+            $ausenciasPills = collect($metricas['ausencias'])->map(fn($count, $nombre) => [
+                'nombre' => $nombre,
+                'count'  => $count,
+                'clase'  => $claseAusencia[VmHorasService::categoriaAusencia($nombre)] ?? 'Absentismo',
+            ])->values();
+
+            return (object) [
+                'id'                  => $u->id,
+                'nombre'              => $u->nombre,
+                'id_rol'              => $u->id_rol,
+                'departamento'        => $rolesMap[$u->id_rol] ?? null,
+                'paso'                => $paso,
+                'dias_trabajados'     => $metricas['dias_trabajados'],
+                // Solo días con fichaje real -- no incluye el ajuste de un día entero que
+                // generan las ausencias de tipo Compensación (ver metricasResumen()).
+                'horas_extra'         => $metricas['horas_extra_fichado'],
+                'ausencias'           => $ausenciasPills,
+                'desviacion'          => $metricas['desviacion'],
+                'pct_imputado'        => $metricas['pct_imputado'],
+                'editado_tras_inicio' => $editadosTrasInicio->has($u->id),
+                'tiene_firma'         => (bool) ($firmasPorUsuario[$u->id] ?? null),
+                'es_mi_informe'       => $u->admin_user_id && (int) $u->admin_user_id === (int) auth()->id(),
+                'es_turno'            => $metricas['es_turno'],
+                'dias_turno'          => $metricas['dias_turno'],
+                'dias_descanso'       => $metricas['dias_descanso'],
+                'dias_sin_asignar'    => $metricas['dias_sin_asignar'],
+            ];
+        })->sortBy('nombre')->values();
+
+        return view('informe-imputaciones-list', [
+            'project'                => $project,
+            'year'                   => $year,
+            'month'                  => $month,
+            'filas'                  => $filas,
+            'rol_filtro'               => $rolFiltro,
+            'default_tab'              => $defaultTab,
+            'puede_firmar_rrhh'        => $puedeFirmarRrhh,
+            'puede_firmar_coordinador' => $puedeFirmarCoordinador,
+            'puede_firmar_direccion'   => $puedeFirmarDireccion,
+            'viewer_tiene_firma'       => (bool) $viewerSignaturePath,
+            'breadcrumb' => [
+                ['label' => 'Informe mensual', 'url' => ''],
+            ],
+        ]);
+    }
+
+    // Métricas de un usuario para una fila del panel de aprobaciones. Reutiliza getInformeData()
+    // una sola vez (mismo cálculo que resumenParaPwa()) y de paso extrae la desviación
+    // fichaje/imputación del mes -- mismo criterio que el bloque del dashboard (>30 min, solo
+    // roles que imputan tiempo por tarea: Limpieza=1, Mantenimiento=4), sin repetir consultas.
+    private function metricasResumen(int $userId, int $year, int $month): array
+    {
+        $data  = $this->getInformeData($userId, $year, $month);
+        $stats = $data['year_stats'][$month] ?? null;
+
+        $ausencias = collect($data['dias'])
+            ->filter(fn($d) => $d['tipo'])
+            ->groupBy(fn($d) => $d['tipo']->nombre)
+            ->map(fn($g) => $g->count());
+
+        // Horas extra solo de días con fichaje real -- excluye el ajuste negativo de un día
+        // entero (-esperadoMin) que generan las ausencias de tipo Compensación al no haber
+        // fichaje ese día (VmHorasService::calcularHeDia). Es una suma distinta de 'ep'/'en' de
+        // year_stats, que sí las incluye.
+        $heMinFichado = 0;
+        foreach ($data['dias'] as $d) {
+            if ($d['tf_min'] === null) continue;
+            $heMinFichado += $d['he_min'] ?? 0;
+        }
+
+        $rol = $data['usuario']->id_rol ?? null;
+        $desviacion = null;
+        if (in_array((int) $rol, [1, 4], true)) {
+            $diasConDesviacion = 0;
+            $sumaDesviacionMin = 0;
+            foreach ($data['dias'] as $d) {
+                if ($d['tf_min'] === null) continue;
+                $mins = $d['p_min'] !== null ? $d['tf_min'] - $d['p_min'] : $d['tf_min'];
+                $diff = abs($mins - $d['ht_min']);
+                if ($diff > 30) {
+                    $diasConDesviacion++;
+                    $sumaDesviacionMin += $diff;
+                }
+            }
+            if ($diasConDesviacion > 0) {
+                $desviacion = ['dias' => $diasConDesviacion, 'total_min' => $sumaDesviacionMin];
+            }
+        }
+
+        // % de horas de tareas imputadas sobre horas reales fichadas en el mes (agregado, no
+        // día a día como la desviación). fichadoMin=0 con imputadoMin>0 (imputó sin fichar) o un
+        // porcentaje fuera de 0-300% se marca como "fuera de rango" en vez de un número engañoso.
+        $pctImputado = null;
+        if (in_array((int) $rol, [1, 4], true)) {
+            $fichadoMinTotal = 0;
+            $imputadoMinTotal = 0;
+            foreach ($data['dias'] as $d) {
+                $imputadoMinTotal += $d['ht_min'] ?? 0;
+                if ($d['tf_min'] === null) continue;
+                $fichadoMinTotal += $d['p_min'] !== null ? $d['tf_min'] - $d['p_min'] : $d['tf_min'];
+            }
+            if ($fichadoMinTotal > 0) {
+                $pct = ($imputadoMinTotal / $fichadoMinTotal) * 100;
+                $pctImputado = ($pct < 0 || $pct > 300) ? 'fuera_de_rango' : (int) round($pct);
+            } elseif ($imputadoMinTotal > 0) {
+                $pctImputado = 'fuera_de_rango';
+            }
+        }
+
+        // Departamentos con horario de turnos (visible_horarios): cada día debería llevar
+        // 'turno', 'descanso' o una ausencia -- lo que no encaja en ninguna de las tres es un
+        // hueco real en la planificación, no un domingo implícito (esos usuarios no tienen
+        // fin de semana fijo, ver VmHorasService::esDescansoEfectivo()).
+        $esTurno = VmHorasService::esDeptoTurno($userId);
+        $diasTurno = 0;
+        $diasDescanso = 0;
+        $diasSinAsignar = 0;
+        if ($esTurno) {
+            foreach ($data['dias'] as $d) {
+                if ($d['horario_tipo'] === 'turno') { $diasTurno++; continue; }
+                if ($d['horario_tipo'] === 'descanso') { $diasDescanso++; continue; }
+                if ($d['tipo']) continue;
+                $diasSinAsignar++;
+            }
+        }
+
+        return [
+            'usuario'               => $data['usuario']->nombre ?? null,
+            'dias_trabajados'       => $stats['dias_col']['T'] ?? 0,
+            'horas_extra_positivas' => $stats['ep'] ?? 0,
+            'horas_extra_negativas' => $stats['en'] ?? 0,
+            'horas_extra_fichado'   => $heMinFichado / 60,
+            'ausencias'             => $ausencias,
+            'desviacion'            => $desviacion,
+            'pct_imputado'          => $pctImputado,
+            'es_turno'              => $esTurno,
+            'dias_turno'            => $diasTurno,
+            'dias_descanso'         => $diasDescanso,
+            'dias_sin_asignar'      => $diasSinAsignar,
+        ];
+    }
+
     // Paso 1/4 del flujo de aprobación: RRHH (o Dirección general/admin) firma. A partir de
     // ahí, cualquier edición de ausencias/fichaje/horarios/imputaciones de ese usuario+mes
     // muestra un aviso, queda registrada en vm_informes_ediciones_log y reinicia todo el
@@ -240,21 +460,9 @@ class InformeImputacionesController extends Controller
     // (sin la rejilla día a día, solo los totales que ya calcula getInformeData()/getYearStats()).
     public function resumenParaPwa(int $userId, int $year, int $month): array
     {
-        $data  = $this->getInformeData($userId, $year, $month);
-        $stats = $data['year_stats'][$month] ?? null;
-
-        $ausencias = collect($data['dias'])
-            ->filter(fn($d) => $d['tipo'])
-            ->groupBy(fn($d) => $d['tipo']->nombre)
-            ->map(fn($g) => $g->count());
-
-        return [
-            'usuario'               => $data['usuario']->nombre ?? null,
-            'dias_trabajados'       => $stats['dias_col']['T'] ?? 0,
-            'horas_extra_positivas' => $stats['ep'] ?? 0,
-            'horas_extra_negativas' => $stats['en'] ?? 0,
-            'ausencias'             => $ausencias,
-        ];
+        $m = $this->metricasResumen($userId, $year, $month);
+        unset($m['desviacion']);
+        return $m;
     }
 
     // Hash determinista del contenido de negocio del informe (fichajes/ausencias/imputaciones
@@ -428,7 +636,7 @@ class InformeImputacionesController extends Controller
         $canSelect       = $canSelectTodos || $canSelectEquipo;
 
         if ($canSelectTodos) {
-            $allUsuarios = DB::table('vm_usuarios')->where('deleted', 0)->orderBy('nombre')->get(['id', 'nombre', 'id_rol']);
+            $allUsuarios = DB::table('vm_usuarios')->where('deleted', 0)->orderBy('nombre')->get(['id', 'nombre', 'id_rol', 'admin_user_id']);
         } elseif ($canSelectEquipo) {
             $visibleIds = RoleHierarchy::visibleUserIds(
                 $project->slug . '_roles', $project->slug . '_usuarios',
@@ -438,7 +646,7 @@ class InformeImputacionesController extends Controller
                 ->where('deleted', 0)
                 ->whereIn('id', array_map('intval', $visibleIds))
                 ->orderBy('nombre')
-                ->get(['id', 'nombre', 'id_rol']);
+                ->get(['id', 'nombre', 'id_rol', 'admin_user_id']);
         } else {
             $allUsuarios = collect();
         }

@@ -153,6 +153,7 @@ Route::middleware('auth')->group(function () {
         Route::get('informe-financiero', [InformeFinancieroController::class, 'index'])->name('informe-financiero');
         Route::get('informe-operativo', [InformeOperativoController::class, 'index'])->name('informe-operativo');
 
+        Route::get('informe-imputaciones_list', [InformeImputacionesController::class, 'listado'])->name('informe-imputaciones.listado');
         Route::get('informe-imputaciones', [InformeImputacionesController::class, 'index'])->name('informe-imputaciones');
         Route::get('informe-imputaciones/pdf', [InformeImputacionesController::class, 'pdf'])->name('informe-imputaciones.pdf');
         Route::get('informe-imputaciones/pdf-todos', [InformeImputacionesController::class, 'pdfTodos'])->name('informe-imputaciones.pdf-todos');
