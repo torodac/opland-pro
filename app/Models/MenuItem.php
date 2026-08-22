@@ -41,7 +41,11 @@ class MenuItem extends Model
     public function resolveUrl(): string
     {
         if ($this->url) {
-            return $this->url;
+            // Algunos items tienen la URL guardada en relativo (p.ej. "/mb/pyg"), mientras que las
+            // resueltas via route() de mas abajo son siempre absolutas. url() normaliza ambos casos
+            // a absoluta (si ya lo es, la deja igual) para que la comparacion con request()->url()
+            // en el sidebar (marcador data-sidebar-active) funcione sea cual sea el formato guardado.
+            return url($this->url);
         }
         if ($this->projectTable) {
             $taskMap = [

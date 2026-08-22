@@ -11,7 +11,6 @@
     @endif
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-    @livewireStyles
     <style>
         /* Tooltip por defecto de la aplicacion */
         .app-tooltip { position: relative; display: inline-flex; }
@@ -87,6 +86,17 @@
                         $authUser?->canViewTable($project, $i->projectTable?->name ?? '')
                     );
                     $isProjectAdmin = $authUser?->isProjectAdmin($project);
+
+                    // El orden visual de los módulos ("Panel" de /config/projects/{project}) se
+                    // guarda en project.modulo_order pero antes solo lo respetaba esa pantalla de
+                    // configuración -- el sidebar solo miraba el "order" plano de cada ítem, así
+                    // que un módulo recién reordenado ahí no cambiaba de sitio aquí. Se reordena
+                    // igual que TableController::index() (mismo modulo_order), con sort estable
+                    // (PHP 8+) para no alterar el orden ya correcto dentro de cada módulo.
+                    $moduloOrderMap = array_flip(array_map('strval', $project->modulo_order ?? []));
+                    $mainItems      = $mainItems->values()->sortBy(
+                        fn($i) => $moduloOrderMap[(string) $i->modulo] ?? 9999
+                    );
                 @endphp
 
                 @php $currentModulo = null; @endphp
@@ -115,6 +125,7 @@
                             <div x-show="open && sidebarOpen" class="ml-4 mt-0.5 space-y-0.5">
                                 @foreach($item->children as $child)
                                     <a href="{{ $child->resolveUrl() }}"
+                                       @if(request()->url() === $child->resolveUrl()) data-sidebar-active @endif
                                        class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg {{ request()->url() === $child->resolveUrl() ? 'bg-orange-50 text-orange-700 font-medium' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800' }}">
                                         @if($child->icon)<i class="{{ $child->icon }} w-4 text-center text-xs"></i>@endif
                                         {{ $child->label }}
@@ -125,6 +136,7 @@
                     @else
                         <a href="{{ $item->resolveUrl() }}"
                            :title="sidebarOpen ? '' : {{ Illuminate\Support\Js::from($item->label) }}"
+                           @if(request()->url() === $item->resolveUrl()) data-sidebar-active @endif
                            class="flex items-center gap-2 px-2 py-2 text-sm rounded-lg {{ request()->url() === $item->resolveUrl() ? 'bg-orange-50 text-orange-700 font-medium' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900' }}">
                             @if($item->icon)<i class="{{ $item->icon }} w-5 text-center shrink-0 text-xs"></i>@endif
                             <span class="truncate" :class="sidebarOpen ? 'opacity-100' : 'opacity-0 hidden'">{{ $item->label }}</span>
@@ -157,6 +169,7 @@
                         <div x-show="open && sidebarOpen" class="ml-4 mt-0.5 space-y-0.5">
                             @foreach($configItems as $item)
                                 <a href="{{ $item->resolveUrl() }}"
+                                   @if(request()->url() === $item->resolveUrl()) data-sidebar-active @endif
                                    class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg {{ request()->url() === $item->resolveUrl() ? 'bg-orange-50 text-orange-700 font-medium' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800' }}">
                                     @if($item->icon)<i class="{{ $item->icon }} w-4 text-center text-xs"></i>@endif
                                     {{ $item->label }}
@@ -169,17 +182,79 @@
         </nav>
         <script>
         (function () {
-            // Cada clic en el menu recarga la pagina entera (no es una SPA), asi que el
-            // scroll del sidebar se resetea a 0 en cada navegacion. Se guarda en
-            // sessionStorage y se restaura aqui mismo, justo despues de que el <nav> ya
-            // exista en el DOM (script no-module, se ejecuta al vuelo durante el parseo).
-            var nav = document.getElementById('sidebar-nav');
-            if (!nav) return;
-            var saved = sessionStorage.getItem('sidebarScroll');
-            if (saved !== null) nav.scrollTop = parseInt(saved, 10) || 0;
-            nav.addEventListener('scroll', function () {
-                sessionStorage.setItem('sidebarScroll', nav.scrollTop);
-            }, { passive: true });
+            // Cada clic en el menu recarga la pagina entera (no es una SPA), asi que el scroll
+            // del sidebar se resetea a 0 en cada navegacion. La idea no es "centrar" el item
+            // activo (eso mueve el raton igualmente si no clicaste en el centro del sidebar),
+            // sino dejarlo EXACTAMENTE a la misma altura en pantalla en la que estaba cuando se
+            // hizo clic -- asi el raton, que no se ha movido, se queda encima de la siguiente
+            // opcion si el usuario sigue clicando hacia abajo/arriba por la lista.
+            //
+            // Estrategia: al hacer clic en un enlace del sidebar, se guarda en sessionStorage la
+            // distancia en pixeles entre ese enlace y el borde superior visible del contenedor
+            // con scroll, junto con su URL completa. En la pagina siguiente, se busca ese mismo
+            // enlace por URL (no por posicion/orden -- asi no se rompe si los modulos se
+            // reordenan en /config/projects/{project}) y se ajusta el scroll para que quede
+            // exactamente a esa misma distancia. Si no hay nada guardado (primera carga, o el
+            // enlace guardado ya no existe), se centra el item activo como alternativa razonable.
+            //
+            // Se ejecuta en el evento 'alpine:initialized' (Alpine va en un <script
+            // type="module">, que por spec corre despues de parsear todo el HTML): hasta que
+            // Alpine no aplica el estado colapsado de los desplegables (x-show="open && ..."),
+            // la geometria no es la definitiva. 'load' y un timeout son red de seguridad por si
+            // ese evento no llegara a dispararse.
+            var STORAGE_KEY = 'sidebarClickOffset';
+
+            document.addEventListener('click', function (ev) {
+                var link = ev.target.closest && ev.target.closest('#sidebar-nav a[href]');
+                if (!link) return;
+                var nav = document.getElementById('sidebar-nav');
+                if (!nav) return;
+                var linkRect = link.getBoundingClientRect();
+                var navRect = nav.getBoundingClientRect();
+                try {
+                    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+                        href: link.href,
+                        offset: linkRect.top - navRect.top,
+                    }));
+                } catch (e) { /* sessionStorage no disponible (modo privado, etc) -- se ignora */ }
+            }, true);
+
+            function llevarActivoAVista(origen) {
+                var nav = document.getElementById('sidebar-nav');
+                if (!nav) return;
+                var activo = nav.querySelector('[data-sidebar-active]');
+                if (!activo) { console.log('[sidebar-scroll]', origen, 'ningun elemento data-sidebar-active en el DOM'); return; }
+
+                var activoRect = activo.getBoundingClientRect();
+                if (activoRect.height === 0) return; // oculto (desplegable colapsado)
+
+                var navRect = nav.getBoundingClientRect();
+
+                var offsetGuardado = null;
+                try {
+                    var raw = sessionStorage.getItem(STORAGE_KEY);
+                    if (raw) {
+                        var datos = JSON.parse(raw);
+                        if (datos.href === activo.href) offsetGuardado = datos.offset;
+                    }
+                } catch (e) { /* ignorar */ }
+
+                var offsetDeseado = offsetGuardado !== null
+                    ? offsetGuardado
+                    : (nav.clientHeight / 2) - (activo.clientHeight / 2); // sin dato guardado: centrar
+
+                var delta = (activoRect.top - navRect.top) - offsetDeseado;
+                var nuevo = Math.max(0, nav.scrollTop + delta);
+                console.log('[sidebar-scroll]', origen, offsetGuardado !== null ? 'restaurando offset guardado' : 'sin offset guardado, centrando', '-> scrollTop de', nav.scrollTop, 'a', nuevo, 'texto:', activo.textContent.trim());
+                nav.scrollTop = nuevo;
+            }
+
+            // No se borra el offset guardado tras usarlo: las llamadas de 'load'/timeout son solo
+            // red de seguridad y deben apuntar al mismo sitio que 'alpine:initialized' ya dejo
+            // (si ya esta ahi, delta sale 0 y no se mueve nada). Un clic nuevo lo sobrescribe.
+            document.addEventListener('alpine:initialized', function () { llevarActivoAVista('alpine:initialized'); });
+            window.addEventListener('load', function () { llevarActivoAVista('load'); });
+            setTimeout(function () { llevarActivoAVista('timeout-300ms'); }, 300);
         })();
         </script>
 
@@ -347,6 +422,5 @@ document.addEventListener("alpine:initialized", resetMainScrollRaf);
 
 
 
-@livewireScripts
 </body>
 </html>
