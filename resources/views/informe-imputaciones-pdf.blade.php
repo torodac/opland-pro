@@ -45,7 +45,7 @@ body { font-family:DejaVu Sans,sans-serif; font-size:9pt; color:#222; padding:0.
 .tbl-main .col-dur { width:28pt; }
 .tbl-main .col-km { width:22pt; }
 .tbl-main .col-tipo { width:18pt; }
-.tbl-main tr.wk td { background:#fafafa; color:#bbb; }
+.tbl-main tr.wk td { background:#fafafa; color:#6B7280; }
 
 .tipo-badge { display:inline-block; padding:1pt 5pt; border-radius:8pt;
               font-size:6.5pt; font-weight:bold; color:#fff; }
