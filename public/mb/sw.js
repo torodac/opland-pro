@@ -1,4 +1,4 @@
-const CACHE = 'mb-asamblea-v3';
+const CACHE = 'mb-asamblea-v4';
 const ASSETS = [
   '/mb/manifest.json',
   '/mb/icon-192.png',
@@ -28,6 +28,9 @@ self.addEventListener('fetch', e => {
     return;
   }
   if (/\/asamblea\/recuento\/(voto|tallies)/.test(url.pathname)) {
+    return;
+  }
+  if (/\/gestion_mb\/(tarjeta|registro)/.test(url.pathname)) {
     return;
   }
 

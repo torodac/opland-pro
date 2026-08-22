@@ -1,6 +1,6 @@
 {
-  "name": "Reparto de hojas - Mareny Blau",
-  "short_name": "Reparto MB",
+  "name": "Mareny Blau",
+  "short_name": "Mareny Blau",
   "start_url": "/mb/asamblea/reparto",
   "scope": "/mb/",
   "display": "standalone",

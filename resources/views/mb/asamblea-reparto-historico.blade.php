@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#185fa5">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Reparto MB">
+<meta name="apple-mobile-web-app-title" content="Mareny Blau">
 <link rel="manifest" href="{{ asset('mb/manifest.json') }}">
 <link rel="apple-touch-icon" href="{{ asset('mb/icon-192.png') }}">
 <link rel="icon" href="{{ asset('mb/icon-192.png') }}">
@@ -69,6 +69,7 @@ body { margin:0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Rob
   <a href="{{ route('mb.asamblea.reparto', $project->slug) }}">Reparto</a>
   <a href="{{ route('mb.asamblea.reparto.sin-camara', $project->slug) }}">Sin cámara</a>
   <a href="{{ route('mb.asamblea.reparto.historico', $project->slug) }}" class="active">Histórico</a>
+  <a href="{{ route('mb.aforo', $project->slug) }}">Aforo</a>
 </nav>
 
 <div id="modal-anular" class="modal-overlay">

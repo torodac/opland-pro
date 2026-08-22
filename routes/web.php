@@ -331,6 +331,20 @@ Route::middleware('auth')->group(function () {
             Route::post('cuotas_import/cancelar', [\App\Http\Controllers\Mb\CuotasImportController::class, 'cancelar'])->where('project', 'mb')->name('mb.cuotas_import.cancelar');
             Route::get('cuotas_provisional/{cuota}/historico', [\App\Http\Controllers\Mb\CuotasImportController::class, 'historico'])->where(['project' => 'mb', 'cuota' => '[0-9]+'])->name('mb.cuotas_provisional.historico');
 
+            // Importador de extractos bancarios .xls -> mb_movs_bancarios, clasificación instantánea
+            // por reglas de texto (mb_movs_mapeo), sin IA.
+            Route::get('movimientos_bancarios', [\App\Http\Controllers\Mb\MovimientosBancariosController::class, 'index'])->where('project', 'mb')->name('mb.movimientos_bancarios');
+            Route::post('movimientos_bancarios/import', [\App\Http\Controllers\Mb\MovimientosBancariosController::class, 'import'])->where('project', 'mb')->name('mb.movimientos_bancarios.import');
+            Route::post('movs_mapeo/ejecutar/previsualizar', [\App\Http\Controllers\Mb\MovimientosBancariosController::class, 'previsualizarClasificacion'])->where('project', 'mb')->name('mb.movs_mapeo.ejecutar.previsualizar');
+            Route::post('movs_mapeo/ejecutar/aplicar', [\App\Http\Controllers\Mb\MovimientosBancariosController::class, 'aplicarClasificacion'])->where('project', 'mb')->name('mb.movs_mapeo.ejecutar.aplicar');
+
+            // "Gestión MB": control (previo, sin aforo real) de invitados por tarjeta.
+            Route::get('gestion_mb', [\App\Http\Controllers\Mb\AforoController::class, 'index'])->where('project', 'mb')->name('mb.aforo');
+            Route::get('gestion_mb/tarjeta', [\App\Http\Controllers\Mb\AforoController::class, 'tarjeta'])->where('project', 'mb')->name('mb.aforo.tarjeta');
+            Route::post('gestion_mb/registro', [\App\Http\Controllers\Mb\AforoController::class, 'registrar'])->where('project', 'mb')->name('mb.aforo.registro');
+            Route::get('tarjetas/asignacion', [\App\Http\Controllers\Mb\AforoController::class, 'asignacion'])->where('project', 'mb')->name('mb.tarjetas.asignacion');
+            Route::post('tarjetas/asignacion', [\App\Http\Controllers\Mb\AforoController::class, 'guardarTarjeta'])->where('project', 'mb')->name('mb.tarjetas.asignacion.guardar');
+
             // Sustituye al listado genérico de "viviendas" (mismo motivo que "pyg" arriba: ->where('project','mb')
             // para que el comodín genérico {table} siga funcionando igual para cualquier otro proyecto).
             Route::get('viviendas', [\App\Http\Controllers\Mb\ViviendasController::class, 'index'])->where('project', 'mb')->name('mb.viviendas');
