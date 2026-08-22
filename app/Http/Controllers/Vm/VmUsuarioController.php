@@ -267,8 +267,10 @@ class VmUsuarioController extends Controller
     public function storeContrato(Request $request, Project $project, int $id)
     {
         $this->authorize($project);
+        $nombreUsuario = DB::table('vm_usuarios')->where('id', $id)->value('nombre');
         DB::table('vm_contratos')->insert([
             'id_usuarios'  => $id,
+            'nombre'       => "{$nombreUsuario}_{$request->fecha_alta}",
             'fecha_alta'   => $request->fecha_alta,
             'fecha_baja'   => $request->fecha_baja ?: null,
             'salario_base' => $request->salario_base,
