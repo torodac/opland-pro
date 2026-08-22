@@ -100,10 +100,14 @@ $urlContratoArchivarTpl = route('ficha.archive', [$project->slug, 'contratos', '
   #nf-ficha .col-fechas { width:32%; }
   #nf-ficha .col-importe { width:14%; }
   #nf-ficha .col-cobros { width:36%; }
-  #nf-ficha .circulo { display:inline-block;width:10px;height:10px;border-radius:50%;margin:1px 3px 1px 0;background:#fff;border:1.5px solid #ccc;box-sizing:border-box; }
+  #nf-ficha .circulo { display:inline-block;width:10px;height:10px;border-radius:50%;margin:1px 3px 1px 0;background:#fff;border:1.5px solid #ccc;box-sizing:border-box;text-decoration:none; }
+  #nf-ficha a.circulo { cursor:pointer; }
+  #nf-ficha a.circulo:hover { transform:scale(1.3); }
   #nf-ficha .circulo-pagado { background:#3D8B5A;border-color:#3D8B5A; }
   #nf-ficha .circulo-pendiente { background:#B5432F;border-color:#B5432F; }
   #nf-ficha .circulo-sin_generar { background:#fff;border-color:#ccc; }
+  #nf-ficha .circulo-anulado { background:#fff;border-color:#ccc;position:relative;border-radius:50%; }
+  #nf-ficha .circulo-anulado::before { content:'✕';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:9px;line-height:1;color:#999;font-weight:700; }
   #nf-ficha table.servicios th { text-align:left;padding:6px 8px;font-size:11px;color:#888;font-weight:500; }
   #nf-ficha table.servicios td { padding:8px;font-size:13px;vertical-align:middle; }
   #nf-ficha table.servicios tr.trow { border-top:.5px solid rgba(0,0,0,.06); }
@@ -290,9 +294,24 @@ $urlContratoArchivarTpl = route('ficha.archive', [$project->slug, 'contratos', '
           </td>
           <td class="col-cobros">
             @if(!empty($c->mesesCobro))
-              @php $tituloEstado = ['pagado' => 'Cobrado', 'pendiente' => 'Pendiente de cobro', 'sin_generar' => 'Pago no generado todavía']; @endphp
-              @foreach($c->mesesCobro as $estadoMes)
-                <span class="circulo circulo-{{ $estadoMes }}" title="{{ $tituloEstado[$estadoMes] }}"></span>
+              @php
+                $tituloEstado = ['pagado' => 'Cobrado', 'pendiente' => 'Pendiente de cobro', 'anulado' => 'Pago anulado', 'sin_generar' => 'Pago no generado todavía'];
+                $mesesEs = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+                $tituloMes = function ($mesCobro) use ($tituloEstado, $mesesEs) {
+                    [$anio, $mes] = explode('-', $mesCobro['mes']);
+                    $txt = $mesesEs[(int) $mes] . ' ' . $anio . ' — ' . $tituloEstado[$mesCobro['estado']];
+                    if ($mesCobro['importe'] !== null) {
+                        $txt .= ' — ' . number_format($mesCobro['importe'], 2, ',', '.') . ' €';
+                    }
+                    return $txt;
+                };
+              @endphp
+              @foreach($c->mesesCobro as $mesCobro)
+                @if($mesCobro['pago_id'])
+                  <a class="circulo circulo-{{ $mesCobro['estado'] }}" href="{{ route('ficha', [$project->slug, 'pagos', $mesCobro['pago_id']]) }}" target="_blank" rel="noopener" title="{{ $tituloMes($mesCobro) }}"></a>
+                @else
+                  <span class="circulo circulo-{{ $mesCobro['estado'] }}" title="{{ $tituloMes($mesCobro) }}"></span>
+                @endif
               @endforeach
             @else
               <span style="color:#bbb;">—</span>

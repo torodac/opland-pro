@@ -499,6 +499,16 @@ class FichaController extends Controller
             $this->syncProjectUserAccess($project, $registro, $deactivate);
         }
 
+        // nf: borrar un contrato borra en cascada sus pagos (no al revés -- restaurar el
+        // contrato no restaura pagos que puedan haberse anulado por otro motivo).
+        if ($project->slug === 'nf' && $projectTable->name === 'contratos' && $newDeleted === 1) {
+            DB::table('nf_pagos')->where('id_contratos', $id)->where('deleted', false)->update([
+                'deleted'    => true,
+                'updateuser' => $this->currentUserId() ?? $registro->updateuser,
+                'updatedat'  => now(),
+            ]);
+        }
+
         return back();
     }
 

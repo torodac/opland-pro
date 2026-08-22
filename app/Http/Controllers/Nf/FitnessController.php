@@ -36,8 +36,7 @@ class FitnessController extends Controller
         // anulado o sin pago generado todavía).
         $pagosPorContrato = DB::table('nf_pagos')
             ->whereIn('id_contratos', $contratos->pluck('id'))
-            ->where('deleted', false)
-            ->select('id_contratos', 'fecha_pago', 'id_estado_pagos')
+            ->select('id', 'id_contratos', 'fecha_pago', 'id_estado_pagos', 'cantidad', 'deleted')
             ->get()
             ->groupBy('id_contratos');
         foreach ($contratos as $c) {
@@ -51,11 +50,13 @@ class FitnessController extends Controller
         return view('nf.cliente', compact('project', 'cliente', 'contratos', 'activo', 'generos', 'gruposFitness', 'colorGrupo'));
     }
 
-    // Array de estados ('pagado'|'pendiente'|'sin_generar'), uno por cada mes natural entre
-    // fecha_inicio y fecha_fin del contrato. Solo aplica a Fitness (id_tipo=2); Osteopatía es
-    // una sesión suelta sin concepto de "meses" y devuelve un array vacío.
-    // 'sin_generar' (círculo hueco) = todavía no existe ningún pago para ese mes -- distinto de
-    // 'pendiente' (círculo rojo) = el pago existe pero no está cobrado.
+    // Array de ['estado' => 'pagado'|'pendiente'|'anulado'|'sin_generar', 'pago_id' => ?int,
+    // 'mes' => 'YYYY-MM', 'importe' => ?float], uno por cada mes natural entre fecha_inicio y
+    // fecha_fin del contrato. Solo aplica a Fitness
+    // (id_tipo=2); Osteopatía es una sesión suelta sin concepto de "meses" y devuelve vacío.
+    // 'sin_generar' (círculo hueco, sin link) = nunca ha existido pago ese mes -- distinto de
+    // 'anulado' (aspa) = existió un pago pero se anuló/borró (caso legítimo, no un fallo) --
+    // distinto de 'pendiente' (círculo rojo) = el pago existe y sigue vivo, pero no cobrado.
     private function mesesCobroFitness(object $contrato, \Illuminate\Support\Collection $pagosPorContrato): array
     {
         if ((int) $contrato->id_tipo !== 2) {
@@ -69,13 +70,21 @@ class FitnessController extends Controller
         $meses = [];
         while ($cursor->lte($fin)) {
             $mesActual = $cursor->format('Y-m');
-            $pago = $pagos->first(fn($p) => \Carbon\Carbon::parse($p->fecha_pago)->format('Y-m') === $mesActual);
+            $pagosDelMes = $pagos->filter(fn($p) => \Carbon\Carbon::parse($p->fecha_pago)->format('Y-m') === $mesActual);
+            $pago = $pagosDelMes->first(fn($p) => !$p->deleted) ?? $pagosDelMes->sortByDesc('id')->first();
 
-            $meses[] = match (true) {
+            $estado = match (true) {
                 !$pago => 'sin_generar',
+                $pago->deleted || (int) $pago->id_estado_pagos === 3 => 'anulado',
                 (int) $pago->id_estado_pagos === 2 => 'pagado',
                 default => 'pendiente',
             };
+            $meses[] = [
+                'estado'  => $estado,
+                'pago_id' => $pago->id ?? null,
+                'mes'     => $mesActual,
+                'importe' => $pago->cantidad ?? null,
+            ];
             $cursor->addMonth();
         }
 
@@ -104,13 +113,15 @@ class FitnessController extends Controller
 
         $hoy = now()->toDateString();
 
-        $contratos = DB::table('nf_contratos')
-            ->where('id_tipo', 2)
-            ->where('deleted', false)
-            ->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))
-            ->where('fecha_inicio', '<=', $hoy)
-            ->where(fn($q) => $q->whereNull('fecha_fin')->orWhere('fecha_fin', '>=', $hoy))
-            ->select('id_grupo', 'dia1', 'dia2')
+        $contratos = DB::table('nf_contratos as c')
+            ->join('nf_clientes as cl', 'cl.id', '=', 'c.id_clientes')
+            ->where('c.id_tipo', 2)
+            ->where('c.deleted', false)
+            ->where(fn($q) => $q->whereNull('c.hidden')->orWhere('c.hidden', 0))
+            ->where('c.fecha_inicio', '<=', $hoy)
+            ->where(fn($q) => $q->whereNull('c.fecha_fin')->orWhere('c.fecha_fin', '>=', $hoy))
+            ->orderBy('cl.nombre')
+            ->select('c.id_grupo', 'c.dia1', 'c.dia2', 'cl.id as id_cliente', 'cl.nombre as cliente')
             ->get();
 
         $matriz = $grupos->map(fn($g) => [
@@ -120,6 +131,17 @@ class FitnessController extends Controller
             'dia2' => $contratos->where('id_grupo', $g->id)->where('dia2', true)->count(),
         ]);
 
+        // Inscritos por grupo, embebido en la página -- el listado del dashboard se rellena en
+        // el cliente al pulsar un grupo (vacío por defecto), sin ida y vuelta al servidor.
+        $inscritosPorGrupo = $grupos->mapWithKeys(fn($g) => [
+            $g->id => $contratos->where('id_grupo', $g->id)->map(fn($c) => [
+                'id_cliente' => $c->id_cliente,
+                'nombre'     => $c->cliente,
+                'dia1'       => (bool) $c->dia1,
+                'dia2'       => (bool) $c->dia2,
+            ])->values(),
+        ]);
+
         return view('nf.dashboard', [
             'project' => $project,
             'anio' => $anio,
@@ -127,6 +149,7 @@ class FitnessController extends Controller
             'ejercicioAnterior' => $anio - 1,
             'ejercicioSiguiente' => $anio + 1,
             'matriz' => $matriz,
+            'inscritosPorGrupo' => $inscritosPorGrupo,
             'totalContratos' => $contratos->count(),
             'colorGrupo' => $this->colorGrupo(),
         ]);
