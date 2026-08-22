@@ -25,6 +25,14 @@
             <i class="fa-solid fa-file-import"></i>
         </a>
         @endif
+        {{-- Ejecutar reglas de clasificación (solo mb_movs_mapeo) --}}
+        @if($projectTable->name === 'movs_mapeo')
+        <button type="button" onclick="mmEjecutarPrevisualizar()"
+           class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">
+            <i class="fa-solid fa-play"></i>
+            Ejecutar
+        </button>
+        @endif
         {{-- Planificador (solo tareas_limpieza) --}}
         @if($projectTable->name === 'tareas_limpieza')
         <a href="{{ route('planificador-limpieza', $project->slug) }}"
@@ -169,7 +177,7 @@
     @if($tablStats)
     @php $statActiva = request('stat'); @endphp
 
-    @if(isset($tablStats['emitido_anio']) && ($ejercicioCuotasSel ?? null))
+    @if($ejercicioCuotasSel ?? null)
     @php
         [$ejY1, $ejY2] = explode('-', $ejercicioCuotasSel);
         $ejPrev = ((int) $ejY1 - 1) . '-' . ((int) $ejY2 - 1);
@@ -186,7 +194,19 @@
     @endif
 
     @php
-        $stats = isset($tablStats['emitido_anio'])
+        // mb_movs_bancarios: numero de categorias variable (una por cada valor real de
+        // mb_gastos_cuentas usado), asi que no encaja en el reparto fijo row 1/2 de las demas
+        // tablas -- se resuelve aparte con una rejilla de columnas calculadas (ver mas abajo).
+        $statsDinamicos = null;
+        if (isset($tablStats['sin_clasificar'])) {
+            $statsDinamicos = [
+                'sin_clasificar' => ['label' => 'Sin clasificar', 'count' => $tablStats['sin_clasificar'], 'n' => $tablStats['sin_clasificar_n'], 'tooltip' => 'Movimientos del ejercicio seleccionado sin categoría asignada por ninguna regla.'],
+            ];
+            foreach ($tablStats['categorias'] as $cat) {
+                $statsDinamicos['cat:' . $cat['id']] = ['label' => $cat['nombre'], 'count' => $cat['count'], 'n' => $cat['n'], 'tooltip' => null];
+            }
+        }
+        $stats = $statsDinamicos ? [] : (isset($tablStats['emitido_anio'])
             ? [
                 'emitido_anio'       => ['label' => 'Emitido ' . ($ejercicioCuotasSel ?? 'este año'),      'count' => $tablStats['emitido_anio'],       'row' => 1, 'tooltip' => 'Importe total emitido (suma de importe) de las cuotas del ejercicio seleccionado, sin contar Anuladas.'],
                 'pendiente_anio'     => ['label' => 'Pendiente ' . ($ejercicioCuotasSel ?? 'este año'),    'count' => $tablStats['pendiente_anio'],     'row' => 1, 'tooltip' => 'Importe pendiente de las cuotas del ejercicio seleccionado (sin contar Anuladas). % = importe pendiente / importe total emitido del ejercicio.'],
@@ -209,8 +229,29 @@
                 'ocultas'         => ['label' => 'Propiedades ocultas',  'count' => $tablStats['ocultas'],          'row' => 1, 'tooltip' => 'Propiedades archivadas — no se muestran en desplegables ni en otros módulos'],
                 'sin_breezeway'   => ['label' => 'Sin ID Breezeway',      'count' => $tablStats['sin_breezeway'],    'row' => 1, 'tooltip' => 'Propiedades activas y visibles sin breezeway_home_id — no se sincronizarán tareas de limpieza/mantenimiento para ellas.'],
                 'codigo_compartido' => ['label' => 'Código compartido',   'count' => $tablStats['codigo_compartido'], 'row' => 1, 'tooltip' => 'Propiedades activas cuyo código histórico (A3 o Icnea) coincide con el de otra propiedad — posible duplicado a revisar.'],
-            ]);
+            ]));
     @endphp
+    @if($statsDinamicos)
+        {{-- mb_movs_bancarios: rejilla con tantas columnas como haga falta para no pasar de 2
+             filas (perRow = mitad de los stats, redondeando hacia arriba). --}}
+        @php $perRow = max(1, (int) ceil(count($statsDinamicos) / 2)); @endphp
+        <div class="mb-4" style="display:grid;grid-template-columns:repeat({{ $perRow }}, minmax(110px, 1fr));gap:0.5rem;">
+            @foreach($statsDinamicos as $key => $stat)
+            @php $activa = $statActiva === $key; @endphp
+            <a href="{{ request()->fullUrlWithQuery(['stat' => $activa ? null : $key, 'page' => null]) }}"
+               style="background:{{ $activa ? '#fff7ed' : '#fff' }};border:1px solid {{ $activa ? '#fdba74' : '#dce6ee' }};border-radius:0.6rem;padding:0.5rem 0.65rem;text-decoration:none;transition:opacity .15s;box-sizing:border-box;min-width:0"
+               class="hover:opacity-80">
+                <div style="display:flex;align-items:baseline;gap:5px">
+                    <span style="font-size:0.9rem;font-weight:700;color:#16232b;font-variant-numeric:tabular-nums">{{ number_format($stat['count'], 2, ',', '.') }} €</span>
+                    <span style="font-size:0.6rem;color:#a8b7c1;font-variant-numeric:tabular-nums">({{ $stat['n'] }})</span>
+                </div>
+                <div style="font-size:0.65rem;font-weight:500;color:{{ $activa ? '#c2410c' : '#7e93a1' }};margin-top:0.1rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ $stat['label'] }}">
+                    {{ $stat['label'] }}
+                </div>
+            </a>
+            @endforeach
+        </div>
+    @else
     @foreach([1, 2] as $rowNum)
         @php $statsRow = collect($stats)->filter(fn($s) => $s['row'] === $rowNum); @endphp
         @if($statsRow->isNotEmpty())
@@ -239,6 +280,7 @@
         </div>
         @endif
     @endforeach
+    @endif
     @endif
 
     @if($icneaSync ?? null)
@@ -741,7 +783,19 @@
                                         };
                                     @endphp
                                     <td class="px-4 py-3 text-gray-700 {{ $colAlign }}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;{{ in_array($campo->type, ['fecha','time']) ? 'min-width:90px' : '' }}">
-                                        @include('partials.cell', ['campo' => $campo, 'valor' => $registro->{$campo->name} ?? null, 'fkOptions' => $fkOptions, 'usuariosMap' => $usuariosMap ?? []])
+                                        @if($projectTable->name === 'movs_bancarios' && $campo->name === 'id_gastos_cuentas' && empty($registro->id_gastos_cuentas))
+                                            {{-- Categoria vacia: atajo para clasificar en 1 clic sin abrir la ficha -- las dos
+                                                 categorias mas frecuentes entre "Sin clasificar" (Gastos = PTE REVISIÓN id 116,
+                                                 Cuotas = Ingresos cuotas id 52). Si ya tiene categoria, se ve normal (nombre). --}}
+                                            <div class="flex gap-1" id="mb-cat-cell-{{ $registro->id }}" onclick="event.stopPropagation()">
+                                                <button type="button" onclick="mbSetCategoria({{ $registro->id }}, 116, 'PTE REVISIÓN', this)"
+                                                        style="background:#fed7aa;color:#9a3412;border:none;border-radius:0.375rem;padding:0.2rem 0.55rem;font-size:0.7rem;font-weight:600;cursor:pointer;white-space:nowrap">Gastos</button>
+                                                <button type="button" onclick="mbSetCategoria({{ $registro->id }}, 52, 'Ingresos cuotas', this)"
+                                                        style="background:#bfdbfe;color:#1e40af;border:none;border-radius:0.375rem;padding:0.2rem 0.55rem;font-size:0.7rem;font-weight:600;cursor:pointer;white-space:nowrap">Cuotas</button>
+                                            </div>
+                                        @else
+                                            @include('partials.cell', ['campo' => $campo, 'valor' => $registro->{$campo->name} ?? null, 'fkOptions' => $fkOptions, 'usuariosMap' => $usuariosMap ?? []])
+                                        @endif
                                     </td>
                                 @endforeach
 
@@ -1289,3 +1343,110 @@ async function toggleCuotaHistorico(id, btn) {
 }
 @endif
 </script>
+
+@if($projectTable->name === 'movs_mapeo')
+<div class="fixed inset-0 z-50 hidden items-center justify-center bg-black/30" id="mm-modal">
+    <div class="bg-white rounded-xl shadow-xl p-6 w-96">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3" id="mm-modal-title">Ejecutar reglas de clasificación</h3>
+        <div id="mm-modal-body" class="text-sm text-gray-600 space-y-2 mb-5">
+            <div class="flex items-center gap-2 text-gray-400"><i class="fa-solid fa-spinner fa-spin"></i> Calculando…</div>
+        </div>
+        <div class="flex justify-end gap-2" id="mm-modal-footer">
+            <button class="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors" onclick="document.getElementById('mm-modal').classList.add('hidden')">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const MM_PREVIEW_URL = '{{ route('mb.movs_mapeo.ejecutar.previsualizar', $project->slug) }}';
+const MM_APLICAR_URL = '{{ route('mb.movs_mapeo.ejecutar.aplicar', $project->slug) }}';
+const MM_CSRF = '{{ csrf_token() }}';
+
+async function mmEjecutarPrevisualizar() {
+    const modal = document.getElementById('mm-modal');
+    const body = document.getElementById('mm-modal-body');
+    const footer = document.getElementById('mm-modal-footer');
+    document.getElementById('mm-modal-title').textContent = 'Ejecutar reglas de clasificación';
+    body.innerHTML = '<div class="flex items-center gap-2 text-gray-400"><i class="fa-solid fa-spinner fa-spin"></i> Calculando…</div>';
+    footer.innerHTML = '<button class="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors" onclick="document.getElementById(\'mm-modal\').classList.add(\'hidden\')">Cancelar</button>';
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+
+    try {
+        const res = await fetch(MM_PREVIEW_URL, { method: 'POST', headers: { 'X-CSRF-TOKEN': MM_CSRF, 'Accept': 'application/json' } });
+        const data = await res.json();
+        if (!data.ok) { body.innerHTML = `<span class="text-red-500">${data.error || 'Error al calcular la previsualización.'}</span>`; return; }
+
+        body.innerHTML = `
+            <p>Sobre <strong>${data.total}</strong> movimientos importados:</p>
+            <ul class="list-disc pl-5">
+                <li><strong class="text-green-700">${data.a_clasificar}</strong> se clasificarían (no tenían categoría)</li>
+                <li><strong class="text-orange-600">${data.a_reclasificar}</strong> se reclasificarían (ya tenían una categoría distinta)</li>
+                <li class="text-gray-400">${data.sin_cambios} sin cambios</li>
+            </ul>
+            ${(data.a_clasificar + data.a_reclasificar) === 0 ? '<p class="text-gray-400 mt-2">No hay nada que aplicar.</p>' : ''}
+        `;
+        if (data.a_clasificar + data.a_reclasificar > 0) {
+            footer.innerHTML = `
+                <button class="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors" onclick="document.getElementById('mm-modal').classList.add('hidden')">Cancelar</button>
+                <button class="px-4 py-1.5 text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors" onclick="mmEjecutarAplicar()">Continuar</button>
+            `;
+        }
+    } catch (e) {
+        body.innerHTML = '<span class="text-red-500">Error de red al calcular la previsualización.</span>';
+    }
+}
+
+async function mmEjecutarAplicar() {
+    const body = document.getElementById('mm-modal-body');
+    const footer = document.getElementById('mm-modal-footer');
+    body.innerHTML = '<div class="flex items-center gap-2 text-gray-400"><i class="fa-solid fa-spinner fa-spin"></i> Aplicando…</div>';
+    footer.innerHTML = '';
+
+    try {
+        const res = await fetch(MM_APLICAR_URL, { method: 'POST', headers: { 'X-CSRF-TOKEN': MM_CSRF, 'Accept': 'application/json' } });
+        const data = await res.json();
+        if (!data.ok) { body.innerHTML = `<span class="text-red-500">${data.error || 'Error al aplicar la clasificación.'}</span>`; return; }
+
+        document.getElementById('mm-modal-title').textContent = '✓ Clasificación aplicada';
+        body.innerHTML = `<p><strong>${data.a_clasificar}</strong> movimientos clasificados y <strong>${data.a_reclasificar}</strong> reclasificados.</p>`;
+        footer.innerHTML = '<button class="px-4 py-1.5 text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors" onclick="location.reload()">Cerrar</button>';
+    } catch (e) {
+        body.innerHTML = '<span class="text-red-500">Error de red al aplicar la clasificación.</span>';
+    }
+}
+</script>
+@endif
+
+@if($projectTable->name === 'movs_bancarios')
+<script>
+// Sin recargar la pagina: al clasificar, la celda pasa a mostrar el nombre de la categoria al
+// instante (igual que quedaria tras recargar), para poder seguir clasificando filas seguidas sin
+// perder el sitio en el listado. Los stats de arriba (sumas por categoria) no se recalculan en
+// vivo -- se actualizaran solos la proxima vez que se cargue la pagina.
+async function mbSetCategoria(id, idGastosCuentas, nombreCategoria, btn) {
+    const celda = document.getElementById('mb-cat-cell-' + id);
+    celda.querySelectorAll('button').forEach(b => b.disabled = true);
+    btn.style.opacity = '0.5';
+
+    try {
+        const res = await fetch('{{ route('ficha.update-field', [$project->slug, 'movs_bancarios', '__ID__']) }}'.replace('__ID__', id), {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+            body: JSON.stringify({ field: 'id_gastos_cuentas', value: idGastosCuentas }),
+        });
+        if (res.ok) {
+            celda.outerHTML = nombreCategoria;
+        } else {
+            alert('No se ha podido guardar la categoría.');
+            celda.querySelectorAll('button').forEach(b => b.disabled = false);
+            btn.style.opacity = '1';
+        }
+    } catch (e) {
+        alert('Error de red al guardar la categoría.');
+        celda.querySelectorAll('button').forEach(b => b.disabled = false);
+        btn.style.opacity = '1';
+    }
+}
+</script>
+@endif

@@ -137,6 +137,11 @@ class ListadoController extends Controller
             $aDemandarTooltip       = $this->aDemandarPorAnio($ejercicioCuotasSel);
         }
 
+        if ($fullTable === 'mb_movs_bancarios') {
+            $ejercicioCuotasSel = $request->input('ejercicio') ?: $this->ejercicioActualCuotas();
+            $tablStats = $this->movsBancariosStats($ejercicioCuotasSel);
+        }
+
         $nfClientesTelefono = null;
         if ($fullTable === 'nf_pagos') {
             $nfClientesTelefono = DB::table('nf_clientes')->pluck('telefono', 'id')->toArray();
@@ -400,6 +405,15 @@ class ListadoController extends Controller
                 'a_demandar'         => $query->whereIn('id_viviendas', $this->viviendasProximasAPrescribir($ejercicioSel))->where('estado', 'Pendiente')->where('pendiente', '>', 0),
                 default              => null,
             };
+        } elseif ($fullTable === 'mb_movs_bancarios' && $stat) {
+            $ejercicioSel = $request->input('ejercicio') ?: $this->ejercicioActualCuotas();
+            $rangoSel     = $this->ejercicioRango($ejercicioSel);
+            $query->where('deleted', false)->whereBetween('fecha', $rangoSel);
+            if ($stat === 'sin_clasificar') {
+                $query->whereNull('id_gastos_cuentas');
+            } elseif (str_starts_with($stat, 'cat:')) {
+                $query->where('id_gastos_cuentas', (int) substr($stat, 4));
+            }
         } else {
             // Borrados / archivados (solo si las columnas existen)
             if ($tieneDeleted) {
@@ -596,6 +610,33 @@ class ListadoController extends Controller
             )
         ");
         return array_column($rows, 'id');
+    }
+
+    // "Sin clasificar" + un stat por cada categoria (mb_gastos_cuentas) con movimientos en el
+    // ejercicio dado -- misma logica de "sin_clasificar"/"cat:{id}" que el filtro de
+    // filteredSortedQuery(), la categoria se identifica por id (no por nombre) para no depender
+    // de textos con acentos/espacios en la query string. El valor de cada stat es la SUMA de
+    // importe (no el recuento de movimientos).
+    private function movsBancariosStats(string $ejercicioActual): array
+    {
+        $rango = $this->ejercicioRango($ejercicioActual);
+        $base  = fn() => DB::table('mb_movs_bancarios')->where('deleted', false)->whereBetween('fecha', $rango);
+
+        $sinClasificarRow = $base()->whereNull('id_gastos_cuentas')->selectRaw('count(*) as n, coalesce(sum(importe),0) as suma')->first();
+
+        $categorias = DB::table('mb_movs_bancarios as m')
+            ->join('mb_gastos_cuentas as c', 'c.id', '=', 'm.id_gastos_cuentas')
+            ->where('m.deleted', false)
+            ->whereBetween('m.fecha', $rango)
+            ->groupBy('c.id', 'c.nombre')
+            ->orderByDesc(DB::raw('sum(m.importe)'))
+            ->get(['c.id', 'c.nombre', DB::raw('count(*) as n'), DB::raw('sum(m.importe) as suma')]);
+
+        return [
+            'sin_clasificar'    => (float) $sinClasificarRow->suma,
+            'sin_clasificar_n'  => (int) $sinClasificarRow->n,
+            'categorias'        => $categorias->map(fn($c) => ['id' => $c->id, 'nombre' => $c->nombre, 'count' => (float) $c->suma, 'n' => (int) $c->n])->all(),
+        ];
     }
 
     private function ejercicioActualCuotas(): string
