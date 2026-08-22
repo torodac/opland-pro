@@ -55,7 +55,7 @@ class InformeImputacionesController extends Controller
 
         $currentVmUserId = $user->projectUserId($project);
         $authRol         = $currentVmUserId ? DB::table('vm_usuarios')->where('id', $currentVmUserId)->value('id_rol') : null;
-        $puedeFirmarCoordinador = $pasoActual === 'coordinador' && ($isAdmin || (int) $authRol === 10);
+        $puedeFirmarCoordinador = $pasoActual === 'coordinador' && ($isAdmin || in_array((int) $authRol, [10, 3], true));
         $puedeFirmarDireccion   = $pasoActual === 'direccion'   && ($isAdmin || (int) $authRol === 3);
         $puedeFirmarTrabajador  = $pasoActual === 'trabajador'
             && (int) DB::table('vm_usuarios')->where('id', $userId)->value('admin_user_id') === (int) auth()->id();
@@ -101,7 +101,9 @@ class InformeImputacionesController extends Controller
         // Mismos gates que cada botón de firma en la ficha individual (validar/firmarCoordinador/
         // firmarDireccion) -- se reutilizan tal cual, no se inventa un permiso nuevo para esta vista.
         $puedeFirmarRrhh        = $canSelectTodos; // isAdmin || authRol en [3,11]
-        $puedeFirmarCoordinador = $isAdmin || (int) $authRol === 10;
+        // Direccion general (3) puede actuar tambien como Coordinador, igual que ya puede como
+        // RRHH (canSelectTodos, arriba) -- rol superior cubre los pasos de aprobacion inferiores.
+        $puedeFirmarCoordinador = $isAdmin || in_array((int) $authRol, [10, 3], true);
         $puedeFirmarDireccion   = $isAdmin || (int) $authRol === 3;
         $viewerSignaturePath    = DB::table('admin_users')->where('id', auth()->id())->value('signature_path');
 
@@ -156,8 +158,9 @@ class InformeImputacionesController extends Controller
 
         $rolesMap      = DB::table('vm_roles')->pluck('nombre', 'id');
         $claseAusencia = ['C' => 'Compensacion', 'V' => 'Vacaciones', 'B' => 'Baja', 'AA' => 'Asuntos', 'otro' => 'Absentismo'];
+        $pendientesValidacion = $this->pendientesValidacionDashboard($userIds);
 
-        $filas = $usuarios->map(function ($u) use ($year, $month, $estados, $editadosTrasInicio, $firmasPorUsuario, $rolesMap, $claseAusencia) {
+        $filas = $usuarios->map(function ($u) use ($year, $month, $estados, $editadosTrasInicio, $firmasPorUsuario, $rolesMap, $claseAusencia, $pendientesValidacion) {
             $paso     = $estados[$u->id] ?? 'rrhh';
             $metricas = $this->metricasResumen($u->id, $year, $month);
 
@@ -187,6 +190,7 @@ class InformeImputacionesController extends Controller
                 'dias_turno'          => $metricas['dias_turno'],
                 'dias_descanso'       => $metricas['dias_descanso'],
                 'dias_sin_asignar'    => $metricas['dias_sin_asignar'],
+                'pendientes_validacion' => $pendientesValidacion[$u->id] ?? 0,
             ];
         })->sortBy('nombre')->values();
 
@@ -205,6 +209,82 @@ class InformeImputacionesController extends Controller
                 ['label' => 'Informe mensual', 'url' => ''],
             ],
         ]);
+    }
+
+    // Cuenta, por usuario, cuántos elementos tiene pendientes en los 3 bloques del dashboard que
+    // tienen una acción "Validar" real (DashboardController::validarConciliacion/validarTarea/
+    // validarFichaje) -- deliberadamente NO se comparten las consultas con DashboardController
+    // (que están limitadas a 50 filas y pensadas para pintar una lista, no para contar) para no
+    // tocar el dashboard en vivo; misma lógica de negocio, repetida sin el limit().
+    private function pendientesValidacionDashboard(array $userIds): array
+    {
+        $hoy = now()->toDateString();
+        $pendientes = array_fill_keys($userIds, 0);
+
+        // Conciliaciones: horario especial sin ausencia creada.
+        DB::table('vm_horarios as h')
+            ->whereNotIn('h.tipo', ['turno', 'descanso'])
+            ->where('h.fecha', '<', $hoy)
+            ->whereIn('h.id_usuario', $userIds)
+            ->whereNotExists(function ($q) {
+                $q->from('vm_ausencias as a')
+                    ->whereColumn('a.id_usuarios', 'h.id_usuario')
+                    ->whereColumn('a.fecha_inicio', '<=', 'h.fecha')
+                    ->whereColumn('a.fecha_fin', '>=', 'h.fecha')
+                    ->where('a.deleted', 0);
+            })
+            ->select('h.id_usuario', DB::raw('count(*) as n'))
+            ->groupBy('h.id_usuario')
+            ->get()
+            ->each(function ($r) use (&$pendientes) { $pendientes[$r->id_usuario] = ($pendientes[$r->id_usuario] ?? 0) + $r->n; });
+
+        // Tareas limpieza/mantenimiento completadas sin imputar y sin validar -- control_user es
+        // un array JSON (puede haber varios asignados), se cuenta para cada uno.
+        $sinImputacion = fn($tipo) => fn($q) => $q->from('vm_imputaciones as i')
+            ->where('i.tipo', $tipo)->whereColumn('i.id_tarea', 't.id');
+        foreach (['limpieza' => 'vm_tareas_limpieza', 'mantenimiento' => 'vm_tareas_mantenimiento'] as $tipo => $tabla) {
+            DB::table("{$tabla} as t")
+                ->where('t.deleted', 0)->where('t.estado', 'Completada')
+                ->where(fn($q) => $q->whereNull('t.validado')->orWhere('t.validado', false))
+                ->whereNull('t.usuario_breezeway_ausente')
+                ->whereNotExists($sinImputacion($tipo))
+                ->get(['t.control_user'])
+                ->each(function ($t) use (&$pendientes) {
+                    foreach (json_decode($t->control_user ?? '[]', true) ?? [] as $id) {
+                        $id = (int) $id;
+                        if (isset($pendientes[$id])) $pendientes[$id]++;
+                    }
+                });
+        }
+
+        // Fichaje vs imputaciones (diff > 30 min, sin validar) -- mismo cálculo que el dashboard.
+        $usuariosRol = DB::table('vm_usuarios')->where('deleted', 0)->whereIn('id_rol', [1, 4])->pluck('id', 'nombre');
+        $imputacionesDia = DB::table('vm_imputaciones')
+            ->where('fecha_imputacion', '<', $hoy)->whereNotNull('duracion')
+            ->selectRaw('id_usuario, fecha_imputacion, SUM(duracion) as total_min')
+            ->groupBy('id_usuario', 'fecha_imputacion')
+            ->get()->keyBy(fn($r) => $r->id_usuario . '_' . $r->fecha_imputacion);
+
+        DB::table('vm_fichaje')
+            ->where('deleted', 0)
+            ->where(fn($q) => $q->whereNull('validado')->orWhere('validado', false))
+            ->where('fecha_fichaje', '<', $hoy)
+            ->whereNotNull('hora_fin')
+            ->get(['nombre', 'fecha_fichaje', 'hora_inicio', 'hora_fin', 'pausa_inicio', 'pausa_fin'])
+            ->each(function ($f) use (&$pendientes, $usuariosRol, $imputacionesDia) {
+                $nombreUsuario = preg_replace('/^\d{4}\.\d{2}\.\d{2}_/', '', (string) $f->nombre);
+                $idUsuario = $usuariosRol[$nombreUsuario] ?? null;
+                if (!$idUsuario || !isset($pendientes[$idUsuario])) return;
+
+                $mins = VmHorasService::hmsToMinutes($f->hora_fin) - VmHorasService::hmsToMinutes($f->hora_inicio);
+                if ($f->pausa_inicio && $f->pausa_fin) {
+                    $mins -= VmHorasService::hmsToMinutes($f->pausa_fin) - VmHorasService::hmsToMinutes($f->pausa_inicio);
+                }
+                $impMin = (int) ($imputacionesDia[$idUsuario . '_' . $f->fecha_fichaje]->total_min ?? 0);
+                if (abs($mins - $impMin) > 30) $pendientes[$idUsuario]++;
+            });
+
+        return $pendientes;
     }
 
     // Métricas de un usuario para una fila del panel de aprobaciones. Reutiliza getInformeData()
@@ -328,8 +408,8 @@ class InformeImputacionesController extends Controller
 
         $currentVmUserId = $user->projectUserId($project);
         $authRol         = $currentVmUserId ? DB::table('vm_usuarios')->where('id', $currentVmUserId)->value('id_rol') : null;
-        if (!($isAdmin || (int) $authRol === 10)) {
-            return response()->json(['error' => 'Solo el coordinador (Dirección de Operaciones) puede firmar este paso.'], 403);
+        if (!($isAdmin || in_array((int) $authRol, [10, 3], true))) {
+            return response()->json(['error' => 'Solo el coordinador (Dirección de Operaciones) o Dirección general pueden firmar este paso.'], 403);
         }
 
         return $this->responderFirma($this->firmarPaso($userId, $year, $month, 'coordinador', (int) auth()->id(), $request));

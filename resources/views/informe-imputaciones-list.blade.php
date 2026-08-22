@@ -88,6 +88,7 @@ function sprintfDiasHorasMin($totalMin) {
 .ap-who-dept { font-size:11.5px; color:#6b7280; }
 
 .ap-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+.ap-pendientes-validacion { font-size:11px; font-weight:700; color:#ff0000; background:#FBE7E4; padding:2px 8px; border-radius:20px; margin-left:auto; }
 .ap-btn { border:1px solid transparent; border-radius:8px; padding:7px 13px; font-size:12.5px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; text-decoration:none; }
 .ap-btn-sign { background:#2c5c86; color:#fff; }
 .ap-btn-sign:hover { background:#1b3e5c; }
@@ -127,6 +128,7 @@ function sprintfDiasHorasMin($totalMin) {
 .ap-line3 { display:flex; flex-direction:column; gap:3px; padding-left:42px; }
 .ap-flag { display:flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; }
 .ap-flag.bad { color:#c24236; }
+.ap-flag.gray { color:#6b7280; }
 .ap-flag.warn { color:#b8790f; }
 
 .ap-empty { text-align:center; padding:40px 0; color:#9ca3af; font-size:13.5px; }
@@ -226,7 +228,7 @@ function filtrarRol(rol) {
             </div>
             <div class="ap-row-right">
                 @if($fila->desviacion)
-                    <div class="ap-flag bad">
+                    <div class="ap-flag gray">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
                         Desviación fichaje/imputación en {{ $fila->desviacion['dias'] }} {{ $fila->desviacion['dias'] === 1 ? 'día' : 'días' }}, suma {{ sprintfDiasHorasMin($fila->desviacion['total_min']) }}
                     </div>
@@ -267,6 +269,9 @@ function filtrarRol(rol) {
             @endforelse
             @if($fila->es_turno && $fila->dias_sin_asignar > 0)
                 <span class="ap-sin-asignar">{{ $fila->dias_sin_asignar }} sin horario</span>
+            @endif
+            @if($fila->pendientes_validacion > 0)
+                <span class="ap-pendientes-validacion">{{ $fila->pendientes_validacion }} {{ $fila->pendientes_validacion === 1 ? 'validación pendiente' : 'validaciones pendientes' }}</span>
             @endif
         </div>
         @if($fila->editado_tras_inicio)
