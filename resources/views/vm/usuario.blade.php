@@ -78,9 +78,9 @@ $sinVigente = $contratos->isNotEmpty()
             Reset password
         </button>
         <button onclick="openModal('modal-delete')"
-                class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors">
+                class="flex items-center gap-1.5 px-3 py-1.5 text-sm {{ $usuario->deleted ? 'text-green-600 border-green-200 hover:bg-green-50' : 'text-red-500 border-red-200 hover:bg-red-50' }} border rounded-lg transition-colors">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
-            Borrar
+            {{ $usuario->deleted ? 'Restaurar' : 'Borrar' }}
         </button>
         <button onclick="cancelEditMode()"
                 class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-500 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
@@ -148,6 +148,9 @@ td{padding:8px;font-size:13px;}
       <div>
         <div style="display:flex;align-items:center;gap:8px;">
           <p style="font-weight:500;font-size:18px;margin:0;">{{ $usuario->nombre }}</p>
+          @if($usuario->deleted)
+            <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#FCEBEB;color:#A32D2D;border:0.5px solid #F7C1C1;white-space:nowrap;">Borrado</span>
+          @endif
           @if($sinVigente)
             <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#FCEBEB;color:#A32D2D;border:0.5px solid #F7C1C1;white-space:nowrap;">Sin contrato vigente</span>
           @endif
@@ -561,11 +564,19 @@ td{padding:8px;font-size:13px;}
 
 <div class="modal-overlay" id="modal-delete">
   <div class="modal" style="width:320px;">
-    <p class="modal-title">Borrar usuario</p>
-    <p style="font-size:13px;color:#888;margin:0 0 1rem;">El usuario <strong>{{ $usuario->nombre }}</strong> quedará marcado como borrado y perderá el acceso. Esta acción es reversible.</p>
+    <p class="modal-title">{{ $usuario->deleted ? 'Restaurar usuario' : 'Borrar usuario' }}</p>
+    @if($usuario->deleted)
+      <p style="font-size:13px;color:#888;margin:0 0 1rem;">El usuario <strong>{{ $usuario->nombre }}</strong> dejará de estar marcado como borrado y podrá recuperar el acceso.</p>
+    @else
+      <p style="font-size:13px;color:#888;margin:0 0 1rem;">El usuario <strong>{{ $usuario->nombre }}</strong> quedará marcado como borrado y perderá el acceso. Esta acción es reversible.</p>
+    @endif
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-delete')">Cancelar</button>
-      <button class="btn" style="background:#FCEBEB;color:#A32D2D;border-color:#F7C1C1;" onclick="eliminarUsuario()">Borrar</button>
+      @if($usuario->deleted)
+        <button class="btn" style="background:#E6F6EA;color:#1F7A3D;border-color:#BCE6C7;" onclick="eliminarUsuario()">Restaurar</button>
+      @else
+        <button class="btn" style="background:#FCEBEB;color:#A32D2D;border-color:#F7C1C1;" onclick="eliminarUsuario()">Borrar</button>
+      @endif
     </div>
   </div>
 </div>
@@ -932,14 +943,32 @@ function renderPills(year) {
 
         if (a.tipo === 'Vacaciones') {
             const devengo = a.anyo_devengo || anyoDisfrute;
-            // En la vista de `year`, mostramos todas las vacaciones con anyo_devengo == year
-            if (String(devengo) !== String(year)) continue;
-            // Agrupamos por año de disfrute
-            const muted = anyoDisfrute != year;
-            const key   = 'Vacaciones_' + anyoDisfrute;
-            const label = muted ? 'Vacaciones ' + anyoDisfrute : 'Vacaciones';
-            if (!conteos[key]) conteos[key] = { label, dias: 0, muted, tipo: 'Vacaciones' };
-            conteos[key].dias += diasHabiles(a.desde, a.hasta);
+            const mismoDevengo  = String(devengo) === String(year);
+            const mismoDisfrute = String(anyoDisfrute) === String(year);
+            // Ni se devengan ni se disfrutan este año: no tiene nada que ver con la vista actual.
+            if (!mismoDevengo && !mismoDisfrute) continue;
+
+            if (mismoDevengo) {
+                // Comportamiento de siempre: agrupadas por año de disfrute, atenuada si el
+                // disfrute cae en otro año distinto al que se esta viendo.
+                const muted = !mismoDisfrute;
+                const key   = 'Vacaciones_' + anyoDisfrute;
+                const label = muted ? 'Vacaciones ' + anyoDisfrute : 'Vacaciones';
+                const tooltip = muted
+                    ? `Vacaciones adelantadas: días de vacaciones devengados en el ejercicio seleccionado pero disfrutados en ${anyoDisfrute}`
+                    : null;
+                if (!conteos[key]) conteos[key] = { label, dias: 0, muted, tipo: 'Vacaciones', tooltip };
+                conteos[key].dias += diasHabiles(a.desde, a.hasta);
+            } else {
+                // Disfrutadas ESTE año pero con devengo de un año anterior (dias que quedaban
+                // pendientes de vacaciones ya devengadas antes) -- pill aparte, sin atenuar,
+                // porque sí se han disfrutado dentro del año que se esta viendo.
+                const key   = 'Vacaciones_devengo_' + devengo;
+                const label = 'Vacaciones (devengo ' + devengo + ')';
+                const tooltip = `Vacaciones atrasadas: días disfrutados en el ejercicio seleccionado pero devengados en ${devengo}`;
+                if (!conteos[key]) conteos[key] = { label, dias: 0, muted: false, tipo: 'Vacaciones', tooltip };
+                conteos[key].dias += diasHabiles(a.desde, a.hasta);
+            }
         } else {
             // Para otros tipos: ausencias que caen en el año visualizado
             if (a.hasta < yearStart || a.desde > yearEnd) continue;
@@ -960,7 +989,13 @@ function renderPills(year) {
         btn.className = 'stat-pill';
         btn.dataset.tipo = info.tipo;
         btn.style.cssText = `background:${bg};border-color:${col}33;color:${col};${info.muted ? 'opacity:0.4;cursor:default;pointer-events:none;' : ''}`;
-        btn.innerHTML = `${info.label}: <strong>${info.dias}</strong> d`;
+        const tooltipHtml = info.tooltip
+            ? ` <span class="app-tooltip" style="pointer-events:auto;vertical-align:middle" onclick="event.stopPropagation()">
+                   <span style="font-size:0.7rem">&#9432;</span>
+                   <span class="app-tooltip-box">${info.tooltip}</span>
+               </span>`
+            : '';
+        btn.innerHTML = `${info.label}: <strong>${info.dias}</strong> d${tooltipHtml}`;
         if (!info.muted) btn.onclick = function() { toggleFiltro(this); };
         cont.appendChild(btn);
     }
@@ -1089,9 +1124,11 @@ function horasFichadasBrutasAnio(year) {
     return total;
 }
 
-// Días de vacaciones disfrutados en el año (mismo criterio que renderPills(): agrupa por
-// año de devengo, días hábiles según diasHabiles()).
-function diasVacacionesDisfrutadosAnio(year) {
+// Días de vacaciones SOLICITADOS con devengo de ese año (mismo criterio que renderPills():
+// agrupa por año de devengo, días hábiles según diasHabiles()) -- incluye tanto las ya
+// disfrutadas (fecha_fin pasada) como las pendientes/futuras, es el total comprometido contra
+// el devengo del año.
+function diasVacacionesSolicitadosAnio(year) {
     let total = 0;
     for (const a of AUSENCIAS) {
         if (a.tipo !== 'Vacaciones') continue;
@@ -1102,11 +1139,26 @@ function diasVacacionesDisfrutadosAnio(year) {
     return total;
 }
 
-function convenioStatCardHtml(numero, referencia, pct) {
+// Subconjunto de las anteriores cuya fecha_fin ya ha pasado -- las realmente disfrutadas, no
+// solo solicitadas/planificadas.
+function diasVacacionesDisfrutadosAnio(year) {
+    const hoy = new Date().toISOString().slice(0, 10);
+    let total = 0;
+    for (const a of AUSENCIAS) {
+        if (a.tipo !== 'Vacaciones') continue;
+        const devengo = a.anyo_devengo || a.desde.slice(0, 4);
+        if (String(devengo) !== String(year)) continue;
+        if (a.hasta >= hoy) continue;
+        total += diasHabiles(a.desde, a.hasta);
+    }
+    return total;
+}
+
+function convenioStatCardHtml(numero, referencia, pct, fontSize) {
     const w = Math.max(0, Math.min(100, pct));
     return `
       <div style="background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px;padding:14px 16px;">
-        <p style="font-size:26px;font-weight:600;line-height:1.1;margin:0;color:#222;">${numero}</p>
+        <p style="font-size:${fontSize || 26}px;font-weight:600;line-height:1.1;margin:0;color:#222;">${numero}</p>
         <p style="font-size:11px;color:#999;margin:2px 0 10px;">${referencia}</p>
         <div style="height:8px;border-radius:4px;background:#F1EFE8;overflow:hidden;">
           <div style="height:100%;width:${w}%;background:#f97316;border-radius:4px;"></div>
@@ -1122,6 +1174,7 @@ function renderConvenio(year) {
     const objetivoAnual   = HORAS_CONVENIO_ANIO[year] || 0;
     const objetivoHoy     = HORAS_CONVENIO_HOY_ANIO[year] || 0;
     const vacCorresponden = DIAS_VAC_CORRESPONDEN_ANIO[year] || 0;
+    const vacSolicitadas  = diasVacacionesSolicitadosAnio(year);
     const vacDisfrutadas  = diasVacacionesDisfrutadosAnio(year);
 
     let html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">';
@@ -1136,9 +1189,10 @@ function renderConvenio(year) {
         objetivoHoy > 0 ? (fichadas / objetivoHoy) * 100 : 0
     );
     html += convenioStatCardHtml(
-        `${vacDisfrutadas}`,
+        `${vacDisfrutadas} d disfrutados / ${vacSolicitadas} d solicitados`,
         `de ${vacCorresponden.toFixed(1)} días de vacaciones que corresponden`,
-        vacCorresponden > 0 ? (vacDisfrutadas / vacCorresponden) * 100 : 0
+        vacCorresponden > 0 ? (vacDisfrutadas / vacCorresponden) * 100 : 0,
+        16
     );
     html += '</div>';
     cont.innerHTML = html;
