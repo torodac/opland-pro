@@ -8,6 +8,7 @@ use App\Models\Project;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use App\Services\InformeAprobacionGuard;
+use App\Services\RoleHierarchy;
 use App\Services\VmHorasService;
 use Illuminate\Support\Facades\DB;
 
@@ -341,6 +342,7 @@ class DashboardController extends Controller
         $verAusenciasSin= $isAdmin || $rolId === 11;                     // Dir.RRHH
         $verLimpSinImp  = $isAdmin || in_array($rolId, [10, 2]);         // Dir.Op, Coord.limp
         $verMantSinImp  = $isAdmin || in_array($rolId, [10, 5]);         // Dir.Op, Coord.mant
+        $verInformesPendientes = $isAdmin || in_array($rolId, [11, 3, 10]); // Dir.RRHH, Dir.gral (todos) / Dir.Op (su equipo)
 
         // ── Próximas ausencias del usuario actual ────────────────────────────
         $proximasAusencias = $vmUsuario
@@ -374,14 +376,39 @@ class DashboardController extends Controller
                 ->values();
         }
 
+        // ── Informes mensuales pendientes de alguna firma ────────────────────
+        // "Pendiente de firma" = flujo iniciado (en_aprobacion=true) y todavía no completado
+        // (paso_actual != 'completado'; un reinicio por edición vuelve a 'rrhh' con
+        // en_aprobacion=false -- ver InformeAprobacionGuard -- y esos no cuentan como pendientes).
+        // Visibilidad: Dir.RRHH y Dir.gral ven todos; Dir.Op solo los de su equipo supervisado
+        // (vm_roles.roles_supervisados a partir de su rol, mismo mecanismo que el paso
+        // "coordinador" del propio flujo -- ver RoleHierarchy).
+        $informesPendientes = collect();
+        if ($verInformesPendientes) {
+            $query = DB::table('vm_informes_estado as e')
+                ->join('vm_usuarios as u', 'u.id', '=', 'e.id_usuario')
+                ->where('e.en_aprobacion', true)
+                ->where('e.paso_actual', '!=', 'completado');
+
+            if (!$isAdmin && $rolId === 10) {
+                $rolesEquipo = array_map('intval', RoleHierarchy::subordinateRoleIds('vm_roles', 10));
+                $query->whereIn('u.id_rol', $rolesEquipo ?: [-1]);
+            }
+
+            $informesPendientes = $query
+                ->orderBy('e.anio')->orderBy('e.mes')->orderBy('e.marcado_at')
+                ->get(['u.id as id_usuario', 'u.nombre as usuario', 'e.anio', 'e.mes', 'e.paso_actual', 'e.marcado_at']);
+        }
+
         return view('dashboard', compact(
             'project',
             'conciliaciones',
             'tareasLimpieza', 'tareasMantPisc', 'breezewayPendientes',
             'turnoSinFichaje', 'desviaciones', 'recordatoriosSscc',
-            'conflictosFichaje',
+            'conflictosFichaje', 'informesPendientes',
             'vmUsuario', 'proximasAusencias',
-            'verReservas', 'verRRHH', 'verAusenciasSin', 'verLimpSinImp', 'verMantSinImp'
+            'verReservas', 'verRRHH', 'verAusenciasSin', 'verLimpSinImp', 'verMantSinImp',
+            'verInformesPendientes'
         ));
 
     }

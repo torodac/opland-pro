@@ -53,7 +53,13 @@
 
     @case('id')
     @case('desplegable')
-        @php $fkNombre = ($fkOptions[$campo->name][$valor] ?? null); @endphp
+        @php
+            // vm_bonus.id_referencia nunca es un id real (ni con alcance=usuario -- guarda el
+            // nombre en texto, ver nota en partials/field.blade.php), asi que no tiene sentido
+            // buscarlo en $fkOptions: el valor ya es directamente el texto a mostrar.
+            $esBonusReferencia = ($projectTable->name ?? null) === 'bonus' && $campo->name === 'id_referencia';
+            $fkNombre = $esBonusReferencia ? $valor : ($fkOptions[$campo->name][$valor] ?? null);
+        @endphp
         @if($campo->name === 'control_user' && $fkNombre)
             @php $inicial = strtoupper(mb_substr($fkNombre, 0, 1)); @endphp
             <span class="inline-flex items-center gap-1.5">
@@ -101,5 +107,13 @@
         @break
 
     @default
-        {{ $valor ?? '—' }}
+        @if(($projectTable->name ?? null) === 'bonus' && $campo->name === 'meses' && $valor)
+            @php
+                $mesesNombres = [1=>'Ene',2=>'Feb',3=>'Mar',4=>'Abr',5=>'May',6=>'Jun',7=>'Jul',8=>'Ago',9=>'Sep',10=>'Oct',11=>'Nov',12=>'Dic'];
+                $etiquetas = collect(explode(',', $valor))->map(fn($n) => $mesesNombres[(int) trim($n)] ?? trim($n))->implode(', ');
+            @endphp
+            {{ $etiquetas }}
+        @else
+            {{ $valor ?? '—' }}
+        @endif
 @endswitch

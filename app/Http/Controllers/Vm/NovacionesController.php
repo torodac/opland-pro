@@ -457,7 +457,10 @@ class NovacionesController extends Controller
 
     // Compara los totales ya documentados del mes indicado contra los recién recalculados.
     // Si difieren y no hay ya una tarea de revisión abierta para esa propiedad+mes, crea una.
-    private function comprobarDiferenciaYCrearTarea(int $propId, int $year, int $month): ?array
+    // Publico (no private): IcneaSyncImportesCommand (cron) reutiliza esta misma comprobacion
+    // tras su propia reconciliacion, para que la tarea "Revisión Novación" se genere igual haya
+    // venido de pulsar "Sincronizar" a mano o del cron automatico.
+    public function comprobarDiferenciaYCrearTarea(int $propId, int $year, int $month): ?array
     {
         $ultimoDoc = DB::table('vm_novaciones_documentos')
             ->where('id_propiedades', $propId)

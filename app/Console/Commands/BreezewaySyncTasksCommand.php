@@ -15,6 +15,18 @@ class BreezewaySyncTasksCommand extends Command
     private string $clientId;
     private string $clientSecret;
 
+    // Mapeo de plantilla de Breezeway (task['template_id']) -> campo "Tipo" de
+    // vm_tareas_limpieza/vm_tareas_mantenimiento (opciones actuales: Checkout, Cliente,
+    // Mantenimiento, Otros). Breezeway no expone un endpoint para resolver el nombre de la
+    // plantilla por id, así que los ids de aqui se identificaron a mano inspeccionando el
+    // nombre real de las tareas de cada plantilla (792735 = "(ES) Limpieza de Salida", 828373 =
+    // "(ES) Limpieza de Salida y Entrada" -- ambas son limpiezas de checkout). Solo se setea
+    // "Tipo" cuando la plantilla esta en este mapa; el resto de tareas no tocan ese campo.
+    private const TEMPLATE_TIPO = [
+        792735 => 'Checkout',
+        828373 => 'Checkout',
+    ];
+
     public function handle(): void
     {
         $this->clientId     = (string) env('BREEZEWAY_CLIENT_ID');
@@ -179,6 +191,11 @@ class BreezewaySyncTasksCommand extends Command
                         $reserva = DB::table('vm_reservas')->where('booking_id', $extId)->value('id');
                     }
                     $data['id_reservas'] = $reserva;
+                }
+
+                $tipo = self::TEMPLATE_TIPO[$task['template_id'] ?? null] ?? null;
+                if ($tipo !== null) {
+                    $data['Tipo'] = $tipo;
                 }
 
                 $existente = DB::table($tableName)->where('breezeway_task_id', $task['id'])->first(['id']);

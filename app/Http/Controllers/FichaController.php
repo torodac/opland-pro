@@ -857,10 +857,16 @@ class FichaController extends Controller
 
     private function validateRequired(Request $request, ProjectTable $projectTable): void
     {
+        $fullTable = $projectTable->getFullTableName();
         $rules = [];
         foreach ($projectTable->fields->where('required', true) as $field) {
             // nombre se calcula automáticamente cuando hay fórmula; no validar como required
             if ($field->name === 'nombre' && $projectTable->nombre_formula) continue;
+            // select: puede dejarse a null (ademas de los valores de opt:) siempre que la
+            // columna real de la BD lo permita -- si es NOT NULL sin default (ej. vm_bonus.alcance,
+            // mb_cuotas.tipo_cuota), seguir exigiendolo aqui evita un 500 de Postgres en vez de
+            // dar la falsa sensacion de que se puede guardar en blanco. Ver field.blade.php.
+            if ($field->type === 'select' && $field->columnIsNullable($fullTable)) continue;
             $rules[$field->name] = 'required';
         }
 

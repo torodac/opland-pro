@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Http\Controllers\Vm\NovacionesController;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -29,7 +30,7 @@ class IcneaSyncImportesCommand extends Command
         $reservas = DB::table('vm_reservas')
             ->whereBetween('check_out_date', [$desde, $hasta])
             ->whereNotIn('booking_status', ['cancelled'])
-            ->get(['id', 'booking_id', 'guest_name']);
+            ->get(['id', 'booking_id', 'guest_name', 'id_propiedades', 'check_out_date']);
 
         $this->info(count($reservas) . ' reservas a procesar.');
 
@@ -38,8 +39,17 @@ class IcneaSyncImportesCommand extends Command
         $actualizadas = 0;
         $borradas = 0;
         $errores = 0;
+        // (id_propiedades, year, month) unicos vistos, para comprobar al final si alguna
+        // novacion ya documentada ha dejado de cuadrar tras esta reconciliacion -- misma
+        // comprobacion que dispara el boton "Sincronizar" de Novaciones.
+        $combosNovacion = [];
 
         foreach ($reservas as $reserva) {
+            if ($reserva->id_propiedades && $reserva->check_out_date) {
+                $co  = \Illuminate\Support\Carbon::parse($reserva->check_out_date);
+                $key = "{$reserva->id_propiedades}-{$co->year}-{$co->month}";
+                $combosNovacion[$key] = [$reserva->id_propiedades, $co->year, $co->month];
+            }
             $response = $this->fetchReservation($reserva->booking_id);
 
             if ($response === null) {
@@ -131,6 +141,22 @@ class IcneaSyncImportesCommand extends Command
         }
 
         $this->info("Completado — procesadas: {$procesadas}, insertadas: {$insertadas}, actualizadas: {$actualizadas}, marcadas obsoletas: {$borradas}, errores: {$errores}");
+
+        // Misma comprobacion que "Sincronizar" en Novaciones: si una propiedad+mes ya tiene una
+        // novacion documentada y los totales recalculados ya no cuadran, se abre (si no existia)
+        // una tarea "Revisión Novación" para que Contabilidad la revise -- antes esto solo pasaba
+        // al pulsar el boton a mano, nunca desde este cron.
+        $novacionesController = new NovacionesController();
+        $tareasCreadas = 0;
+        foreach ($combosNovacion as [$propId, $year, $month]) {
+            $resultado = $novacionesController->comprobarDiferenciaYCrearTarea($propId, $year, $month);
+            if ($resultado && ($resultado['creada'] ?? false)) {
+                $tareasCreadas++;
+            }
+        }
+        if ($tareasCreadas > 0) {
+            $this->info("{$tareasCreadas} tarea(s) 'Revisión Novación' creada(s).");
+        }
     }
 
     private function fetchReservation(string $bookingId): ?array

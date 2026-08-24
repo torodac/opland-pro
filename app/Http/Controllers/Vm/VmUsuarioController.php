@@ -256,7 +256,7 @@ class VmUsuarioController extends Controller
             'mail'         => $request->mail,
             'telefono'       => $request->telefono,
             'id_departamento'=> $request->id_departamento ?: null,
-            'cargo'          => $request->cargo,
+            'cargo'          => $request->cargo ?: null,
             'id_rol'       => $request->id_rol ?: null,
             'acceso'       => $request->acceso,
             'updatedat'    => now(),

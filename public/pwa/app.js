@@ -150,6 +150,30 @@ async function doLogin() {
   }
 }
 
+async function enviarOlvidePassword() {
+  const email = document.getElementById('op-email').value.trim();
+  const errEl = document.getElementById('op-error');
+  const infoEl = document.getElementById('op-info');
+  const btn   = document.getElementById('op-enviar');
+
+  errEl.style.display = 'none';
+  infoEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Enviando…';
+
+  try {
+    const data = await api('POST', '/forgot-password', { email });
+    infoEl.textContent = data.message;
+    infoEl.style.display = 'block';
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Enviar enlace';
+  }
+}
+
 function limpiarSesionLocal() {
   state.token = null;
   state.user  = null;
@@ -1756,6 +1780,18 @@ document.getElementById('btn-volver-horario').addEventListener('click', () => {
 document.getElementById('login-btn').addEventListener('click', doLogin);
 document.getElementById('login-pass').addEventListener('keydown', e => {
   if (e.key === 'Enter') doLogin();
+});
+
+document.getElementById('btn-olvide-password').addEventListener('click', () => {
+  document.getElementById('op-email').value = document.getElementById('login-email').value.trim();
+  document.getElementById('op-error').style.display = 'none';
+  document.getElementById('op-info').style.display = 'none';
+  showScreen('olvide-password');
+});
+document.getElementById('btn-volver-login').addEventListener('click', () => showScreen('login'));
+document.getElementById('op-enviar').addEventListener('click', enviarOlvidePassword);
+document.getElementById('op-email').addEventListener('keydown', e => {
+  if (e.key === 'Enter') enviarOlvidePassword();
 });
 
 // ── Geolocalización ───────────────────────────────────────────────────────────

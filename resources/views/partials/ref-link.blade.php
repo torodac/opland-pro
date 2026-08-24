@@ -3,7 +3,12 @@
     Enlaza a la ficha del registro referenciado, no al listado.
     Variables: $campo (TableField), $valor (mixed), $project (Project)
 --}}
-@if($campo->type === 'desplegable' && $valor && $campo->getRefTable())
+@php
+    // vm_bonus.id_referencia nunca es un id real (guarda nombre/cargo/departamento en texto, ver
+    // nota en partials/field.blade.php) -- nunca hay ficha a la que enlazar aqui.
+    $esBonusReferencia = ($projectTable->name ?? null) === 'bonus' && $campo->name === 'id_referencia';
+@endphp
+@if($campo->type === 'desplegable' && $valor && $campo->getRefTable() && !$esBonusReferencia)
     <a href="{{ route('ficha', [$project->slug, $campo->getRefTable(), $valor]) }}"
        target="_blank" rel="noopener"
        title="Abrir en una nueva pestaña"

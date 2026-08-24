@@ -196,6 +196,7 @@ td{padding:8px;font-size:13px;}
       </div>
       <div class="form-row"><label class="form-label">Cargo</label>
         <select id="u-cargo">
+          <option value="" {{ !$usuario->cargo?'selected':'' }}></option>
           @foreach($cargos as $c)<option {{ $usuario->cargo===$c?'selected':'' }}>{{ $c }}</option>@endforeach
         </select>
       </div>
@@ -349,7 +350,10 @@ td{padding:8px;font-size:13px;}
   <div class="section-card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
       <p class="sec-title" style="margin:0;"><i class="ti ti-calendar-off" style="font-size:16px;"></i>Ausencias</p>
-      <button class="btn" onclick="nuevaAusencia()"><i class="ti ti-plus" style="font-size:13px;vertical-align:-2px;"></i> Nueva</button>
+      <div style="display:flex;gap:8px;">
+        <a class="btn" href="{{ route('vm.ausencias_form', $project->slug) }}?f_id_usuarios={{ $usuario->id }}"><i class="ti ti-list" style="font-size:13px;vertical-align:-2px;"></i> Ver listado</a>
+        <button class="btn" onclick="nuevaAusencia()"><i class="ti ti-plus" style="font-size:13px;vertical-align:-2px;"></i> Nueva</button>
+      </div>
     </div>
 
     {{-- Stats pills (renderizadas por JS según año seleccionado) --}}
@@ -906,13 +910,16 @@ const EXCL_FINDE = !['Mantenimiento','Limpiadora'].includes('{{ $usuario->cargo 
 let filtroTipo = null;
 let calYear    = {{ now()->year }};
 
-function diasHabiles(desde, hasta) {
+// exclFinde: si se omite, usa EXCL_FINDE (depende del cargo). Las vacaciones siempre pasan
+// exclFinde=true explícitamente -- ahí no debe haber distinción por cargo, siempre se excluyen
+// fines de semana y festivos igual para todo el mundo.
+function diasHabiles(desde, hasta, exclFinde = EXCL_FINDE) {
     let count = 0;
     const d = new Date(desde);
     const h = new Date(hasta);
     for (let cur = new Date(d); cur <= h; cur.setDate(cur.getDate() + 1)) {
         const dow = cur.getDay(); // 0=dom, 6=sab
-        if (EXCL_FINDE && (dow === 0 || dow === 6)) continue;
+        if (exclFinde && (dow === 0 || dow === 6)) continue;
         const iso = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`;
         if (FESTIVOS.has(iso)) continue;
         count++;
@@ -958,7 +965,7 @@ function renderPills(year) {
                     ? `Vacaciones adelantadas: días de vacaciones devengados en el ejercicio seleccionado pero disfrutados en ${anyoDisfrute}`
                     : null;
                 if (!conteos[key]) conteos[key] = { label, dias: 0, muted, tipo: 'Vacaciones', tooltip };
-                conteos[key].dias += diasHabiles(a.desde, a.hasta);
+                conteos[key].dias += diasHabiles(a.desde, a.hasta, true);
             } else {
                 // Disfrutadas ESTE año pero con devengo de un año anterior (dias que quedaban
                 // pendientes de vacaciones ya devengadas antes) -- pill aparte, sin atenuar,
@@ -967,7 +974,7 @@ function renderPills(year) {
                 const label = 'Vacaciones (devengo ' + devengo + ')';
                 const tooltip = `Vacaciones atrasadas: días disfrutados en el ejercicio seleccionado pero devengados en ${devengo}`;
                 if (!conteos[key]) conteos[key] = { label, dias: 0, muted: false, tipo: 'Vacaciones', tooltip };
-                conteos[key].dias += diasHabiles(a.desde, a.hasta);
+                conteos[key].dias += diasHabiles(a.desde, a.hasta, true);
             }
         } else {
             // Para otros tipos: ausencias que caen en el año visualizado
@@ -1134,7 +1141,7 @@ function diasVacacionesSolicitadosAnio(year) {
         if (a.tipo !== 'Vacaciones') continue;
         const devengo = a.anyo_devengo || a.desde.slice(0, 4);
         if (String(devengo) !== String(year)) continue;
-        total += diasHabiles(a.desde, a.hasta);
+        total += diasHabiles(a.desde, a.hasta, true);
     }
     return total;
 }
@@ -1149,7 +1156,7 @@ function diasVacacionesDisfrutadosAnio(year) {
         const devengo = a.anyo_devengo || a.desde.slice(0, 4);
         if (String(devengo) !== String(year)) continue;
         if (a.hasta >= hoy) continue;
-        total += diasHabiles(a.desde, a.hasta);
+        total += diasHabiles(a.desde, a.hasta, true);
     }
     return total;
 }

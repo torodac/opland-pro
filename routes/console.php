@@ -13,6 +13,16 @@ Artisan::command('inspire', function () {
 
 Schedule::command('vm:notificar-turno')->everyMinute()->withoutOverlapping();
 
+// Detecta pantallas con url propia pero sin fila en admin_project_tables -- estas quedan
+// invisibles en /config/projects/{slug} aunque funcionen por URL directa (ver
+// AdminAuditOrphanScreensCommand). Se registra en el log semanalmente para detectar la
+// regresión sin depender de que alguien se acuerde de ejecutarlo a mano.
+Schedule::command('admin:audit-orphan-screens')->weeklyOn(1, '07:00')->withoutOverlapping();
+
+// Tarea mensual "Validar informes mensuales RRHH" -- el propio comando decide si hoy es el
+// primer día laborable del mes, así que puede correr a diario sin duplicar nada.
+Schedule::command('vm:generar-tarea-informes-rrhh')->dailyAt('06:30')->withoutOverlapping();
+
 // Cierra automáticamente los fichajes del día anterior que siguen abiertos
 Schedule::call(function () {
     // Se ejecuta a las 08:00 — procesa fichajes del día anterior

@@ -153,6 +153,9 @@ Route::middleware('auth')->group(function () {
         Route::get('informe-financiero', [InformeFinancieroController::class, 'index'])->name('informe-financiero');
         Route::get('informe-operativo', [InformeOperativoController::class, 'index'])->name('informe-operativo');
 
+        Route::get('costes-laborales-propiedad', [\App\Http\Controllers\Vm\CostesLaboralesController::class, 'index'])->name('vm.costes-laborales');
+        Route::post('costes-laborales-propiedad/recalcular', [\App\Http\Controllers\Vm\CostesLaboralesController::class, 'recalcular'])->name('vm.costes-laborales.recalcular');
+
         Route::get('informe-imputaciones_list', [InformeImputacionesController::class, 'listado'])->name('informe-imputaciones.listado');
         Route::get('informe-imputaciones', [InformeImputacionesController::class, 'index'])->name('informe-imputaciones');
         Route::get('informe-imputaciones/pdf', [InformeImputacionesController::class, 'pdf'])->name('informe-imputaciones.pdf');
@@ -269,6 +272,10 @@ Route::middleware('auth')->group(function () {
         Route::get('pyg_form', [PygController::class, 'index'])->name('vm.pyg_form');
         Route::post('pyg_form/import', [PygController::class, 'import'])->name('vm.pyg_form.import');
         Route::delete('pyg_form/{periodo}', [PygController::class, 'deletePeriodo'])->name('vm.pyg_form.delete');
+
+        Route::get('nominas_import', [\App\Http\Controllers\Vm\NominasImportController::class, 'index'])->name('vm.nominas_import');
+        Route::post('nominas_import/previsualizar', [\App\Http\Controllers\Vm\NominasImportController::class, 'previsualizar'])->name('vm.nominas_import.previsualizar');
+        Route::post('nominas_import/aplicar', [\App\Http\Controllers\Vm\NominasImportController::class, 'aplicar'])->name('vm.nominas_import.aplicar');
 
         Route::get('liquidacion', [LiquidacionController::class, 'index'])->name('vm.liquidacion');
         Route::get('liquidacion/pdf', [LiquidacionController::class, 'pdf'])->name('vm.liquidacion.pdf');

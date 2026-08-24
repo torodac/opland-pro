@@ -486,8 +486,15 @@ class InformeImputacionesController extends Controller
     // firma de arriba y por VacationmarbellaPwaController::firmarInformeTrabajador().
     public function firmarPaso(int $userId, int $year, int $month, string $step, int $aprobadoPor, Request $request): array
     {
+        // El paso "coordinador" (rol 10, Dirección de Operaciones) solo tiene sentido si el rol
+        // del usuario está realmente supervisado por él (vm_roles.roles_supervisados, ver
+        // RoleHierarchy). Si no tiene coordinador, el flujo salta directo de RRHH a trabajador.
+        $rolUsuario = (int) DB::table('vm_usuarios')->where('id', $userId)->value('id_rol');
+        $rolesSupervisados = array_map('intval', RoleHierarchy::subordinateRoleIds('vm_roles', 10));
+        $tieneCoordinador = in_array($rolUsuario, $rolesSupervisados, true);
+
         $siguientePaso = [
-            'rrhh'        => 'coordinador',
+            'rrhh'        => $tieneCoordinador ? 'coordinador' : 'trabajador',
             'coordinador' => 'trabajador',
             'trabajador'  => 'direccion',
             'direccion'   => 'completado',

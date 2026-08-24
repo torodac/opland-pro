@@ -122,6 +122,24 @@ class TableField extends Model
         return $this->type === 'desplegable';
     }
 
+    // ¿Admite NULL la columna real de $fullTable para este campo? Usado para saber si un select
+    // marcado como "required" en el motor no-code puede de todos modos dejarse en blanco sin que
+    // Postgres lo rechace (columnas NOT NULL sin default, ej. vm_bonus.alcance, no lo permiten).
+    // Cacheado en la instancia -- se llama tanto al pintar el formulario como al validar el envio.
+    private ?bool $columnIsNullableCache = null;
+
+    public function columnIsNullable(string $fullTable): bool
+    {
+        if ($this->columnIsNullableCache !== null) return $this->columnIsNullableCache;
+
+        $row = \Illuminate\Support\Facades\DB::selectOne(
+            'select is_nullable from information_schema.columns where table_name = ? and column_name = ?',
+            [$fullTable, $this->name]
+        );
+
+        return $this->columnIsNullableCache = $row ? ($row->is_nullable === 'YES') : true;
+    }
+
     // Nombre corto de la tabla referenciada: "ref:socios" → "socios", "ref:master.estados" → "estados"
     // Soporta "ref:inventario|parent:id_propiedades" — ignora la parte |parent:...
     public function getRefTable(): ?string

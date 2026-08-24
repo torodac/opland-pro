@@ -22,19 +22,19 @@ class PasswordResetController extends Controller
     {
         $request->validate(['email' => 'required|email']);
 
-        $user = User::where('email', $request->email)->first();
+        $user = User::whereRaw('LOWER(email) = LOWER(?)', [$request->email])->first();
 
         if ($user) {
             $token = Str::random(64);
 
-            DB::table('password_reset_codes')->where('email', $request->email)->delete();
+            DB::table('password_reset_codes')->where('email', $user->email)->delete();
             DB::table('password_reset_codes')->insert([
-                'email'      => $request->email,
+                'email'      => $user->email,
                 'code'       => $token,
                 'expires_at' => now()->addMinutes(30),
             ]);
 
-            $link = route('password.reset-form', ['token' => $token, 'email' => $request->email]);
+            $link = route('password.reset-form', ['token' => $token, 'email' => $user->email]);
 
             Mail::to($user->email)->send(new PasswordResetCode($link, config('app.name')));
         }

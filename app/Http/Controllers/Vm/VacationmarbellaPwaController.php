@@ -24,7 +24,7 @@ class VacationmarbellaPwaController extends Controller
         ]);
 
         $authUser = DB::table('admin_users')
-            ->where('email', $request->email)
+            ->whereRaw('LOWER(email) = LOWER(?)', [$request->email])
             ->first();
 
         if (!$authUser || !password_verify($request->password, $authUser->password)) {
@@ -93,6 +93,37 @@ class VacationmarbellaPwaController extends Controller
                 'debe_cambiar_password' => (bool) $debecambiarPassword,
             ],
         ]);
+    }
+
+    // "Has olvidado tu contraseña" desde la PWA: reutiliza tal cual la logica y la tabla
+    // password_reset_codes de PasswordResetController::sendLink() (web normal) -- unica diferencia,
+    // esta devuelve JSON en vez de un redirect con flash de sesion. El enlace del correo abre la
+    // pantalla web de siempre (auth.reset-password), no hace falta nada mas dentro de la PWA.
+    public function forgotPassword(Request $request)
+    {
+        $request->validate(['email' => 'required|email']);
+
+        $authUser = DB::table('admin_users')
+            ->whereRaw('LOWER(email) = LOWER(?)', [$request->email])
+            ->first();
+
+        if ($authUser) {
+            $token = Str::random(64);
+
+            DB::table('password_reset_codes')->where('email', $authUser->email)->delete();
+            DB::table('password_reset_codes')->insert([
+                'email'      => $authUser->email,
+                'code'       => $token,
+                'expires_at' => now()->addMinutes(30),
+            ]);
+
+            $link = route('password.reset-form', ['token' => $token, 'email' => $authUser->email]);
+
+            \Illuminate\Support\Facades\Mail::to($authUser->email)
+                ->send(new \App\Mail\PasswordResetCode($link, config('app.name')));
+        }
+
+        return response()->json(['ok' => true, 'message' => 'Si el email existe en el sistema, recibirás el enlace en breve.']);
     }
 
     public function logout(Request $request)

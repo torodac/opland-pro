@@ -158,8 +158,8 @@
       </td>
       <td class="num">{{ $v->voto ?? '—' }}</td>
       <td style="text-align:right" onclick="event.stopPropagation()">
-        <button type="button" class="vv-btn-entrega" title="Registrar entrega a cuenta"
-                onclick="abrirModalEntrega({{ $v->id }}, {{ Illuminate\Support\Js::from($v->nombre) }})">
+        <button type="button" class="vv-btn-entrega" title="Pendiente aprobación de desarrollo"
+                onclick="avisoPendienteAprobacion()">
           <i class="fa-solid fa-wallet"></i>
         </button>
       </td>
@@ -181,8 +181,8 @@
                 <td class="num">{{ number_format($c->importe, 2, ',', '.') }} €</td>
                 <td class="num">{{ number_format($c->pendiente, 2, ',', '.') }} €</td>
                 <td style="text-align:right">
-                  <button type="button" class="vv-btn-carrito" id="vv-carrito-btn-{{ $c->id }}" title="Añadir al carrito de cobro"
-                          onclick="toggleCarrito({{ $c->id }}, {{ $v->id }}, {{ Illuminate\Support\Js::from($v->nombre) }}, {{ Illuminate\Support\Js::from($c->ejercicio . ' ' . $c->tipo_cuota) }}, {{ $c->pendiente }})">
+                  <button type="button" class="vv-btn-carrito" id="vv-carrito-btn-{{ $c->id }}" title="Pendiente aprobación de desarrollo"
+                          onclick="avisoPendienteAprobacion()">
                     <i class="fa-solid fa-cart-shopping"></i>
                   </button>
                 </td>
@@ -348,6 +348,10 @@ let ecViviendaId    = null;
 let ecEntregaId     = null;
 let ecMovimientos   = [];
 let ecSaldoOriginal = 0;
+
+function avisoPendienteAprobacion() {
+  alert('Funcionalidad pendiente de aprobación');
+}
 
 function abrirModalEntrega(idVivienda, nombre) {
   ecViviendaId = idVivienda;

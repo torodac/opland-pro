@@ -1,6 +1,6 @@
 <x-app-layout :project="$project" :breadcrumb="[['label'=>'Inicio','url'=>'']]">
 
-@include('partials.role-badge', ['project' => $project, 'texto' => 'Algunos bloques de este dashboard (Reservas, RRHH, Ausencias sin conciliar, Limpieza/Mantenimiento sin imputar) solo son visibles para ciertos roles (Dirección general, Dirección de Operaciones, Coordinador limpieza, Coordinador mantenimiento, Director RRHH). Los ves todos por ser admin.'])
+@include('partials.role-badge', ['project' => $project, 'texto' => 'Algunos bloques de este dashboard (Reservas, RRHH, Ausencias sin conciliar, Limpieza/Mantenimiento sin imputar, Informes mensuales pendientes de firma) solo son visibles para ciertos roles (Dirección general, Dirección de Operaciones, Coordinador limpieza, Coordinador mantenimiento, Director RRHH). Los ves todos por ser admin.'])
 
 <style>
 .db-grid    { display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:12px; margin-bottom:12px; }
@@ -388,6 +388,37 @@
                     onclick="validarTarea(this, {{ $t->id }}, 'mantenimiento')">
               Validar
             </button>
+          </td>
+        </tr>
+        @endforeach
+      </tbody>
+    </table>
+    @endif
+  </div>
+@endif
+
+@if($verInformesPendientes)
+@php $pasoLabels = ['rrhh' => 'RRHH', 'coordinador' => 'Coordinador', 'trabajador' => 'Trabajador', 'direccion' => 'Dirección']; @endphp
+  {{-- Informes mensuales pendientes de alguna firma --}}
+  <div class="db-card" style="margin-bottom:12px;">
+    <p class="db-title"><i class="ti ti-file-check"></i> Informes mensuales pendientes de firma <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Informes mensuales con el flujo de aprobación iniciado y sin completar todavía. Director RRHH y Dirección general ven todos; Dirección de Operaciones solo los de su equipo supervisado.</span></span></p>
+    @if($informesPendientes->isEmpty())
+      <p class="empty">Sin informes pendientes</p>
+    @else
+    <table class="db-table">
+      <thead><tr><th>Empleado</th><th>Mes</th><th>Esperando firma de</th><th>Desde</th><th></th></tr></thead>
+      <tbody>
+        @foreach($informesPendientes as $i)
+        <tr>
+          <td><a href="{{ route('vm.usuario', [$project->slug, $i->id_usuario]) }}" style="color:#185FA5;text-decoration:none;font-weight:500;">{{ $i->usuario }}</a></td>
+          <td style="color:#888;">{{ \Carbon\Carbon::create($i->anio, $i->mes, 1)->translatedFormat('F Y') }}</td>
+          <td><span class="badge-sm" style="background:#E6F1FB;color:#0C447C;">{{ $pasoLabels[$i->paso_actual] ?? $i->paso_actual }}</span></td>
+          <td style="color:#888;">{{ \Carbon\Carbon::parse($i->marcado_at)->translatedFormat('d M') }}</td>
+          <td>
+            <a href="{{ route('informe-imputaciones', $project->slug) }}?year={{ $i->anio }}&month={{ $i->mes }}&user_id={{ $i->id_usuario }}" target="_blank"
+               class="badge-sm" style="background:#EAF3DE;color:#27500A;text-decoration:none;padding:3px 8px;border-radius:4px;display:inline-block;">
+              Ver informe
+            </a>
           </td>
         </tr>
         @endforeach
