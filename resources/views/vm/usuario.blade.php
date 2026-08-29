@@ -13,6 +13,10 @@ function varPct($actual, $prev): ?float {
     if (!$prev || $prev->salario_base == 0) return null;
     return round(($actual->salario_base - $prev->salario_base) / $prev->salario_base * 100, 1);
 }
+function varAbs($actual, $prev): ?float {
+    if (!$prev) return null;
+    return round($actual->salario_base - $prev->salario_base, 2);
+}
 // contratos vienen DESC; para var necesitamos el anterior cronológico (mayor fecha_alta menor que la actual)
 function prevContrato($c, $contratos) {
     return $contratos
@@ -224,12 +228,13 @@ td{padding:8px;font-size:13px;}
     </div>
     <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
       <thead><tr>
-        <th style="width:14%;text-align:center;">Inicio</th>
-        <th style="width:14%;text-align:center;">Fin</th>
-        <th style="width:18%;text-align:center;">Salario</th>
-        <th style="width:10%;text-align:center;">Horas</th>
-        <th style="width:10%;text-align:center;">Var.</th>
-        <th style="width:14%;text-align:center;">Estado</th>
+        <th style="width:13%;text-align:center;">Inicio</th>
+        <th style="width:13%;text-align:center;">Fin</th>
+        <th style="width:9%;text-align:center;">Horas</th>
+        <th style="width:15%;text-align:center;">Salario</th>
+        <th style="width:11%;text-align:center;">Incr. €</th>
+        <th style="width:9%;text-align:center;">Incr. %</th>
+        <th style="width:13%;text-align:center;">Estado</th>
         <th style="width:8%;text-align:center;"></th>
       </tr></thead>
       <tbody>
@@ -239,12 +244,16 @@ td{padding:8px;font-size:13px;}
           $estado  = estadoContrato($c, $contratos);
           $prev    = prevContrato($c, $contratos);
           $pct     = $prev ? varPct($c, $prev) : null;
+          $abs     = $prev ? varAbs($c, $prev) : null;
         @endphp
         <tr class="trow">
           <td style="text-align:center;">{{ $c->fecha_alta ? \Carbon\Carbon::parse($c->fecha_alta)->format('d/m/Y') : '—' }}</td>
           <td style="text-align:center;color:{{ $c->fecha_baja ? 'inherit' : '#aaa' }}">{{ $c->fecha_baja ? \Carbon\Carbon::parse($c->fecha_baja)->format('d/m/Y') : '—' }}</td>
-          <td style="text-align:center;font-weight:500;">{{ number_format($c->salario_base,2,',','.') }} €</td>
           <td style="text-align:center;">{{ $c->horas_semana ? (intval($c->horas_semana) == $c->horas_semana ? intval($c->horas_semana) : $c->horas_semana).'h' : '—' }}</td>
+          <td style="text-align:center;font-weight:500;">{{ number_format($c->salario_base,2,',','.') }} €</td>
+          <td style="text-align:center;font-weight:500;color:{{ $abs !== null ? ($abs>=0?'#0F6E56':'#A32D2D') : 'inherit' }}">
+            {{ $abs !== null ? ($abs>=0?'+':'').number_format($abs,2,',','.').' €' : '—' }}
+          </td>
           <td style="text-align:center;font-weight:500;color:{{ $pct !== null ? ($pct>=0?'#0F6E56':'#A32D2D') : 'inherit' }}">
             {{ $pct !== null ? ($pct>=0?'+':'').$pct.'%' : '—' }}
           </td>
@@ -818,13 +827,14 @@ function guardarAusencia() {
     const method = ausId ? 'PATCH' : 'POST';
     if (ausId) form.append('_method', 'PATCH');
 
-    fetch(url, {
+    window.fetchConAprobacion(url, {
         method: ausId ? 'POST' : 'POST',
         headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' },
         body: form,
     })
-    .then(r => r.json())
+    .then(r => r ? r.json() : null)
     .then(data => {
+        if (!data) return; // cancelado o bloqueado (fetchConAprobacion ya avisó)
         if (data.error) {
             errorEl.textContent = data.error;
             errorEl.style.display = 'block';
@@ -838,12 +848,13 @@ function guardarAusencia() {
 function eliminarAusencia() {
     const ausId = document.getElementById('a-id').value;
     if (!ausId || !confirm('¿Eliminar esta ausencia?')) return;
-    fetch(BASE + '/ausencias/' + ausId, {
+    window.fetchConAprobacion(BASE + '/ausencias/' + ausId, {
         method: 'DELETE',
         headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' },
     })
-    .then(r => r.json())
+    .then(r => r ? r.json() : null)
     .then(data => {
+        if (!data) return; // cancelado o bloqueado (fetchConAprobacion ya avisó)
         if (data.error) { alert(data.error); } else {
             if (data.aviso_aprobacion) alert(data.aviso_aprobacion);
             location.reload();

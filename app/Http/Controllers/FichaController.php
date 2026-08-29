@@ -596,7 +596,7 @@ class FichaController extends Controller
             $rows = DB::table($relTable->getFullTableName())
                 ->where($fkField->name, $id)
                 ->where('deleted', 0)
-                ->orderBy('id')
+                ->orderByDesc('id')
                 ->get();
 
             // FK options para las celdas de la tabla relacionada

@@ -263,8 +263,8 @@
 
                         @if($campo->type === 'text')
                             {{-- Campo texto: fila completa --}}
-                            <div class="px-5 py-4 border-b border-transparent">
-                                <div class="flex items-center gap-1.5 mb-1.5">
+                            <div class="px-4 py-2.5 border-b border-transparent">
+                                <div class="flex items-center gap-1.5 mb-1">
                                     <label for="campo_{{ $campo->name }}"
                                            class="block text-xs font-bold text-gray-600">
                                         {{ $campo->label }}
@@ -281,9 +281,9 @@
                             {{-- Un campo por fila cuando hay PDF, dos por fila en el resto --}}
                             @php $campo2 = (!$mostrarPdf && $i + 1 < $total && $camposList[$i + 1]->type !== 'text') ? $camposList[$i + 1] : null; @endphp
                             <div class="{{ $mostrarPdf ? 'grid grid-cols-1' : 'grid grid-cols-1 sm:grid-cols-2' }}">
-                                <div class="px-5 py-4">
+                                <div class="px-4 py-2.5">
                                     @php $valor = $registro ? ($registro->{$campo->name} ?? null) : (old($campo->name) ?? ($prefill[$campo->name] ?? null)); @endphp
-                                    <div class="flex items-center gap-1.5 mb-1.5">
+                                    <div class="flex items-center gap-1.5 mb-1">
                                         <label for="campo_{{ $campo->name }}" class="block text-xs font-bold text-gray-600">
                                             {{ $campo->label }}
                                             @if($campo->required)<span class="text-red-400">*</span>@endif
@@ -301,9 +301,9 @@
                                     @include('partials.field', array_merge(['campo' => $campo, 'valor' => $valor], $fieldExtra))
                                 </div>
                                 @if($campo2)
-                                    <div class="px-5 py-4">
+                                    <div class="px-4 py-2.5">
                                         @php $valor = $registro ? ($registro->{$campo2->name} ?? null) : (old($campo2->name) ?? ($prefill[$campo2->name] ?? null)); @endphp
-                                        <div class="flex items-center gap-1.5 mb-1.5">
+                                        <div class="flex items-center gap-1.5 mb-1">
                                             <label for="campo_{{ $campo2->name }}" class="block text-xs font-bold text-gray-600">
                                                 {{ $campo2->label }}
                                                 @if($campo2->required)<span class="text-red-400">*</span>@endif
@@ -358,7 +358,7 @@
                 </form>
                 @endif
 
-                <div class="mt-6 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-gray-300">
+                <div class="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-gray-300">
                     @if($registro->createdat ?? null)
                         <span>
                             Creado {{ \Carbon\Carbon::parse($registro->createdat)->format('d/m/Y H:i') }}
@@ -406,7 +406,7 @@
         @foreach($tabs as $tabData)
             <div x-show="tab === '{{ $tabData['table']->name }}'" x-cloak>
                 <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                    <div class="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-transparent">
+                    <div class="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-transparent">
                         <span class="text-sm font-medium text-gray-700">
                             {{ $tabData['table']->label }}
                             <span class="ml-1.5 text-xs text-gray-400 font-normal">({{ $tabData['rows']->count() }})</span>
@@ -428,7 +428,7 @@
                                 <tr class="border-b border-transparent">
                                     @foreach($tabData['campos'] as $campo)
                                         @if($campo->name !== $tabData['fkField']->name)
-                                            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                                            <th class="text-left px-4 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">
                                                 {{ $campo->label }}
                                             </th>
                                         @endif
@@ -441,7 +441,7 @@
                                     <tr class="hover:bg-gray-50">
                                         @foreach($tabData['campos'] as $campo)
                                             @if($campo->name !== $tabData['fkField']->name)
-                                                <td class="px-4 py-2.5">
+                                                <td class="px-4 py-2">
                                                     @php $valor = $row->{$campo->name} ?? null; @endphp
                                                     @include('partials.cell', [
                                                         'campo'      => $campo,
@@ -452,7 +452,7 @@
                                                 </td>
                                             @endif
                                         @endforeach
-                                        <td class="px-4 py-2.5 text-right">
+                                        <td class="px-4 py-2 text-right">
                                             <a href="{{ route('ficha', [$project->slug, $tabData['table']->name, $row->id]) }}"
                                                class="text-xs text-gray-400 hover:text-orange-600">Ver</a>
                                         </td>

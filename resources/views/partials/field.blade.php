@@ -4,7 +4,7 @@
 --}}
 @php
     $hasError = $errors->has($campo->name);
-    $base = 'w-full text-xs border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-default '
+    $base = 'w-full text-xs border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-default '
           . ($hasError
               ? 'border-red-400 focus:ring-red-200 bg-red-50'
               : 'border-gray-200 focus:ring-orange-300');
