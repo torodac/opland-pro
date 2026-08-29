@@ -302,8 +302,13 @@
 
     @if(($breezewayPendientesHeader ?? null) && $breezewayPendientesHeader->isNotEmpty())
     <div class="text-xs text-gray-400 mb-3">
-        Usuarios de Breezeway sin cuenta en Opland ({{ $breezewayPendientesHeader->count() }}):
-        {{ $breezewayPendientesHeader->map(fn($p) => $p->nombre . ($p->email ? " ({$p->email})" : ' (sin email)'))->implode(', ') }}
+        @if($projectTable->name === 'propiedades')
+            Propiedades de Breezeway sin ficha en Opland ({{ $breezewayPendientesHeader->count() }}):
+            {{ $breezewayPendientesHeader->pluck('nombre')->implode(', ') }}
+        @else
+            Usuarios de Breezeway sin cuenta en Opland ({{ $breezewayPendientesHeader->count() }}):
+            {{ $breezewayPendientesHeader->map(fn($p) => $p->nombre . ($p->email ? " ({$p->email})" : ' (sin email)'))->implode(', ') }}
+        @endif
     </div>
     @endif
 
@@ -577,7 +582,8 @@
                                     default                                         => 'text-left',
                                 };
                             @endphp
-                            <th class="{{ $colAlign }} px-4 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap">
+                            <th class="{{ $colAlign }} px-4 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap"
+                                style="{{ in_array($campo->type, ['fecha', 'time']) ? 'min-width:100px' : '' }}">
                                 <a href="{{ $sortUrl }}" class="inline-flex items-center gap-1 {{ $isActive ? 'text-orange-500' : 'text-gray-400 hover:text-gray-600' }}">
                                     {{ $campo->label }}
                                     @if($isActive)
@@ -782,7 +788,7 @@
                                             default                                        => 'text-left',
                                         };
                                     @endphp
-                                    <td class="px-4 py-3 text-gray-700 {{ $colAlign }}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;{{ in_array($campo->type, ['fecha','time']) ? 'min-width:90px' : '' }}">
+                                    <td class="px-4 py-3 text-gray-700 {{ $colAlign }}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;{{ in_array($campo->type, ['fecha','time']) ? 'min-width:100px' : '' }}">
                                         @if($projectTable->name === 'movs_bancarios' && $campo->name === 'id_gastos_cuentas' && empty($registro->id_gastos_cuentas))
                                             {{-- Categoria vacia: atajo para clasificar en 1 clic sin abrir la ficha -- las dos
                                                  categorias mas frecuentes entre "Sin clasificar" (Gastos = PTE REVISIÓN id 116,

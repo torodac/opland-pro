@@ -169,6 +169,10 @@ class ListadoController extends Controller
                 'codigo_compartido' => count($this->propiedadesConCodigoCompartido()),
             ];
             $icneaSync = Cache::get('icnea_sync_result');
+            $breezewayPendientesHeader = DB::table('vm_breezeway_propiedades_pendientes')
+                ->where('deleted', 0)
+                ->orderByDesc('fecha_alta')
+                ->get(['nombre']);
         }
 
         return view('listado', [

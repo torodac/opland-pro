@@ -18,12 +18,12 @@ class InformeFinancieroController extends Controller
             ->orderByDesc('anio')
             ->pluck('anio');
 
-        $anioActual = (int) ($request->input('anio') ?: ($anios->first() ?? now()->year));
+        [$anioActual, $grupos, $filtro, $idsFiltro, $tiposRenta, $tipoRenta, $idsTipoRenta] = $this->resolverAnioYFiltros($request, $anios);
 
-        $grupos = $this->clasificarPropiedades($anioActual);
-        $filtro = $request->input('filtro', 'todas');
-        if (!isset($grupos[$filtro])) $filtro = 'todas';
-        $idsFiltro = $filtro === 'todas' ? null : $grupos[$filtro]['ids'];
+        // 'modo' (anual/interanual) no cambia ningún dato -- ambas vistas se calculan siempre y
+        // el toggle es puramente de UI -- pero hace falta conservarlo en la URL para que los
+        // enlaces de Ejercicio/filtro (que recargan la página) no lo reseteen a "anual".
+        $modo = $request->input('modo') === 'interanual' ? 'interanual' : 'anual';
 
         $actual         = $this->resumenAnio($anioActual, $idsFiltro);
         $mesesAnterior  = $this->mesesConDatos($anioActual - 1);
@@ -39,8 +39,6 @@ class InformeFinancieroController extends Controller
                 'beneficio' => $this->pct($actualComun['beneficio'], $anteriorComun['beneficio']),
             ];
         }
-
-        $propiedadesEnCartera = DB::table('vm_propiedades')->where('deleted', 0)->count();
 
         $periodosEjercicio = $this->periodosParaGrafico($idsFiltro);
 
@@ -65,11 +63,46 @@ class InformeFinancieroController extends Controller
                 ->pluck('periodo');
             $gruposInteranual = $this->clasificarPropiedadesEnPeriodos($periodosActivosVentana);
             $idsFiltroInteranual = $filtro === 'todas' ? null : ($gruposInteranual[$filtro]['ids'] ?? []);
+            $idsFiltroInteranual = $this->combinarIds($idsFiltroInteranual, $idsTipoRenta);
         }
         $periodosInteranual = $this->periodosParaGrafico($idsFiltroInteranual);
 
+        // KPIs del modo Interanual: mismos 3 números de arriba (Ingresos/Gastos/Beneficio) pero
+        // sumados sobre la ventana móvil de 12 meses en vez del ejercicio -- antes el toggle
+        // Anual/Interanual solo cambiaba el gráfico de abajo, dejando los KPI siempre fijos en el
+        // ejercicio seleccionado. La comparativa (delta) es contra la ventana de 12 meses
+        // inmediatamente anterior (mismo criterio que el modo Anual compara contra el año anterior).
+        $actualInteranual = null;
+        $deltaInteranual  = null;
+        if ($ultimoPeriodoActivo) {
+            $actualInteranual = $this->resumenVentana($periodosInteranual, $ventanaInteranual);
+
+            $anioFin = (int) substr($ultimoPeriodoActivo, 0, 4);
+            $mesFin  = (int) substr($ultimoPeriodoActivo, 5, 2);
+            $anclaVentanaAnterior = sprintf('%04d-%02d-01', $anioFin - 1, $mesFin);
+            $ventanaAnterior      = $this->ventanaInteranual($anclaVentanaAnterior);
+            $anteriorInteranual   = $this->resumenVentana($periodosInteranual, $ventanaAnterior);
+
+            if ($anteriorInteranual['ingresos'] != 0.0 || $anteriorInteranual['gastos'] != 0.0) {
+                $deltaInteranual = [
+                    'ingresos'  => $this->pct($actualInteranual['ingresos'], $anteriorInteranual['ingresos']),
+                    'gastos'    => $this->pct(abs($actualInteranual['gastos']), abs($anteriorInteranual['gastos'])),
+                    'beneficio' => $this->pct($actualInteranual['beneficio'], $anteriorInteranual['beneficio']),
+                ];
+            }
+        }
+
         $graficoEjercicio  = $this->graficoPorEjercicio($anioActual, $periodosEjercicio);
         $graficoInteranual = $this->graficoInteranual($periodosInteranual, $ultimoPeriodoActivo);
+
+        // Pestaña "Rentabilidad": propiedades con datos en vm_pyg_valores ese año (grupos['todas']),
+        // restringidas además por el filtro combinado vigente (Constantes/Altas/Bajas + tipo_renta).
+        $idsParaRentabilidad = $this->combinarIds($idsFiltro, $grupos['todas']['ids']);
+        $rentabilidad = $this->rentabilidadPorPropiedad($anioActual, $idsParaRentabilidad);
+
+        // "Propiedades en cartera" se mueve con los mismos filtros que el resto de la página --
+        // antes era una cuenta fija de todo vm_propiedades, sin relación con lo seleccionado.
+        $propiedadesEnCartera = count($idsParaRentabilidad);
 
         return view('vm.informe-financiero', [
             'project'               => $project,
@@ -80,13 +113,69 @@ class InformeFinancieroController extends Controller
             'beneficio'             => $actual['beneficio'],
             'propiedadesEnCartera'  => $propiedadesEnCartera,
             'delta'                 => $delta,
+            'ingresosInteranual'    => $actualInteranual['ingresos']  ?? 0.0,
+            'gastosInteranual'      => $actualInteranual['gastos']    ?? 0.0,
+            'beneficioInteranual'   => $actualInteranual['beneficio'] ?? 0.0,
+            'deltaInteranual'       => $deltaInteranual,
             'graficoEjercicio'      => $graficoEjercicio,
             'graficoInteranual'     => $graficoInteranual,
             'grupos'                => $grupos,
             'gruposInteranual'      => $gruposInteranual,
             'filtro'                => $filtro,
+            'tiposRenta'            => $tiposRenta,
+            'tipoRenta'             => $tipoRenta,
+            'rentabilidad'          => $rentabilidad,
+            'modo'                  => $modo,
             'waterfall'             => $this->waterfallPyg($anioActual, $idsFiltro),
+            'breadcrumb'            => [
+                ['label' => 'Informe financiero', 'url' => ''],
+            ],
         ]);
+    }
+
+    // Resuelve año + los dos filtros combinables (Todas/Constantes/Altas/Bajas y tipo_renta) a
+    // partir de la query string -- lo comparten index() y exportRentabilidad(), para que el
+    // Excel exportado sea exactamente lo que se está viendo en pantalla en ese momento.
+    private function resolverAnioYFiltros(Request $request, $anios): array
+    {
+        $anioActual = (int) ($request->input('anio') ?: ($anios->first() ?? now()->year));
+
+        $grupos = $this->clasificarPropiedades($anioActual);
+        $filtro = $request->input('filtro', 'todas');
+        if (!isset($grupos[$filtro])) $filtro = 'todas';
+        $idsFiltro = $filtro === 'todas' ? null : $grupos[$filtro]['ids'];
+
+        $tiposRenta = DB::table('vm_propiedades')
+            ->where('deleted', 0)
+            ->whereNotNull('tipo_renta')->where('tipo_renta', '!=', '')
+            ->distinct()->orderBy('tipo_renta')->pluck('tipo_renta');
+        $tipoRenta = $request->input('tipo_renta', 'todas');
+        if ($tipoRenta !== 'todas' && !$tiposRenta->contains($tipoRenta)) $tipoRenta = 'todas';
+        $idsTipoRenta = $tipoRenta === 'todas' ? null : DB::table('vm_propiedades')
+            ->where('deleted', 0)->where('tipo_renta', $tipoRenta)->pluck('id')->map(fn($id) => (int) $id)->all();
+
+        $idsFiltro = $this->combinarIds($idsFiltro, $idsTipoRenta);
+
+        return [$anioActual, $grupos, $filtro, $idsFiltro, $tiposRenta, $tipoRenta, $idsTipoRenta];
+    }
+
+    // Excel de la pestaña Rentabilidad, con los mismos filtros (Ejercicio, Constantes/Altas/Bajas,
+    // tipo_renta) que estén activos en la URL desde la que se pulsa "Exportar".
+    public function exportRentabilidad(Request $request, Project $project)
+    {
+        $anios = DB::table('vm_pyg_valores')
+            ->selectRaw('DISTINCT EXTRACT(year FROM periodo)::int as anio')
+            ->orderByDesc('anio')
+            ->pluck('anio');
+
+        [$anioActual, $grupos, , $idsFiltro] = $this->resolverAnioYFiltros($request, $anios);
+        $idsParaRentabilidad = $this->combinarIds($idsFiltro, $grupos['todas']['ids']);
+        $rentabilidad = $this->rentabilidadPorPropiedad($anioActual, $idsParaRentabilidad);
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\RentabilidadExport($rentabilidad),
+            "rentabilidad_{$project->slug}_{$anioActual}.xlsx"
+        );
     }
 
     // ───────────────────────── Puente de rentabilidad (waterfall): Ingresos → Resultado del ejercicio ─────────────────────────
@@ -159,6 +248,130 @@ class InformeFinancieroController extends Controller
         $filas[] = ['label' => 'Resultado del ejercicio', 'valor' => round($resultEjercicio, 2), 'tipo' => 'final'];
 
         return $filas;
+    }
+
+    // Combina dos listas de ids de propiedades con AND (intersección) -- null significa "sin
+    // restricción" en ambos filtros de esta pantalla, así que null+null=null, null+X=X, X+Y=X∩Y.
+    private function combinarIds(?array $a, ?array $b): ?array
+    {
+        if ($a === null) return $b;
+        if ($b === null) return $a;
+        return array_values(array_intersect($a, $b));
+    }
+
+    // ───────────────────────── Pestaña "Rentabilidad": margen y % ocupación por propiedad ─────────────────────────
+
+    private function rentabilidadPorPropiedad(int $anio, array $idsPropiedades): array
+    {
+        if (empty($idsPropiedades)) return [];
+
+        $nombres  = DB::table('vm_propiedades')->whereIn('id', $idsPropiedades)->pluck('nombre', 'id');
+        $margenes = $this->margenPorPropiedad($anio, $idsPropiedades);
+        $ocupacion = $this->ocupacionPorPropiedad($anio, $idsPropiedades);
+
+        $filas = [];
+        foreach ($idsPropiedades as $id) {
+            $m = $margenes[$id] ?? null;
+            $o = $ocupacion[$id] ?? null;
+            $ingresos  = $m['ingresos'] ?? 0.0;
+            $diasReservados  = $o['dias_reservados'] ?? 0;
+            $diasDisponibles = $o['dias_disponibles'] ?? 0;
+            $filas[] = [
+                'id_propiedades' => $id,
+                'propiedad'      => $nombres[$id] ?? "#{$id}",
+                'ingresos'       => $ingresos,
+                'gastos'         => $m['gastos'] ?? 0.0,
+                'beneficio'      => $m['beneficio'] ?? 0.0,
+                'margen'         => $m['margen'] ?? null,
+                'dias_reservados'  => $diasReservados,
+                'dias_disponibles' => $diasDisponibles,
+                'ocupacion'        => $o['ocupacion'] ?? null,
+                // ADR (precio medio de las noches vendidas) y RevPAR (ingreso medio por noche
+                // disponible, vendida o no) -- mismos Ingresos/noches ya calculados arriba, las
+                // noches "Propietario" ya están fuera de ambos denominadores (dias_reservados no
+                // las cuenta como vendidas, dias_disponibles ya las resta).
+                'adr'    => $diasReservados > 0  ? round($ingresos / $diasReservados)  : null,
+                'revpar' => $diasDisponibles > 0 ? round($ingresos / $diasDisponibles) : null,
+            ];
+        }
+
+        usort($filas, fn($a, $b) => strcasecmp($a['propiedad'], $b['propiedad']));
+        return $filas;
+    }
+
+    // Margen = beneficio/ingresos del último período cargado del año (mismo criterio que
+    // resumenAnio/sumarAcumulado), esta vez desglosado por propiedad en vez de agregado.
+    private function margenPorPropiedad(int $anio, array $idsPropiedades): array
+    {
+        $ultimoPeriodo = DB::table('vm_pyg_valores')
+            ->whereRaw('EXTRACT(year FROM periodo) = ?', [$anio])
+            ->max('periodo');
+        if (!$ultimoPeriodo) return [];
+
+        $rows = DB::table('vm_pyg_valores as v')
+            ->join('vm_pyg_cuentas as c', 'c.id', '=', 'v.id_cuenta')
+            ->where('v.periodo', $ultimoPeriodo)
+            ->whereIn('v.id_propiedades', $idsPropiedades)
+            ->groupBy('v.id_propiedades')
+            ->selectRaw("
+                v.id_propiedades,
+                COALESCE(SUM(v.importe_acumulado) FILTER (WHERE c.codigo LIKE '7%'), 0) as ingresos,
+                COALESCE(SUM(v.importe_acumulado) FILTER (WHERE c.codigo LIKE '6%'), 0) as gastos
+            ")
+            ->get();
+
+        $out = [];
+        foreach ($rows as $r) {
+            $ingresos  = (float) $r->ingresos;
+            $gastos    = (float) $r->gastos;
+            $beneficio = $ingresos + $gastos;
+            $out[(int) $r->id_propiedades] = [
+                'ingresos'  => $ingresos,
+                'gastos'    => $gastos,
+                'beneficio' => $beneficio,
+                'margen'    => $ingresos != 0.0 ? round($beneficio / $ingresos * 100) : null,
+            ];
+        }
+        return $out;
+    }
+
+    // % ocupación = noches reservadas / noches disponibles del año natural. "Disponibles" excluye
+    // las noches bloqueadas por el propio propietario (vm_reservas.guest_name = "Propietario" en
+    // cualquier combinación de mayúsculas/minúsculas -- coincidencia exacta, no "contiene", para no
+    // arrastrar variantes como "reparaciones propietario" o "amigo propietario"). Solapes con el año
+    // se recortan a [1 ene, 31 dic] contando noches (check_out - check_in), no días de calendario.
+    private function ocupacionPorPropiedad(int $anio, array $idsPropiedades): array
+    {
+        $inicio = "{$anio}-01-01";
+        $finExclusivo = ($anio + 1) . '-01-01';
+        $diasEnAnio = ($anio % 4 === 0 && ($anio % 100 !== 0 || $anio % 400 === 0)) ? 366 : 365;
+
+        $rows = DB::table('vm_reservas')
+            ->where('deleted', 0)
+            ->where('booking_status', '!=', 'cancelled')
+            ->whereIn('id_propiedades', $idsPropiedades)
+            ->where('check_in_date', '<', $finExclusivo)
+            ->where('check_out_date', '>', $inicio)
+            ->groupBy('id_propiedades')
+            ->selectRaw("
+                id_propiedades,
+                COALESCE(SUM(GREATEST(0, LEAST(check_out_date, ?::date) - GREATEST(check_in_date, ?::date)))
+                    FILTER (WHERE LOWER(guest_name) = 'propietario'), 0) as noches_propietario,
+                COALESCE(SUM(GREATEST(0, LEAST(check_out_date, ?::date) - GREATEST(check_in_date, ?::date)))
+                    FILTER (WHERE guest_name IS NULL OR LOWER(guest_name) != 'propietario'), 0) as noches_reservadas
+            ", [$finExclusivo, $inicio, $finExclusivo, $inicio])
+            ->get();
+
+        $out = [];
+        foreach ($rows as $r) {
+            $disponibles = $diasEnAnio - (int) $r->noches_propietario;
+            $out[(int) $r->id_propiedades] = [
+                'dias_reservados'  => (int) $r->noches_reservadas,
+                'dias_disponibles' => $disponibles,
+                'ocupacion'        => $disponibles > 0 ? round(((int) $r->noches_reservadas) / $disponibles * 100) : null,
+            ];
+        }
+        return $out;
     }
 
     // ───────────────────────── Filtro de propiedades: Todas / Constantes / Altas / Bajas ─────────────────────────
@@ -293,6 +506,20 @@ class InformeFinancieroController extends Controller
             'gastos'    => (float) $r->gastos,
             'beneficio' => (float) $r->ingresos + (float) $r->gastos,
         ];
+    }
+
+    // Suma ingresos/gastos de $periodos (colección con anio/mes/ingresos/gastos, sin restringir
+    // fechas -- ver periodosParaGrafico()) restringida a los 12 [anio,mes] de $ventana.
+    private function resumenVentana($periodos, array $ventana): array
+    {
+        $clave = fn($anio, $mes) => "{$anio}-{$mes}";
+        $set   = collect($ventana)->map(fn($v) => $clave($v['anio'], $v['mes']))->flip();
+        $enVentana = $periodos->filter(fn($p) => isset($set[$clave($p->anio, $p->mes)]));
+
+        $ingresos = (float) $enVentana->sum('ingresos');
+        $gastos   = (float) $enVentana->sum('gastos');
+
+        return ['ingresos' => $ingresos, 'gastos' => $gastos, 'beneficio' => $ingresos + $gastos];
     }
 
     private function pct(float $actual, float $anterior): float
