@@ -215,6 +215,13 @@ class TareaController extends Controller
             'observacion'      => 'nullable|string|max:500',
         ]);
 
+        if (InformeAprobacionGuard::estaCompletado((int) $request->id_usuario, $request->fecha_imputacion)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $request->id_usuario, $request->fecha_imputacion)) {
+            return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+        }
+
         $impId = DB::table('vm_imputaciones')->insertGetId([
             'tipo'             => $tipo,
             'id_tarea'         => $id,
@@ -257,6 +264,21 @@ class TareaController extends Controller
             'fecha_imputacion' => 'required|date',
             'observacion'      => 'nullable|string|max:500',
         ]);
+
+        $impActual = DB::table('vm_imputaciones')->where('id', $impId)->first(['id_usuario', 'fecha_imputacion']);
+        if ($impActual) {
+            if (InformeAprobacionGuard::estaCompletado((int) $impActual->id_usuario, $impActual->fecha_imputacion)
+                || InformeAprobacionGuard::estaCompletado((int) $impActual->id_usuario, $request->fecha_imputacion)) {
+                return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+            }
+            if (!$request->boolean('confirmar_reset')) {
+                $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $impActual->id_usuario, $impActual->fecha_imputacion)
+                    ?? InformeAprobacionGuard::mensajeSiEnAprobacion((int) $impActual->id_usuario, $request->fecha_imputacion);
+                if ($aviso) {
+                    return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+                }
+            }
+        }
 
         DB::table('vm_imputaciones')
             ->where('id', $impId)
@@ -316,6 +338,15 @@ class TareaController extends Controller
         abort_unless(auth()->user()->canEditTable($project, $tableName), 403);
 
         $imp = DB::table('vm_imputaciones')->where('id', $impId)->first(['id_usuario', 'fecha_imputacion']);
+
+        if ($imp) {
+            if (InformeAprobacionGuard::estaCompletado((int) $imp->id_usuario, $imp->fecha_imputacion)) {
+                return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+            }
+            if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $imp->id_usuario, $imp->fecha_imputacion)) {
+                return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+            }
+        }
 
         DB::table('vm_imputaciones')
             ->where('id', $impId)
@@ -498,6 +529,10 @@ class TareaController extends Controller
             $query->where($noCerrada);
         } elseif ($stat === 'vencidas') {
             $query->where('t.estado', 'Vencida');
+        } elseif ($stat === 'planificadas') {
+            $query->where('t.estado', 'Planificada');
+        } elseif ($stat === 'nuevas') {
+            $query->where('t.estado', 'Nueva');
         } elseif ($stat === 'no_imputadas') {
             $query->where('t.estado', 'Completada')->whereRaw('COALESCE(imp.total_min, 0) = 0');
             if (Schema::hasColumn($tabla, 'validado')) {
@@ -536,6 +571,8 @@ class TareaController extends Controller
 
         $vigentes    = $statsBase()->where($noCerrada)->count();
         $vencidas    = $statsBase()->where('t.estado', 'Vencida')->count();
+        $planificadas = $statsBase()->where('t.estado', 'Planificada')->count();
+        $nuevas      = $statsBase()->where('t.estado', 'Nueva')->count();
         $noImputadasQ = $statsBase()->where('t.estado', 'Completada')->whereRaw('COALESCE(imp.total_min, 0) = 0');
         if (Schema::hasColumn($tabla, 'validado')) {
             $noImputadasQ->where(fn($q) => $q->whereNull('t.validado')->orWhere('t.validado', false));
@@ -559,7 +596,7 @@ class TareaController extends Controller
         return view('vm.tareas_list', compact(
             'project', 'tipo', 'tableName', 'tareas', 'propias',
             'allUsuarios', 'usuariosMap', 'propiedades', 'estadoOptions',
-            'vigentes', 'vencidas', 'noImputadas',
+            'vigentes', 'vencidas', 'planificadas', 'nuevas', 'noImputadas',
             'canEdit', 'c', 'tipoLabel', 'tipoIcon', 'stat',
             'sortField', 'sortDir'
         ));
@@ -580,8 +617,7 @@ class TareaController extends Controller
         ]);
 
         $tabla  = 'vm_' . $tableName;
-        $userId = auth()->user()->projectUserId($project);
-        $now    = now();
+        $now = now();
 
         $id = DB::table($tabla)->insertGetId([
             'nombre'            => $data['nombre'],
@@ -591,8 +627,8 @@ class TareaController extends Controller
             'deleted'           => 0,
             'hidden'            => 0,
             'blocked'           => 0,
-            'createuser'        => $userId,
-            'updateuser'        => $userId,
+            'createuser'        => auth()->id(), // admin_users.id, igual que el resto de la app
+            'updateuser'        => auth()->id(),
             'createdat'         => $now,
             'updatedat'         => $now,
         ]);

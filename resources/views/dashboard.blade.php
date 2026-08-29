@@ -467,11 +467,12 @@ async function validarConciliacion(btn) {
     btn.disabled = true;
     btn.textContent = '…';
 
-    const r = await fetch(BASE_DB + '/validar-conciliacion', {
+    const r = await window.fetchConAprobacion(BASE_DB + '/validar-conciliacion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_DB, 'Accept': 'application/json' },
         body: JSON.stringify({ id_usuario: idUsuario, fecha, tipo }),
     });
+    if (!r) { btn.disabled = false; btn.textContent = 'Validar'; return; }
     const data = await r.json();
 
     if (data.ok) {
@@ -493,11 +494,12 @@ async function validarFichaje(btn, fichajeId) {
     btn.disabled = true;
     btn.textContent = '…';
 
-    const r = await fetch(BASE_DB + '/validar-fichaje', {
+    const r = await window.fetchConAprobacion(BASE_DB + '/validar-fichaje', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_DB, 'Accept': 'application/json' },
         body: JSON.stringify({ id: fichajeId }),
     });
+    if (!r) { btn.disabled = false; btn.textContent = 'Validar'; return; }
     const data = await r.json();
 
     if (data.ok) {
@@ -705,10 +707,11 @@ async function marcarSsccHecho(btn, id) {
 
   async function post(endpoint) {
     document.querySelectorAll('.f-btn').forEach(b => b.disabled = true);
-    const resp = await fetch(BASE + endpoint, {
+    const resp = await window.fetchConAprobacion(BASE + endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' },
     });
+    if (!resp) { await load(); return; } // cancelado o bloqueado (fetchConAprobacion ya avisó)
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) alert(data.error ?? 'Error al fichar');
     await load();

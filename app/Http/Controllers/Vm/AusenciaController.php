@@ -125,6 +125,13 @@ class AusenciaController extends Controller
             return response()->json(['error' => $check['error']], 422);
         }
 
+        if (InformeAprobacionGuard::estaCompletado((int) $request->id_usuarios, $request->fecha_inicio)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $request->id_usuarios, $request->fecha_inicio)) {
+            return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+        }
+
         $fichero = null;
         if ($request->hasFile('fichero') && $request->file('fichero')->isValid()) {
             $fichero = $request->file('fichero')->store('vm/ausencias/' . $request->id_usuarios, 'public');
@@ -164,6 +171,20 @@ class AusenciaController extends Controller
             return response()->json(['error' => $check['error']], 422);
         }
 
+        // Cualquiera de los dos rangos (el que tenía antes o el que se le quiere asignar ahora)
+        // puede caer en un mes ya aprobado -- se comprueban los dos.
+        if (InformeAprobacionGuard::estaCompletado((int) $ausencia->id_usuarios, $ausencia->fecha_inicio)
+            || InformeAprobacionGuard::estaCompletado((int) $request->id_usuarios, $request->fecha_inicio)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset')) {
+            $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $ausencia->id_usuarios, $ausencia->fecha_inicio)
+                ?? InformeAprobacionGuard::mensajeSiEnAprobacion((int) $request->id_usuarios, $request->fecha_inicio);
+            if ($aviso) {
+                return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+            }
+        }
+
         $data = [
             'id_usuarios'  => $request->id_usuarios,
             'tipo'         => $request->tipo,
@@ -194,6 +215,13 @@ class AusenciaController extends Controller
 
         $ausencia = DB::table('vm_ausencias')->where('id', $ausId)->where('deleted', 0)->first();
         if (!$ausencia) return response()->json(['error' => 'Ausencia no encontrada.'], 404);
+
+        if (InformeAprobacionGuard::estaCompletado((int) $ausencia->id_usuarios, $ausencia->fecha_inicio)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $ausencia->id_usuarios, $ausencia->fecha_inicio)) {
+            return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+        }
 
         DB::table('vm_ausencias')->where('id', $ausId)->update([
             'deleted'    => 1,

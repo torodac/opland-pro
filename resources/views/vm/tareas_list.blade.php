@@ -91,6 +91,18 @@
         <span class="tl-stat-lbl">Vencidas <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Fecha de planificación anterior a hoy y estado distinto de Completada o Cancelada.</span></span></span>
     </a>
 
+    <a href="{{ $listUrl(['stat' => $stat === 'planificadas' ? null : 'planificadas', 'page' => null]) }}"
+       class="tl-stat {{ $stat === 'planificadas' ? 'active' : '' }}">
+        <span class="tl-stat-num">{{ $planificadas }}</span>
+        <span class="tl-stat-lbl">Planificadas <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Tareas en estado Planificada.</span></span></span>
+    </a>
+
+    <a href="{{ $listUrl(['stat' => $stat === 'nuevas' ? null : 'nuevas', 'page' => null]) }}"
+       class="tl-stat {{ $stat === 'nuevas' ? 'active' : '' }}">
+        <span class="tl-stat-num">{{ $nuevas }}</span>
+        <span class="tl-stat-lbl">Nuevas <span class="app-tooltip" onclick="event.preventDefault()"><span style="font-size:0.7rem;color:#6b7280;flex-shrink:0">&#9432;</span><span class="app-tooltip-box">Tareas en estado Nueva.</span></span></span>
+    </a>
+
     <a href="{{ $listUrl(['stat' => $stat === 'no_imputadas' ? null : 'no_imputadas', 'page' => null]) }}"
        class="tl-stat {{ $stat === 'no_imputadas' ? 'active' : '' }}">
         <span class="tl-stat-num">{{ $noImputadas }}</span>

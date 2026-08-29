@@ -627,11 +627,12 @@ async function guardar() {
   }
 
   try {
-    const r = await fetch(PATCH_URL, {
+    const r = await window.fetchConAprobacion(PATCH_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' },
       body: JSON.stringify(body),
     });
+    if (!r) { btn.textContent = 'Guardar'; btn.disabled = false; return; }
     if (!r.ok) {
       let msg = await r.text();
       try { msg = JSON.parse(msg).error || msg; } catch {}
@@ -648,11 +649,12 @@ async function guardar() {
 }
 
 async function borrar() {
-  const r = await fetch(PATCH_URL, {
+  const r = await window.fetchConAprobacion(PATCH_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' },
     body: JSON.stringify({ _method: 'PATCH', deleted: 1 }),
   });
+  if (!r) return;
   if (r.ok) {
     let data = {};
     try { data = await r.json(); } catch {}

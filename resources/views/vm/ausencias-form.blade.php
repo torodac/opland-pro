@@ -15,6 +15,13 @@ $hayFiltros = array_filter($filtros);
     </button>
     @endif
 
+    <a href="{{ route('listado', [$project->slug, 'ausencias']) }}"
+       class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
+       title="Ver como listado estándar">
+        <i class="fas fa-table text-gray-400"></i>
+        Vista estándar
+    </a>
+
     {{-- Acciones (dropdown): exportar, importar, actualización masiva, copiar IDs --}}
     <div class="relative" x-data="{ open: false }" @click.outside="open = false">
         <button @click="open = !open"
@@ -137,7 +144,7 @@ $hayFiltros = array_filter($filtros);
           <th class="text-center px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-400 whitespace-nowrap">Hasta</th>
           <th class="text-center px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-400 whitespace-nowrap">Año devengo</th>
           <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-400 whitespace-nowrap">Comentario</th>
-          <th class="w-10"></th>
+          <th class="text-center px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-400 whitespace-nowrap">Archivo</th>
           <th class="w-10"></th>
         </tr>
       </thead>
@@ -151,9 +158,11 @@ $hayFiltros = array_filter($filtros);
           <td class="px-4 py-3 text-center text-gray-700 whitespace-nowrap">{{ \Illuminate\Support\Carbon::parse($a->fecha_fin)->format('d/m/Y') }}</td>
           <td class="px-4 py-3 text-center text-gray-700">{{ $a->anyo_devengo ?? '—' }}</td>
           <td class="px-4 py-3 text-gray-500">{{ $a->comentario ?: '—' }}</td>
-          <td class="px-2 py-3 text-center" onclick="event.stopPropagation()">
+          <td class="px-4 py-3 text-center whitespace-nowrap" onclick="event.stopPropagation()">
             @if($a->file_fichero)
-            <a href="{{ Illuminate\Support\Facades\Storage::url($a->file_fichero) }}" target="_blank" class="icon-btn" title="Ver justificante"><i class="ti ti-paperclip"></i></a>
+            <a href="{{ Illuminate\Support\Facades\Storage::url($a->file_fichero) }}" target="_blank" style="color:#0C447C;text-decoration:underline;font-size:12px;">Ver archivo</a>
+            @else
+            <span style="color:#c1c5cb;">—</span>
             @endif
           </td>
           <td class="px-2 py-3 text-right" onclick="event.stopPropagation()">
@@ -208,6 +217,9 @@ $hayFiltros = array_filter($filtros);
       <input type="text" id="a-comentario" placeholder="Ej. IT-2026-1234">
     </div>
     <div class="form-row"><label class="form-label">Justificante <span style="font-size:10px;">(opcional)</span></label>
+      <a id="a-fichero-ver" href="#" target="_blank" style="display:none;font-size:12px;color:#0C447C;text-decoration:underline;margin-bottom:6px;">
+        Ver justificante actual
+      </a>
       <div id="a-fichero-zone" onclick="document.getElementById('a-fichero').click()"
            style="border:2px dashed #d8d6de;border-radius:8px;padding:14px 12px;text-align:center;cursor:pointer;background:#fafafa;transition:border-color .2s;"
            onmouseenter="this.style.borderColor='#7367f0'" onmouseleave="this.style.borderColor='#d8d6de'">
@@ -215,7 +227,7 @@ $hayFiltros = array_filter($filtros);
         <div id="a-fichero-label" style="font-size:12px;color:#b9b9c3;margin-top:4px;">PDF, JPG o PNG · <span style="color:#7367f0;font-weight:600;text-decoration:underline;">selecciona</span></div>
       </div>
       <input type="file" id="a-fichero" accept=".pdf,.jpg,.jpeg,.png" style="display:none;"
-             onchange="document.getElementById('a-fichero-label').innerHTML=this.files[0]?'<strong style=\'color:#5F5E5A\'>'+this.files[0].name+'</strong>':'PDF, JPG o PNG · <span style=\'color:#7367f0;font-weight:600;text-decoration:underline\'>selecciona</span>'">
+             onchange="document.getElementById('a-fichero-label').innerHTML=this.files[0]?'<strong style=\'color:#5F5E5A\'>'+this.files[0].name+'</strong>':'PDF, JPG o PNG · <span style=\'color:#7367f0;font-weight:600;text-decoration:underline\'>selecciona</span>';actualizarAvisoBaja();">
     </div>
     <div class="modal-footer">
       <button class="btn btn-danger-link" id="a-delete-btn" style="display:none;margin-right:auto;" onclick="borrarAusenciaModal()">Eliminar</button>
@@ -227,7 +239,7 @@ $hayFiltros = array_filter($filtros);
 
 <script>
 const CSRF = '{{ csrf_token() }}';
-const BASE = '{{ url($project->slug . "/ausencias_form") }}';
+const BASE = '{{ url($project->slug . "/ausencias_list") }}';
 const AUSENCIAS = {!! $ausencias->map(fn($a) => [
     'id'          => $a->id,
     'tipo'        => $a->tipo,
@@ -236,16 +248,29 @@ const AUSENCIAS = {!! $ausencias->map(fn($a) => [
     'hasta'       => \Illuminate\Support\Carbon::parse($a->fecha_fin)->format('Y-m-d'),
     'anyo_devengo'=> $a->anyo_devengo,
     'comentario'  => $a->comentario,
-    'fichero'     => $a->file_fichero ? true : false,
+    'fichero_url' => $a->file_fichero ? \Illuminate\Support\Facades\Storage::url($a->file_fichero) : null,
 ])->values()->toJson() !!};
 
 function openModal(id)  { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
+// URL del justificante YA guardado en BD para la ausencia que se está editando (null si es
+// nueva, o si todavía no tenía ninguno). Se usa tanto para el enlace "Ver justificante actual"
+// como para decidir si el aviso de "adjunta el justificante" debe mostrarse.
+let ficheroActualUrl = null;
+
 function onTipoAusenciaChange(val) {
-    const esBaja = val.toLowerCase().includes('baja');
-    document.getElementById('a-baja-aviso').style.display = esBaja ? 'block' : 'none';
     document.getElementById('a-anyo-row').style.display = val === 'Vacaciones' ? 'block' : 'none';
+    actualizarAvisoBaja();
+}
+
+// El aviso de "adjunta el justificante" solo tiene sentido si el tipo es Baja Y todavía no hay
+// ningún justificante (ni el que ya estaba guardado, ni uno nuevo recién seleccionado).
+function actualizarAvisoBaja() {
+    const tipo = document.getElementById('a-tipo').value;
+    const esBaja = tipo.toLowerCase().includes('baja');
+    const hayFichero = !!ficheroActualUrl || document.getElementById('a-fichero').files.length > 0;
+    document.getElementById('a-baja-aviso').style.display = (esBaja && !hayFichero) ? 'block' : 'none';
 }
 
 function resetModalAusencia() {
@@ -255,6 +280,8 @@ function resetModalAusencia() {
     document.getElementById('a-comentario').value = '';
     document.getElementById('a-fichero').value = '';
     document.getElementById('a-fichero-label').innerHTML = 'PDF, JPG o PNG · <span style="color:#7367f0;font-weight:600;text-decoration:underline;">selecciona</span>';
+    ficheroActualUrl = null;
+    document.getElementById('a-fichero-ver').style.display = 'none';
 }
 
 function nuevaAusencia() {
@@ -281,18 +308,23 @@ function editarAusencia(id) {
     for (let i = 0; i < sel.options.length; i++) {
         if (sel.options[i].value === aus.tipo) { sel.selectedIndex = i; break; }
     }
-    onTipoAusenciaChange(aus.tipo);
 
     document.getElementById('a-inicio').value = aus.desde;
     document.getElementById('a-fin').value = aus.hasta;
     document.getElementById('a-anyo').value = aus.anyo_devengo || aus.desde.substring(0,4);
     document.getElementById('a-comentario').value = aus.comentario || '';
 
-    const fLabel = aus.fichero
-        ? '<span style="color:#166534;font-weight:600;">📎 Ya tiene justificante adjunto</span><br><span style="font-size:11px;color:#b9b9c3;">Selecciona otro para reemplazarlo</span>'
-        : 'PDF, JPG o PNG · <span style="color:#7367f0;font-weight:600;text-decoration:underline;">selecciona</span>';
-    document.getElementById('a-fichero-label').innerHTML = fLabel;
+    ficheroActualUrl = aus.fichero_url;
+    const verEl = document.getElementById('a-fichero-ver');
+    if (ficheroActualUrl) {
+        verEl.href = ficheroActualUrl;
+        verEl.style.display = 'inline-block';
+        document.getElementById('a-fichero-label').innerHTML = '<span style="color:#166534;font-weight:600;">Reemplazar justificante</span><br><span style="font-size:11px;color:#b9b9c3;">Selecciona otro para sustituir el actual</span>';
+    } else {
+        verEl.style.display = 'none';
+    }
 
+    onTipoAusenciaChange(aus.tipo);
     openModal('modal-ausencia');
 }
 
@@ -332,13 +364,14 @@ function guardarAusencia() {
     if (fichero) form.append('fichero', fichero);
     if (ausId) form.append('_method', 'PATCH');
 
-    fetch(ausId ? BASE + '/' + ausId : BASE, {
+    window.fetchConAprobacion(ausId ? BASE + '/' + ausId : BASE, {
         method: 'POST',
         headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' },
         body: form,
     })
-    .then(r => r.json())
+    .then(r => r ? r.json() : null)
     .then(data => {
+        if (!data) return; // cancelado o bloqueado (fetchConAprobacion ya avisó)
         if (data.error) {
             errorEl.textContent = data.error;
             errorEl.style.display = 'block';
@@ -351,12 +384,13 @@ function guardarAusencia() {
 
 function borrarAusencia(id) {
     if (!confirm('¿Eliminar esta ausencia?')) return;
-    fetch(BASE + '/' + id, {
+    window.fetchConAprobacion(BASE + '/' + id, {
         method: 'DELETE',
         headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' },
     })
-    .then(r => r.json())
+    .then(r => r ? r.json() : null)
     .then(data => {
+        if (!data) return; // cancelado o bloqueado (fetchConAprobacion ya avisó)
         if (data.error) { alert(data.error); } else {
             if (data.aviso_aprobacion) alert(data.aviso_aprobacion);
             location.reload();

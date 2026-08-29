@@ -241,8 +241,11 @@ $csrf         = csrf_token();
   <div id="v-datos" class="field-grid">
     <div class="field-row">
       <div class="field-lbl">Fecha planificada</div>
-      <div class="field-val {{ !$tarea->fecha_planificada ? 'empty' : '' }}">
-        {{ $tarea->fecha_planificada ? \Carbon\Carbon::parse($tarea->fecha_planificada)->translatedFormat('j \d\e F Y') : 'Sin fecha' }}
+      <div class="field-val {{ !$tarea->fecha_planificada ? 'empty' : '' }}" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <span>{{ $tarea->fecha_planificada ? \Carbon\Carbon::parse($tarea->fecha_planificada)->translatedFormat('j \d\e F Y') : 'Sin fecha' }}</span>
+        @if ($tarea->breezeway_task_id ?? null)
+        <span style="font-size:11px;color:#9ca3af;font-variant-numeric:tabular-nums;white-space:nowrap">Breezeway #{{ $tarea->breezeway_task_id }}</span>
+        @endif
       </div>
     </div>
     <div class="field-row">
@@ -309,6 +312,12 @@ $csrf         = csrf_token();
       <div style="font-size:13px;color:#bbb;font-style:italic">Sin personas asignadas.</div>
     @endforelse
   </div>
+  @if ($tarea->usuario_breezeway_ausente ?? null)
+  <div style="margin-top:10px;padding-top:10px;border-top:0.5px solid rgba(0,0,0,.05);font-size:12px;color:#b45309;display:flex;align-items:start;gap:6px">
+    <i class="ti ti-alert-triangle" style="font-size:14px;margin-top:1px"></i>
+    <span>Asignado en Breezeway sin usuario en Opland: {{ $tarea->usuario_breezeway_ausente }}</span>
+  </div>
+  @endif
 </div>
 
 {{-- ── IMPUTACIONES ── --}}
@@ -985,10 +994,11 @@ async function confirmarEliminarImp() {
   closeModal('modal-confirm-del-imp');
   if (btn) btn.disabled = true;
   try {
-    const r = await fetch(URL_IMP_DEL + '/' + impId, {
+    const r = await window.fetchConAprobacion(URL_IMP_DEL + '/' + impId, {
       method: 'DELETE',
       headers: {'X-CSRF-TOKEN':CSRF,'Accept':'application/json'}
     });
+    if (!r) { if (btn) btn.disabled = false; _pendingDelImpId = null; _pendingDelBtn = null; return; }
     const data = await r.json();
     if (data.ok) {
       const row = document.getElementById('imp-' + impId);
@@ -1016,11 +1026,12 @@ async function guardarImp() {
   const btn = document.getElementById('btn-imp-save');
   btn.disabled = true; btn.textContent = 'Guardando…';
   try {
-    const r = await fetch(URL_IMP_STORE, {
+    const r = await window.fetchConAprobacion(URL_IMP_STORE, {
       method: 'POST',
       headers: {'Content-Type':'application/json','X-CSRF-TOKEN':CSRF,'Accept':'application/json'},
       body: JSON.stringify({id_usuario:uid, fecha_imputacion:fecha, duracion:dur, observacion:obs||null})
     });
+    if (!r) { btn.disabled = false; btn.textContent = 'Guardar'; return; }
     const data = await r.json();
     if (data.ok) {
       const imp = data.imp;
@@ -1075,11 +1086,12 @@ async function guardarEditImp() {
   const btn = document.getElementById('btn-edit-imp-save');
   btn.disabled = true; btn.textContent = 'Guardando…';
   try {
-    const r = await fetch(URL_IMP_DEL + '/' + impId, {
+    const r = await window.fetchConAprobacion(URL_IMP_DEL + '/' + impId, {
       method: 'PATCH',
       headers: {'Content-Type':'application/json','X-CSRF-TOKEN':CSRF,'Accept':'application/json'},
       body: JSON.stringify({duracion: dur, fecha_imputacion: fecha, observacion: obs || null})
     });
+    if (!r) { btn.disabled = false; btn.textContent = 'Guardar'; return; }
     const data = await r.json();
     if (data.ok) {
       const imp  = data.imp;

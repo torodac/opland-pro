@@ -106,11 +106,13 @@ class HorarioController extends Controller
         // Ancho de la columna Usuario: el contenido más largo de TODOS los departamentos, para que
         // mida igual en todas las tablas de la página (cada tabla es independiente y si no se fuerza
         // se adapta cada una a su propio contenido).
+        // El nombre y el desglose (fest/extr) van en dos líneas dentro de la misma celda, así que
+        // el ancho necesario es el mayor de los dos por separado, no la suma concatenada.
         $colUserMaxLen = $usuariosFiltrados->reduce(function ($max, $u) use ($saldoMap) {
             $s = $saldoMap[$u->id];
-            $nombreConDesglose = "{$u->nombre} (" . number_format($s['dias_fest'], 1, ',', '') . 'd fest / '
-                . number_format($s['horas_resto'], 1, ',', '') . 'h ext)';
-            return max($max, mb_strlen($nombreConDesglose));
+            $desglose = '(' . number_format($s['dias_fest'], 0, ',', '') . ' fest / '
+                . number_format($s['horas_resto'], 0, ',', '') . ' extr)';
+            return max($max, mb_strlen($u->nombre), mb_strlen($desglose));
         }, mb_strlen('Usuario'));
 
         return view('horario', [
@@ -142,6 +144,23 @@ class HorarioController extends Controller
     public function store(Request $request, Project $project)
     {
         $entries = $request->input('entries', []);
+
+        // Se comprueban TODAS las entradas antes de escribir nada -- si alguna cae en un mes ya
+        // aprobado (o pendiente de confirmación), se rechaza el guardado completo en vez de
+        // aplicar solo una parte.
+        foreach ($entries as $entry) {
+            if (InformeAprobacionGuard::estaCompletado((int) $entry['id_usuario'], $entry['fecha'])) {
+                return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+            }
+        }
+        if (!$request->boolean('confirmar_reset')) {
+            foreach ($entries as $entry) {
+                if ($aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $entry['id_usuario'], $entry['fecha'])) {
+                    return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+                }
+            }
+        }
+
         $avisos = [];
 
         foreach ($entries as $entry) {
@@ -167,6 +186,20 @@ class HorarioController extends Controller
     public function destroy(Request $request, Project $project)
     {
         $entries = $request->input('entries', []);
+
+        foreach ($entries as $entry) {
+            if (InformeAprobacionGuard::estaCompletado((int) $entry['id_usuario'], $entry['fecha'])) {
+                return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+            }
+        }
+        if (!$request->boolean('confirmar_reset')) {
+            foreach ($entries as $entry) {
+                if ($aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $entry['id_usuario'], $entry['fecha'])) {
+                    return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+                }
+            }
+        }
+
         $avisos = [];
 
         foreach ($entries as $entry) {

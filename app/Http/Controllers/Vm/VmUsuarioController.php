@@ -370,6 +370,13 @@ class VmUsuarioController extends Controller
             ], 422);
         }
 
+        if (InformeAprobacionGuard::estaCompletado($id, $request->fecha_inicio)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion($id, $request->fecha_inicio)) {
+            return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+        }
+
         // Subida de fichero (multipart)
         $fichero = null;
         if ($request->hasFile('fichero') && $request->file('fichero')->isValid()) {
@@ -433,6 +440,18 @@ class VmUsuarioController extends Controller
             ], 422);
         }
 
+        if (InformeAprobacionGuard::estaCompletado($id, $ausencia->fecha_inicio)
+            || InformeAprobacionGuard::estaCompletado($id, $request->fecha_inicio)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset')) {
+            $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion($id, $ausencia->fecha_inicio)
+                ?? InformeAprobacionGuard::mensajeSiEnAprobacion($id, $request->fecha_inicio);
+            if ($aviso) {
+                return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+            }
+        }
+
         $data = [
             'tipo'         => $request->tipo,
             'fecha_inicio' => $request->fecha_inicio,
@@ -458,6 +477,13 @@ class VmUsuarioController extends Controller
         $this->authorize($project);
         $ausencia = DB::table('vm_ausencias')->where('id', $ausId)->where('id_usuarios', $id)->where('deleted', 0)->first();
         if (!$ausencia) return response()->json(['error' => 'Ausencia no encontrada.'], 404);
+
+        if (InformeAprobacionGuard::estaCompletado($id, $ausencia->fecha_inicio)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion($id, $ausencia->fecha_inicio)) {
+            return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+        }
 
         DB::table('vm_ausencias')->where('id', $ausId)->update(['deleted' => 1, 'updatedat' => now()]);
 

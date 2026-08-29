@@ -63,8 +63,29 @@ async function api(method, path, body) {
     const sep = path.includes('?') ? '&' : '?';
     path = path + sep + 'as_user=' + state.asUser.id;
   }
-  const res = await fetch(API + path, opts);
-  const json = await res.json().catch(() => ({}));
+  let res = await fetch(API + path, opts);
+  let json = await res.json().catch(() => ({}));
+
+  // Aviso previo de aprobación (InformeAprobacionGuard): 409 con requiere_confirmacion=true
+  // significa que el usuario/mes afectado está en proceso de aprobación -- se pregunta con
+  // confirm() y, si se acepta, se reintenta la misma petición añadiendo confirmar_reset=1. Si
+  // se cancela, no se reintenta (el guardado original tampoco llegó a hacerse: el backend
+  // responde el 409 antes de escribir nada). Un 423 significa que el informe ya está aprobado
+  // y bloqueado del todo: no hay confirmación posible, se trata como cualquier otro error.
+  if (res.status === 409 && json.requiere_confirmacion) {
+    if (!confirm(json.mensaje)) {
+      throw new Error('Cambio cancelado.');
+    }
+    if (opts.body instanceof FormData) {
+      opts.body.set('confirmar_reset', '1');
+    } else {
+      const parsed = opts.body ? JSON.parse(opts.body) : {};
+      parsed.confirmar_reset = true;
+      opts.body = JSON.stringify(parsed);
+    }
+    res = await fetch(API + path, opts);
+    json = await res.json().catch(() => ({}));
+  }
 
   // Token caducado/inválido: cierre de sesión automático en CUALQUIER endpoint (antes solo
   // loadTareas() lo detectaba, el resto se quedaba mostrando un error genérico sin volver al
@@ -348,7 +369,7 @@ function avatarColor(id) {
 }
 
 function avatarsHtml(lista) {
-  if (!lista || lista.length <= 1) return '';
+  if (!lista || lista.length === 0) return '';
   const visible = lista.slice(0, 3);
   const resto   = lista.length - 3;
   const chips   = visible.map((u, i) => {
@@ -368,15 +389,49 @@ const TIPO_META = {
   piscina:       { icon: '🏊', label: 'Piscina' },
 };
 
+// Mismas etiquetas/colores que el badge de estado del backoffice (resources/views/vm/tarea.blade.php
+// y tareas_list.blade.php: $estadoColores / $estadoBadgeColores), vía las clases .chip.estado-* de index.html.
+const ESTADO_CLASE = {
+  'Nueva':       'estado-nueva',
+  'Planificada': 'estado-planificada',
+  'Vencida':     'estado-vencida',
+  'Completada':  'estado-completada',
+  'Cancelada':   'estado-cancelada',
+  'Descartada':  'estado-descartada',
+};
+
+function estadoChipHtml(estado) {
+  if (!estado) return '';
+  return `<span class="chip ${ESTADO_CLASE[estado] || 'estado-nueva'}">${esc(estado)}</span>`;
+}
+
+// Solo quien tiene la tarea asignada ve su propio tiempo imputado (o "Sin imputar" si aún no
+// imputó). Para el resto (p.ej. un supervisor mirando tareas que no son suyas), "mi_tiempo_total"
+// siempre sería null aunque el equipo sí haya imputado, así que se muestra el agregado del equipo.
+function fmtHHMM(minutos) {
+  return `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`;
+}
+
+function tiempoChipHtml(t) {
+  if (t.puede_imputar) {
+    const sinImputar = !t.mi_tiempo_total;
+    return sinImputar
+      ? (state.fichajeCerrado
+          ? `<span class="chip" style="background:#450a0a;border-color:#ef4444;color:#fca5a5">Sin imputar</span>`
+          : `<span class="chip amber">Sin imputar</span>`)
+      : `<span class="chip green">${t.mi_tiempo_total}</span>`;
+  }
+
+  const equipoMin = (t.control_user_info || []).reduce((sum, u) => sum + (u.tiempo_minutos || 0), 0);
+  return equipoMin > 0
+    ? `<span class="chip green">Equipo ${fmtHHMM(equipoMin)}</span>`
+    : `<span class="chip amber">Equipo sin imputar</span>`;
+}
+
 function cardHtml(t) {
   const meta     = TIPO_META[t.tipo] || { icon: '📋', label: t.tipo };
   const icon     = meta.icon;
-  const sinImputar = !t.mi_tiempo_total;
-  const tiempoChip = sinImputar
-    ? (state.fichajeCerrado
-        ? `<span class="chip" style="background:#450a0a;border-color:#ef4444;color:#fca5a5">Sin imputar</span>`
-        : `<span class="chip amber">Sin imputar</span>`)
-    : `<span class="chip green">${t.mi_tiempo_total}</span>`;
+  const tiempoChip = tiempoChipHtml(t);
   const tipoChip = `<span class="chip blue">${meta.label}</span>`;
 
   return `
@@ -390,7 +445,7 @@ function cardHtml(t) {
           ${avatarsHtml(t.control_user_info)}
         </div>
       </div>
-      <div class="tarea-badges">${tiempoChip}${tipoChip}</div>
+      <div class="tarea-badges">${estadoChipHtml(t.estado)}${tiempoChip}${tipoChip}</div>
     </div>`;
 }
 
@@ -485,6 +540,7 @@ function abrirDetalle(tarea) {
     <div class="detail-section">
       <div class="detail-label">Tarea</div>
       <div class="detail-value" style="font-weight:600;font-size:17px">${esc(tarea.nombre)}</div>
+      ${tarea.estado ? `<div style="margin-top:6px">${estadoChipHtml(tarea.estado)}</div>` : ''}
     </div>
     ${tarea.descripcion ? `<div class="detail-section"><div class="detail-label">Descripción</div><div class="detail-value">${esc(tarea.descripcion)}</div></div>` : ''}
     <div class="detail-section">

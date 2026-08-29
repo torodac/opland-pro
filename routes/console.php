@@ -23,6 +23,12 @@ Schedule::command('admin:audit-orphan-screens')->weeklyOn(1, '07:00')->withoutOv
 // primer día laborable del mes, así que puede correr a diario sin duplicar nada.
 Schedule::command('vm:generar-tarea-informes-rrhh')->dailyAt('06:30')->withoutOverlapping();
 
+// Cruza vm_propiedades con las propiedades de Breezeway (rellena breezeway_home_id donde falte,
+// mantiene vm_breezeway_propiedades_pendientes con lo que no tiene match) -- a las 07:15, después
+// de icnea:sync-pro (07:00, cron de sistema) para que las propiedades dadas de alta ese mismo día
+// ya puedan cruzarse sin esperar a la ejecución siguiente.
+Schedule::command('breezeway:sync-properties')->dailyAt('07:15')->withoutOverlapping();
+
 // Cierra automáticamente los fichajes del día anterior que siguen abiertos
 Schedule::call(function () {
     // Se ejecuta a las 08:00 — procesa fichajes del día anterior
@@ -54,16 +60,22 @@ Schedule::call(function () {
             ->orderByDesc('fecha_alta')
             ->value('horas_semana');
 
+        [$h, $m] = array_map('intval', explode(':', substr($fichaje->hora_inicio, 0, 5)));
+        $horaInicioMinutos = $h * 60 + $m;
+
         if ($horasSemana && $horasSemana > 0) {
-            [$h, $m] = array_map('intval', explode(':', substr($fichaje->hora_inicio, 0, 5)));
-            $totalMinutos = $h * 60 + $m + (int) round(($horasSemana / 5) * 60);
+            $totalMinutos = $horaInicioMinutos + (int) round(($horasSemana / 5) * 60);
             $horaFinMinutos = $totalMinutos % (24 * 60); // normalizar si supera medianoche
         } else {
             $horaFinMinutos = 23 * 60 + 59;
         }
 
-        // Si la hora calculada cae entre 00:00 y 07:59, significa cambio de día → tope 23:59
-        if ($horaFinMinutos < 8 * 60) {
+        // El módulo de arriba solo "envuelve" (da un resultado menor que la hora de inicio) si
+        // la jornada calculada de verdad cruzó la medianoche -- ese es el único caso real de
+        // cambio de día, y ahí sí se aplica el tope 23:59. Antes se usaba un umbral fijo (<8:00)
+        // que daba un falso positivo con contratos de pocas horas/día cuya jornada, sin cruzar
+        // medianoche, terminaba igualmente antes de las 8:00 (p.ej. entrada 07:07 + 36 min/día).
+        if ($horaFinMinutos < $horaInicioMinutos) {
             $horaFinMinutos = 23 * 60 + 59;
         }
 

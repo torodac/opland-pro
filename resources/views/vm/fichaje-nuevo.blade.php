@@ -10,15 +10,9 @@
 
 <div class="bg-white rounded-xl border border-gray-200 p-6" style="max-width:480px">
 
-  @if($errors->any())
-  <div style="background:#FCEBEB;color:#A32D2D;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px">
-    @foreach($errors->all() as $error)
-      <p style="margin:0">{{ $error }}</p>
-    @endforeach
-  </div>
-  @endif
+  <div id="form-error" style="display:none;background:#FCEBEB;color:#A32D2D;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px"></div>
 
-  <form method="POST" action="{{ route('vm.fichaje_form.store', $project->slug) }}">
+  <form id="form-fichaje-nuevo" method="POST" action="{{ route('vm.fichaje_form.store', $project->slug) }}">
     @csrf
 
     <div class="form-row">
@@ -84,5 +78,29 @@
     </div>
   </form>
 </div>
+
+<script>
+document.getElementById('form-fichaje-nuevo').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const errorBox = document.getElementById('form-error');
+    errorBox.style.display = 'none';
+
+    const res = await window.fetchConAprobacion(this.action, {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+        body: new FormData(this),
+    });
+    if (!res) return; // cancelado o bloqueado (fetchConAprobacion ya mostró el aviso)
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        errorBox.textContent = data.error || 'No se pudo guardar el fichaje.';
+        errorBox.style.display = 'block';
+        return;
+    }
+    if (data.aviso_aprobacion) alert(data.aviso_aprobacion);
+    window.location = data.redirect;
+});
+</script>
 
 </x-app-layout>

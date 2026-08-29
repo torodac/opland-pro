@@ -13,8 +13,11 @@ $tipoLabels = [
     'absentismo'   => 'Absentismo',
 ];
 
-function horarioCellHtml($h): string {
-    if (!$h) return '<div class="hce"></div>';
+function horarioCellHtml($h, bool $isFest = false): string {
+    if (!$h) {
+        if ($isFest) return '<span class="hc hc-festivo">Día festivo</span>';
+        return '<div class="hce"></div>';
+    }
     if ($h->tipo === 'turno') {
         $de = $h->hora_inicio ? substr($h->hora_inicio, 0, 5) : '?';
         $a  = $h->hora_fin   ? substr($h->hora_fin,    0, 5) : '?';
@@ -100,6 +103,7 @@ td.cell-edit:hover .hce { border-color:#93C5FD; background:#EFF6FF; }
 .hc-compensacion, .hc-comp_festivo, .hc-comp_horas { background:#FCE7F3; color:#9D174D; }
 .hc-asuntos     { background:#D1FAE5; color:#065F46; }
 .hc-absentismo  { background:#FEE2E2; color:#991B1B; }
+.hc-festivo     { background:#ffe0e0; color:#cc0000; }
 .aus-readonly   { opacity:0.75; cursor:default; }
 .cell-readonly .hc { opacity:0.7; }
 td.cell-readonly { background:#fafafa; cursor:default; }
@@ -187,13 +191,19 @@ $deptLabel = $dept->nombre ?: 'Sin departamento';
             <tr>
                 @php
                     $saldo = $saldoMap[$u->id] ?? ['total' => 0, 'dias_fest' => 0, 'horas_resto' => 0];
-                    $diasFestFmt = number_format($saldo['dias_fest'], 1, ',', '');
-                    $horasRestoFmt = number_format($saldo['horas_resto'], 1, ',', '');
-                    $nombreConDesglose = "{$u->nombre} ({$diasFestFmt}d fest / {$horasRestoFmt}h ext)";
+                    $diasFestFmt = number_format($saldo['dias_fest'], 0, ',', '');
+                    $horasRestoFmt = number_format($saldo['horas_resto'], 0, ',', '');
+                    $desgloseTexto = "({$diasFestFmt} fest / {$horasRestoFmt} extr)";
                     $totalFmt = IC::fmtHoras($saldo['total'], true) ?: '0h 00m';
-                    $tooltipTexto = "{$u->nombre}\nTotal: {$totalFmt}\n({$diasFestFmt}d fest / {$horasRestoFmt}h ext)";
+                    $tooltipTexto = "{$u->nombre}\nTotal: {$totalFmt}\n{$desgloseTexto}";
                 @endphp
-                <td class="col-user"><span class="app-tooltip app-tooltip-right">{{ $nombreConDesglose }}<span class="app-tooltip-box">{{ $tooltipTexto }}</span></span></td>
+                <td class="col-user">
+                    <span class="app-tooltip app-tooltip-right" style="flex-direction:column;align-items:flex-start;line-height:1.25;">
+                        {{ $u->nombre }}
+                        <span style="color:#9ca3af;font-size:10px;font-weight:400;">{{ $desgloseTexto }}</span>
+                        <span class="app-tooltip-box">{{ $tooltipTexto }}</span>
+                    </span>
+                </td>
                 @foreach($dates as $di => $d)
                 @php
                     $ds     = $d->toDateString();
@@ -218,14 +228,14 @@ $deptLabel = $dept->nombre ?: 'Sin departamento';
                         data-hi="{{ $horario?->hora_inicio ? substr($horario->hora_inicio,0,5) : '' }}"
                         data-hf="{{ $horario?->hora_fin   ? substr($horario->hora_fin,0,5)   : '' }}"
                         onclick="openPop(this)">
-                        {!! horarioCellHtml($horario) !!}
+                        {!! horarioCellHtml($horario, $isFest) !!}
                     </td>
                 @else
                     <td class="{{ $tdCls }}">
                         @if($isPastWeek)
-                            <span class="app-tooltip">{!! horarioCellHtml($horario) !!}<span class="app-tooltip-box">Semana pasada — solo lectura</span></span>
+                            <span class="app-tooltip">{!! horarioCellHtml($horario, $isFest) !!}<span class="app-tooltip-box">Semana pasada — solo lectura</span></span>
                         @else
-                            {!! horarioCellHtml($horario) !!}
+                            {!! horarioCellHtml($horario, $isFest) !!}
                         @endif
                     </td>
                 @endif
@@ -398,11 +408,12 @@ function doSave() {
         hora_fin: hf,
     }));
 
-    fetch(BASE, {
+    window.fetchConAprobacion(BASE, {
         method: 'POST',
         headers: {'Content-Type':'application/json','X-CSRF-TOKEN':CSRF,'Accept':'application/json'},
         body: JSON.stringify({ entries }),
-    }).then(r => r.json()).then(data => {
+    }).then(r => r ? r.json() : null).then(data => {
+        if (!data) { closePop(); return; }
         if (data.ok) {
             dates.forEach(fecha => {
                 const td = document.getElementById(`cell-${uid}-${fecha}`);
@@ -426,11 +437,12 @@ function doDelete() {
 
     const entries = dates.map(fecha => ({ id_usuario: uid, fecha }));
 
-    fetch(DEL, {
+    window.fetchConAprobacion(DEL, {
         method: 'DELETE',
         headers: {'Content-Type':'application/json','X-CSRF-TOKEN':CSRF,'Accept':'application/json'},
         body: JSON.stringify({ entries }),
-    }).then(r => r.json()).then(data => {
+    }).then(r => r ? r.json() : null).then(data => {
+        if (!data) { closePop(); return; }
         if (data.ok) {
             dates.forEach(fecha => {
                 const td = document.getElementById(`cell-${uid}-${fecha}`);

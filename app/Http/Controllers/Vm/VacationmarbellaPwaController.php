@@ -150,7 +150,7 @@ class VacationmarbellaPwaController extends Controller
             : $visibleIds;
 
         $cols = [
-            't.id', 't.nombre', 't.descripcion', 't.comentario',
+            't.id', 't.nombre', 't.descripcion', 't.comentario', 't.estado',
             't.fecha_planificada', 't.tiempo', 't.control_user',
             'p.id as propiedad_id', 'p.nombre as propiedad_nombre',
             'p.icnea_address as direccion', 'p.icnea_city as ciudad',
@@ -307,6 +307,13 @@ class VacationmarbellaPwaController extends Controller
             return response()->json(['error' => 'No tienes permiso para imputar en esta tarea'], 403);
         }
 
+        if (InformeAprobacionGuard::estaCompletado((int) $user->id, $fechaImputacion)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $user->id, $fechaImputacion)) {
+            return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+        }
+
         [$h, $m] = explode(':', $request->tiempo);
         $minutos = (int) $h * 60 + (int) $m;
 
@@ -357,6 +364,18 @@ class VacationmarbellaPwaController extends Controller
         $minutos = (int) $h * 60 + (int) $m;
 
         $observacionFinal = $this->componerObservacion($imputacion->observacion, $request->input('observacion'));
+
+        if (InformeAprobacionGuard::estaCompletado((int) $imputacion->id_usuario, $imputacion->fecha_imputacion)
+            || InformeAprobacionGuard::estaCompletado((int) $imputacion->id_usuario, $fechaImputacion)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset')) {
+            $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $imputacion->id_usuario, $imputacion->fecha_imputacion)
+                ?? InformeAprobacionGuard::mensajeSiEnAprobacion((int) $imputacion->id_usuario, $fechaImputacion);
+            if ($aviso) {
+                return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+            }
+        }
 
         \App\Services\ImputacionesSync::actualizar(
             $imputacionId,
@@ -440,7 +459,7 @@ class VacationmarbellaPwaController extends Controller
             $this->resizeImage($file->getPathname(), $destPath, 1280, 500 * 1024);
             $path = 'vm/fotos/' . $filename;
 
-            $fotoData = ['nombre' => 'Foto reporte', 'file_foto' => $path, 'createuser' => $user->id, 'createdat' => now()];
+            $fotoData = ['nombre' => 'Foto reporte', 'file_foto' => $path, 'createuser' => $user->admin_user_id, 'createdat' => now()];
             if ($tipoDestino === 'limpieza')      $fotoData['id_tareas_limpieza']      = $idNueva;
             if ($tipoDestino === 'mantenimiento') $fotoData['id_tareas_mantenimiento'] = $idNueva;
             DB::table('vm_fotos')->insert($fotoData);
@@ -481,7 +500,7 @@ class VacationmarbellaPwaController extends Controller
         $fotoData = [
             'nombre'     => 'Foto PWA',
             'file_foto'  => $path,
-            'createuser' => $user->id,
+            'createuser' => $user->admin_user_id,
             'createdat'  => now(),
         ];
 
@@ -597,6 +616,17 @@ class VacationmarbellaPwaController extends Controller
             'p256dh'   => 'required|string',
             'auth'     => 'required|string',
         ]);
+
+        // Un mismo dispositivo (mismo endpoint de push) solo puede estar suscrito a un usuario a
+        // la vez. Si antes se usó para fichar como otro trabajador y esa sesión nunca se
+        // desuscribió, la suscripción vieja quedaba huérfana y seguía recibiendo avisos de turno
+        // de ese otro usuario (p.ej. un admin heredando notificaciones de "empieza tu turno" de
+        // quien usó el móvil antes que él). Se borra cualquier suscripción de ese endpoint que no
+        // sea la de quien se está suscribiendo ahora.
+        DB::table('vm_push_subscriptions')
+            ->where('endpoint', $request->endpoint)
+            ->where('id_usuario', '!=', $user->id)
+            ->delete();
 
         DB::table('vm_push_subscriptions')->upsert([
             'id_usuario' => $user->id,
@@ -773,6 +803,13 @@ class VacationmarbellaPwaController extends Controller
             return response()->json(['error' => 'Ya has fichado entrada hoy'], 409);
         }
 
+        if (InformeAprobacionGuard::estaCompletado((int) $user->id, $hoy)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $user->id, $hoy)) {
+            return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+        }
+
         $hora   = now()->format('H:i:s');
         $nombre = now()->format('Y.m.d') . '_' . $user->nombre;
         $fichajeId = DB::table('vm_fichaje')->insertGetId([
@@ -781,7 +818,7 @@ class VacationmarbellaPwaController extends Controller
             'nombre'         => $nombre,
             'hora_inicio'    => $hora,
             'hora_ini_auto'  => $hora,
-            'createuser'     => $user->id,
+            'createuser'     => $user->admin_user_id, // admin_users.id, igual que el resto de la app
             'createdat'      => now(),
         ]);
 
@@ -808,10 +845,17 @@ class VacationmarbellaPwaController extends Controller
             return response()->json(['error' => 'Ya has fichado salida hoy'], 409);
         }
 
+        if (InformeAprobacionGuard::estaCompletado((int) $user->id, $hoy)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $user->id, $hoy)) {
+            return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+        }
+
         $hora = now()->format('H:i:s');
         DB::table('vm_fichaje')
             ->where('id', $fichaje->id)
-            ->update(['hora_fin' => $hora, 'hora_fin_auto' => $hora, 'updateuser' => $user->id, 'updatedat' => now()]);
+            ->update(['hora_fin' => $hora, 'hora_fin_auto' => $hora, 'updateuser' => $user->admin_user_id, 'updatedat' => now()]);
 
         $aviso = InformeAprobacionGuard::checkAndLog((int) $user->id, $hoy, 'vm_fichaje', 'update', $fichaje->id, $request, $user->admin_user_id);
 
@@ -834,7 +878,7 @@ class VacationmarbellaPwaController extends Controller
         }
 
         $hora   = now()->format('H:i:s');
-        $update = ['updateuser' => $user->id, 'updatedat' => now()];
+        $update = ['updateuser' => $user->admin_user_id, 'updatedat' => now()];
 
         if (!$fichaje->pausa_inicio) {
             $update['pausa_inicio']   = $hora;
@@ -846,6 +890,13 @@ class VacationmarbellaPwaController extends Controller
             $msg = 'Pausa finalizada';
         } else {
             return response()->json(['error' => 'La pausa ya esta registrada'], 409);
+        }
+
+        if (InformeAprobacionGuard::estaCompletado((int) $user->id, $hoy)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $user->id, $hoy)) {
+            return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
         }
 
         DB::table('vm_fichaje')->where('id', $fichaje->id)->update($update);
@@ -885,7 +936,7 @@ class VacationmarbellaPwaController extends Controller
             'km'           => 'nullable|numeric|min:0|max:9999.99',
         ]);
 
-        $update = ['updateuser' => $user->id, 'updatedat' => now()];
+        $update = ['updateuser' => $user->admin_user_id, 'updatedat' => now()];
         foreach (['hora_inicio', 'pausa_inicio', 'pausa_fin', 'hora_fin'] as $campo) {
             if ($request->has($campo)) {
                 $update[$campo] = $request->input($campo) ? $request->input($campo) . ':00' : null;
@@ -899,6 +950,13 @@ class VacationmarbellaPwaController extends Controller
         }
         if ($request->has('km')) {
             $update['km'] = $request->input('km') !== '' ? $request->input('km') : null;
+        }
+
+        if (InformeAprobacionGuard::estaCompletado((int) $user->id, $fecha)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $user->id, $fecha)) {
+            return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
         }
 
         DB::table('vm_fichaje')->where('id', $fichaje->id)->update($update);
@@ -939,6 +997,13 @@ class VacationmarbellaPwaController extends Controller
             return response()->json(['error' => 'Ya existe un fichaje para ese día'], 409);
         }
 
+        if (InformeAprobacionGuard::estaCompletado((int) $user->id, $fecha)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $user->id, $fecha)) {
+            return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+        }
+
         $nombre = \Carbon\Carbon::parse($fecha)->format('Y.m.d') . '_' . $user->nombre;
 
         $fichajeId = DB::table('vm_fichaje')->insertGetId([
@@ -952,7 +1017,7 @@ class VacationmarbellaPwaController extends Controller
             'observacion'   => $request->input('observacion') ?: null,
             'trayecto'      => $request->input('trayecto') ?: null,
             'km'            => $request->input('km') !== '' && $request->input('km') !== null ? $request->input('km') : null,
-            'createuser'    => $user->id,
+            'createuser'    => $user->admin_user_id, // admin_users.id, igual que el resto de la app
             'createdat'     => now(),
         ]);
 
@@ -996,13 +1061,20 @@ class VacationmarbellaPwaController extends Controller
         $nombre    = $request->nombre
             ?: 'Tarea de ' . $tipoLabel;
 
+        if (InformeAprobacionGuard::estaCompletado((int) $user->id, $fecha)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $user->id, $fecha)) {
+            return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+        }
+
         $idNueva = DB::table($tabla)->insertGetId([
             'nombre'            => $nombre,
             'id_propiedades'    => $request->id_propiedades,
             'fecha_planificada' => $fecha,
             'fecha_finalizacion'=> $fecha,
             'control_user'      => json_encode([(int) $user->id]),
-            'createuser'        => $user->id,
+            'createuser'        => $user->admin_user_id, // admin_users.id, igual que el resto de la app
             'createdat'         => now(),
             'deleted'           => 0,
             'hidden'            => 0,

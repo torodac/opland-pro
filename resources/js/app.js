@@ -16,6 +16,46 @@ Chart.register(BarController, LineController, BarElement, LineElement, PointElem
 window.Alpine = Alpine;
 Alpine.start();
 
+// ───────────────────────── Aviso previo de aprobación de informe mensual (vm) ─────────────────────────
+// Envoltorio de fetch para los guardados que pueden alterar un informe mensual en proceso de
+// aprobación (App\Services\InformeAprobacionGuard). El backend responde 409 con
+// {requiere_confirmacion, mensaje} si el usuario/mes está en_aprobacion y la petición no llevaba
+// confirmar_reset=1 -- aquí se pregunta con confirm() y, si acepta, se reintenta la misma petición
+// añadiendo ese flag. Si responde 423, el informe ya está aprobado y bloqueado: no hay reintento.
+// OJO: el 409 también lo usan otros endpoints para conflictos de negocio ajenos a esto (p.ej.
+// "La pausa ya está registrada"), así que solo se intercepta si trae requiere_confirmacion=true;
+// en cualquier otro caso se devuelve la respuesta tal cual para que el llamante la trate igual
+// que antes (se usa res.clone() para poder inspeccionar el JSON sin consumir el body original).
+window.fetchConAprobacion = async function (url, options = {}) {
+    options.headers = Object.assign({ 'Accept': 'application/json' }, options.headers || {});
+    let res = await fetch(url, options);
+
+    if (res.status === 409) {
+        let data = {};
+        try { data = await res.clone().json(); } catch (e) {}
+        if (data.requiere_confirmacion) {
+            if (!confirm(data.mensaje)) return null;
+
+            if (options.body instanceof FormData) {
+                options.body.set('confirmar_reset', '1');
+                res = await fetch(url, options);
+            } else {
+                const retryUrl = url.includes('?') ? url + '&confirmar_reset=1' : url + '?confirmar_reset=1';
+                res = await fetch(retryUrl, options);
+            }
+        }
+    }
+
+    if (res.status === 423) {
+        let data = {};
+        try { data = await res.clone().json(); } catch (e) {}
+        alert(data.error || data.mensaje || 'Este informe ya está aprobado y bloqueado. No se puede modificar.');
+        return null;
+    }
+
+    return res;
+};
+
 // ───────────────────────── Informe financiero VM: gráfico Chart.js (barras + línea, doble eje) ─────────────────────────
 
 function formatearEuros(v) {
@@ -262,17 +302,20 @@ function hexToRgba(hex, alpha) {
     return `rgba(${r},${g},${b},${alpha})`;
 }
 
-window.renderInformeOperativoClusters = function (canvasId, categorias, series) {
+window.renderInformeOperativoClusters = function (canvasId, categorias, series, opciones) {
     const canvas = document.getElementById(canvasId);
     if (!canvas || !series || !series.length) return null;
+
+    opciones = opciones || {};
+    const sufijo = opciones.sufijo || '';
 
     if (opCharts[canvasId]) opCharts[canvasId].destroy();
 
     // Un stack por año (anterior/actual) para que se vean como dos columnas apiladas lado a
-    // lado por mes; dentro de cada stack, un dataset por cluster con el mismo color en ambos
+    // lado por mes; dentro de cada stack, un dataset por tipo_renta con el mismo color en ambos
     // años (el año anterior a menor opacidad, igual que en el informe financiero).
     const datasets = series.map((s) => ({
-        label: `${s.cluster} ${s.anio}`,
+        label: `${s.tipoRenta} ${s.anio}`,
         data: s.valores,
         backgroundColor: s.esActual ? s.color : hexToRgba(s.color, 0.35),
         stack: s.esActual ? 'actual' : 'anterior',
@@ -293,13 +336,19 @@ window.renderInformeOperativoClusters = function (canvasId, categorias, series) 
                     external: tooltipExterno,
                     filter: (ctx) => ctx.parsed.y !== null && ctx.parsed.y !== undefined && ctx.parsed.y !== 0,
                     callbacks: {
-                        label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}`,
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}${sufijo}`,
                     },
                 },
             },
             scales: {
                 x: { stacked: true, grid: { display: false } },
-                y: { stacked: true, beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#f3f4f6' } },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    max: opciones.maxY,
+                    ticks: { precision: 0, callback: (v) => `${v}${sufijo}` },
+                    grid: { color: '#f3f4f6' },
+                },
             },
         },
     });

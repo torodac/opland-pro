@@ -151,6 +151,7 @@ Route::middleware('auth')->group(function () {
         Route::get('calendario-reservas', [CalendarioReservasController::class, 'index'])->name('calendario-reservas');
 
         Route::get('informe-financiero', [InformeFinancieroController::class, 'index'])->name('informe-financiero');
+        Route::get('informe-financiero/rentabilidad/export', [InformeFinancieroController::class, 'exportRentabilidad'])->name('informe-financiero.rentabilidad.export');
         Route::get('informe-operativo', [InformeOperativoController::class, 'index'])->name('informe-operativo');
 
         Route::get('costes-laborales-propiedad', [\App\Http\Controllers\Vm\CostesLaboralesController::class, 'index'])->name('vm.costes-laborales');
@@ -222,10 +223,10 @@ Route::middleware('auth')->group(function () {
         });
 
         Route::middleware('table.access:ausencias')->group(function () {
-            Route::get('ausencias_form', [AusenciaController::class, 'index'])->where('project', 'vm')->name('vm.ausencias_form');
-            Route::post('ausencias_form', [AusenciaController::class, 'store'])->where('project', 'vm')->name('vm.ausencias_form.store');
-            Route::patch('ausencias_form/{ausId}', [AusenciaController::class, 'update'])->where('project', 'vm')->name('vm.ausencias_form.update');
-            Route::delete('ausencias_form/{ausId}', [AusenciaController::class, 'destroy'])->where('project', 'vm')->name('vm.ausencias_form.delete');
+            Route::get('ausencias_list', [AusenciaController::class, 'index'])->where('project', 'vm')->name('vm.ausencias_form');
+            Route::post('ausencias_list', [AusenciaController::class, 'store'])->where('project', 'vm')->name('vm.ausencias_form.store');
+            Route::patch('ausencias_list/{ausId}', [AusenciaController::class, 'update'])->where('project', 'vm')->name('vm.ausencias_form.update');
+            Route::delete('ausencias_list/{ausId}', [AusenciaController::class, 'destroy'])->where('project', 'vm')->name('vm.ausencias_form.delete');
         });
 
         Route::get('fotos_list', [\App\Http\Controllers\Vm\FotosGaleriaController::class, 'index'])->where('project', 'vm')->name('vm.fotos-list');
@@ -242,9 +243,9 @@ Route::middleware('auth')->group(function () {
             ->name('vm.tarea.update');
 
         Route::middleware('table.access:fichaje')->group(function () {
+            Route::get('fichaje_list',       [\App\Http\Controllers\Vm\FichajeController::class, 'listado'])->name('vm.fichaje_list');
             Route::get('fichaje_form/nuevo', [\App\Http\Controllers\Vm\FichajeController::class, 'create'])->name('vm.fichaje_form.nuevo');
             Route::post('fichaje_form',      [\App\Http\Controllers\Vm\FichajeController::class, 'store'])->name('vm.fichaje_form.store');
-            Route::get('fichajes/{id}',      [\App\Http\Controllers\Vm\FichajeController::class, 'show'])->where(['id' => '[0-9]+'])->name('vm.fichaje');
             Route::get('fichaje_form/{id}',  [\App\Http\Controllers\Vm\FichajeController::class, 'show'])->where(['id' => '[0-9]+'])->name('vm.fichaje_form');
             Route::patch('fichajes/{id}',    [\App\Http\Controllers\Vm\FichajeController::class, 'update'])->where(['id' => '[0-9]+'])->name('vm.fichaje.update');
         });

@@ -194,7 +194,7 @@ $paso_labels = ['rrhh' => 'RRHH', 'coordinador' => 'Coordinador', 'trabajador' =
         </button>
     @endif
 
-    @if($can_select_todos && $en_aprobacion)
+    @if($can_select_todos && $en_aprobacion && $paso_actual !== 'completado')
         <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-medium rounded-lg transition-colors border border-red-200"
             onclick="firmarPaso('{{ route('informe-imputaciones.anular-validacion', $project->slug) }}', '¿Reiniciar todo el flujo de aprobación de este informe? Se perderán las firmas ya dadas y los avisos de edición dejarán de mostrarse hasta que se vuelva a validar.')">
             Reiniciar flujo
@@ -289,18 +289,16 @@ function firmarPaso(url, confirmMsg) {
                     <td></td>
                     <td>{{ $saldo_prev_year != 0 ? number_format($saldo_prev_year, 1, ',', '') : '0,0' }}</td>
                 </tr>
-                @php $running = $saldo_prev_year; @endphp
                 @foreach($year_stats as $m => $s)
-                @php $running += $s['total']; @endphp
                 <tr>
                     <td>{{ $s['label'] }}</td>
                     <td style="color:#28a745">{{ $s['ep'] != 0 ? number_format($s['ep'],1,',','') : '' }}</td>
                     <td style="color:#dc3545">{{ $s['en'] != 0 ? number_format($s['en'],1,',','') : '' }}</td>
-                    <td style="{{ $running >= 0 ? 'color:#28a745' : 'color:#dc3545' }}">
+                    <td style="{{ $s['total'] >= 0 ? 'color:#28a745' : 'color:#dc3545' }}">
                         @if($s['has_ajuste'] ?? false)
-                            <span class="app-tooltip">{{ number_format($running,1,',','') }}*<span class="app-tooltip-box">Incluye ajuste manual</span></span>
+                            <span class="app-tooltip">{{ number_format($s['total'],1,',','') }}*<span class="app-tooltip-box">Incluye ajuste manual</span></span>
                         @else
-                            {{ number_format($running,1,',','') }}
+                            {{ number_format($s['total'],1,',','') }}
                         @endif
                     </td>
                 </tr>
@@ -422,18 +420,19 @@ function firmarPaso(url, confirmMsg) {
                     elseif ($trabajaDescanso)         $badges[] = ['Trab. desc.','#0d6efd'];
                     elseif ($dia['tipo'])            $badges[] = [$dia['tipo']->nombre, tipoColor($dia['tipo']->nombre, $tipo_color)];
                     elseif ($dia['entrada'])         $badges[] = ['Trabajo', $color_trabajo];
-                    if ($dia['es_descanso_efectivo'] && !$trabajaFestivo && !$trabajaDescanso) $badges[] = ['Descanso', '#F3F4F6', '#6B7280'];
+                    elseif ($dia['is_festivo'])      $badges[] = ['Festivo', '#ffe0e0', '#cc0000'];
+                    if ($es_turno && $dia['es_descanso_efectivo'] && !$trabajaFestivo && !$trabajaDescanso) $badges[] = ['Descanso', '#F3F4F6', '#6B7280'];
                     $conflicto = count($badges) > 1;
                 @endphp
                 <tr class="{{ $dia['weekend'] ? 'weekend' : '' }}" @if($conflicto) style="background:#ffff00;" @endif>
                     <td style="font-weight:bold{{ $dia['is_festivo'] ? ';background:#ffe0e0;color:#cc0000' : '' }}">
                         {{ $dia['dow'] }} {{ $dia['num'] }}
                     </td>
-                    <td>{{ $dia['entrada'] ?? '' }}</td>
-                    <td>{{ $dia['salida'] ?? '' }}</td>
-                    <td>{{ $dia['tf_min'] !== null ? IC::fmtMin($dia['tf_min']) : '' }}</td>
+                    <td>{{ $dia['is_festivo'] ? '' : ($dia['entrada'] ?? '') }}</td>
+                    <td>{{ $dia['is_festivo'] ? '' : ($dia['salida'] ?? '') }}</td>
+                    <td>{{ $dia['is_festivo'] ? '' : ($dia['tf_min'] !== null ? IC::fmtMin($dia['tf_min']) : '') }}</td>
                     <td @if($dia['pausa_resaltada']) style="font-weight:700;color:#4e8ef7" @endif>
-                        {{ $dia['p_min'] !== null && $dia['p_min'] > 0 ? $dia['p_min']."'" : '' }}
+                        {{ $dia['is_festivo'] ? '' : (($dia['p_min'] !== null && $dia['p_min'] > 0) ? $dia['p_min']."'" : '') }}
                     </td>
                     <td class="{{ ($dia['he_min'] ?? 0) > 0 ? 'he-pos' : (($dia['he_min'] ?? 0) < 0 ? 'he-neg' : '') }}">
                         @if(($dia['ajuste_he'] ?? 0) != 0)
@@ -443,7 +442,7 @@ function firmarPaso(url, confirmMsg) {
                         @endif
                     </td>
                     @php $efMin = ($dia['tf_min'] !== null && $dia['p_min'] !== null) ? $dia['tf_min'] - $dia['p_min'] : $dia['tf_min']; @endphp
-                    <td>{{ $efMin !== null ? IC::fmtMin($efMin) : '' }}</td>
+                    <td>{{ $dia['is_festivo'] ? '' : ($efMin !== null ? IC::fmtMin($efMin) : '') }}</td>
                     <td>{{ $dia['ht_min'] > 0 ? IC::fmtMin($dia['ht_min']) : '' }}</td>
                     <td>{{ $dia['km'] !== null && $dia['km'] > 0 ? number_format($dia['km'], 1, ',', '') : ($dia['entrada'] ? '0,0' : '') }}</td>
                     <td>

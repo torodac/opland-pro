@@ -72,6 +72,13 @@ class DashboardController extends Controller
         $fechaFin = end($grupo)->toDateString();
         $usuario  = DB::table('vm_usuarios')->where('id', $idUsuario)->value('nombre');
 
+        if (InformeAprobacionGuard::estaCompletado($idUsuario, $fechaIni)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion($idUsuario, $fechaIni)) {
+            return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+        }
+
         $ausId = DB::table('vm_ausencias')->insertGetId([
             'nombre'       => Carbon::parse($fechaIni)->format('Y.m.d') . '_' . $usuario,
             'id_usuarios'  => $idUsuario,
@@ -94,6 +101,15 @@ class DashboardController extends Controller
         $fichajeId = (int) $request->id;
         $user = $this->vmUsuarioActual();
         $fichaje = DB::table('vm_fichaje')->where('id', $fichajeId)->first(['control_user', 'fecha_fichaje']);
+
+        if ($fichaje) {
+            if (InformeAprobacionGuard::estaCompletado((int) $fichaje->control_user, $fichaje->fecha_fichaje)) {
+                return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+            }
+            if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $fichaje->control_user, $fichaje->fecha_fichaje)) {
+                return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+            }
+        }
 
         DB::table('vm_fichaje')->where('id', $fichajeId)->update([
             'validado'     => true,
@@ -579,9 +595,10 @@ class DashboardController extends Controller
                 tipoAusencia: $tipoAusencia,
                 contrato:     $contrato,
                 isFestivo:    $esFestivo,
-                isFestTrab:   (bool) ($fichaje->festivo ?? false),
+                isFestTrab:   $esFestivo, // festivo trabajado = vm_festivos, ya no depende de vm_fichaje.festivo
                 hasFichaje:   true,
                 isDescanso:   VmHorasService::esDescansoEfectivo($hoy, $horario, VmHorasService::esDeptoTurno($user->id)),
+                esTurno:      VmHorasService::esDeptoTurno($user->id),
             );
         }
 
@@ -604,12 +621,19 @@ class DashboardController extends Controller
 
         if ($existe) return response()->json(['error' => 'Ya has fichado entrada hoy'], 409);
 
+        if (InformeAprobacionGuard::estaCompletado((int) $user->id, $hoy)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $user->id, $hoy)) {
+            return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+        }
+
         $hora   = now()->format('H:i:s');
         $nombre = now()->format('Y.m.d') . '_' . $user->nombre;
         $fichajeId = DB::table('vm_fichaje')->insertGetId([
             'fecha_fichaje' => $hoy, 'control_user' => $user->id, 'nombre' => $nombre,
             'hora_inicio'   => $hora, 'hora_ini_auto' => $hora,
-            'createuser'    => $user->id, 'createdat' => now(),
+            'createuser'    => auth()->id(), 'createdat' => now(), // admin_users.id, igual que el resto de la app
         ]);
 
         $aviso = InformeAprobacionGuard::checkAndLog((int) $user->id, $hoy, 'vm_fichaje', 'insert', $fichajeId, $request);
@@ -628,7 +652,7 @@ class DashboardController extends Controller
         if (!$fichaje || !$fichaje->hora_inicio) return response()->json(['error' => 'No has fichado entrada'], 404);
 
         $hora   = now()->format('H:i:s');
-        $update = ['updateuser' => $user->id, 'updatedat' => now()];
+        $update = ['updateuser' => auth()->id(), 'updatedat' => now()]; // admin_users.id
 
         if (!$fichaje->pausa_inicio) {
             $update['pausa_inicio'] = $hora; $update['pausa_ini_auto'] = $hora;
@@ -636,6 +660,13 @@ class DashboardController extends Controller
             $update['pausa_fin'] = $hora; $update['pausa_fin_auto'] = $hora;
         } else {
             return response()->json(['error' => 'La pausa ya está registrada'], 409);
+        }
+
+        if (InformeAprobacionGuard::estaCompletado((int) $user->id, $fichaje->fecha_fichaje)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $user->id, $fichaje->fecha_fichaje)) {
+            return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
         }
 
         DB::table('vm_fichaje')->where('id', $fichaje->id)->update($update);
@@ -656,9 +687,16 @@ class DashboardController extends Controller
         if (!$fichaje) return response()->json(['error' => 'No has fichado entrada'], 404);
         if ($fichaje->hora_fin) return response()->json(['error' => 'Ya has fichado salida'], 409);
 
+        if (InformeAprobacionGuard::estaCompletado((int) $user->id, $fichaje->fecha_fichaje)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $user->id, $fichaje->fecha_fichaje)) {
+            return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+        }
+
         $hora = now()->format('H:i:s');
         DB::table('vm_fichaje')->where('id', $fichaje->id)
-            ->update(['hora_fin' => $hora, 'hora_fin_auto' => $hora, 'updateuser' => $user->id, 'updatedat' => now()]);
+            ->update(['hora_fin' => $hora, 'hora_fin_auto' => $hora, 'updateuser' => auth()->id(), 'updatedat' => now()]); // admin_users.id
 
         $aviso = InformeAprobacionGuard::checkAndLog((int) $user->id, $fichaje->fecha_fichaje, 'vm_fichaje', 'update', $fichaje->id, $request);
 
