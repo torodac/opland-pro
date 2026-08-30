@@ -467,6 +467,17 @@ class ListadoController extends Controller
             }
         }
 
+        // Filtro genérico por lista explícita de IDs (ids=1,2,3) -- para enlaces que apuntan a
+        // un subconjunto concreto de registros de cualquier tabla (p. ej. "tareas pendientes de
+        // este día" desde vm/fichaje_list). Se aplica antes del filtro de control_user para que
+        // este siga acotando la visibilidad aunque los IDs se manipulen a mano en la URL.
+        if ($request->filled('ids')) {
+            $ids = array_values(array_filter(array_map('intval', explode(',', (string) $request->input('ids')))));
+            if ($ids) {
+                $query->whereIn($fullTable . '.id', $ids);
+            }
+        }
+
         // Filtro control_user: si el usuario no tiene acceso a todos los registros
         $this->applyControlUserFilter($query, $project, $fullTable);
 

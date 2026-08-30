@@ -18,29 +18,6 @@ class FichajeController extends Controller
 
     private const DIAS_SEMANA = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 
-    // Mismas etiquetas/colores que public/pwa/app.js (TIPO_LABELS / tipoBadgeClass), para que el
-    // listado admin muestre exactamente lo mismo que ve el trabajador en el histórico de la PWA.
-    private const TIPO_LABELS = [
-        'turno'        => 'Turno',
-        'descanso'     => 'Descanso',
-        'vacaciones'   => 'Vacaciones',
-        'baja'         => 'Baja',
-        'comp_festivo' => 'Comp. festivo',
-        'comp_horas'   => 'Comp. horas',
-        'asuntos'      => 'Asuntos propios',
-        'absentismo'   => 'Absentismo',
-    ];
-
-    private const TIPO_COLORES = [
-        'turno'      => ['bg' => '#e0e7ff', 'fg' => '#3730a3'],
-        'descanso'   => ['bg' => '#f3f4f6', 'fg' => '#374151'],
-        'vacaciones' => ['bg' => '#dcfce7', 'fg' => '#15803d'],
-        'baja'       => ['bg' => '#fee2e2', 'fg' => '#b91c1c'],
-        'absentismo' => ['bg' => '#fee2e2', 'fg' => '#b91c1c'],
-        'asuntos'    => ['bg' => '#fef3c7', 'fg' => '#92400e'],
-        'comp'       => ['bg' => '#e0f2fe', 'fg' => '#0369a1'], // comp_festivo / comp_horas
-    ];
-
     // Mismo criterio que FichaController::resolveVisibleUserIds() (visibilidad estándar de
     // control_user en toda la plataforma, según todos_registros/roles_supervisados del rol).
     private function resolveVisibleUserIds(Project $project): ?array
@@ -81,10 +58,27 @@ class FichajeController extends Controller
             ->orderBy('nombre')
             ->get(['id', 'nombre']);
 
-        $usuarioId = (int) ($request->input('usuario') ?: ($authUserId ?: ($usuarios->first()->id ?? 0)));
-        if ($visibleIds !== null && !in_array((string) $usuarioId, $visibleIds, true)) {
-            abort(403);
+        // 'usuario' ausente en la URL -> por defecto el propio usuario (o el primero visible);
+        // 'usuario=0' -> opción explícita "Todos", sin seleccionar a nadie en concreto.
+        $usuarioParam = $request->query('usuario');
+        $modoTodos    = $usuarioParam !== null && (string) $usuarioParam === '0';
+
+        if ($modoTodos) {
+            $usuarioId = null;
+        } else {
+            $usuarioId = (int) ($usuarioParam ?: ($authUserId ?: ($usuarios->first()->id ?? 0)));
+            if ($visibleIds !== null && !in_array((string) $usuarioId, $visibleIds, true)) {
+                abort(403);
+            }
         }
+
+        // Ids sobre los que se consulta — SIEMPRE acotados a lo que este usuario puede ver
+        // (restricción de control_user real): en modo "Todos" nunca se consulta la tabla
+        // vm_usuarios completa, solo $visibleIds (o, si el rol ve todo, los mismos ids ya
+        // filtrados arriba en $usuarios).
+        $idsConsulta = $modoTodos
+            ? $usuarios->pluck('id')->map(fn($i) => (int) $i)->all()
+            : [$usuarioId];
 
         $anio = (int) ($request->input('anio') ?: now()->year);
         $mes  = (int) ($request->input('mes') ?: now()->month);
@@ -97,83 +91,145 @@ class FichajeController extends Controller
 
         $registros = DB::table('vm_fichaje')
             ->where('deleted', 0)
-            ->where('control_user', $usuarioId)
+            ->whereIn('control_user', $idsConsulta)
             ->whereBetween('fecha_fichaje', [$desde, $hasta])
             ->get()
-            ->keyBy(fn($f) => (string) $f->fecha_fichaje);
+            ->groupBy('control_user')
+            ->map(fn($rows) => $rows->keyBy(fn($f) => (string) $f->fecha_fichaje));
 
         $ausencias = DB::table('vm_ausencias')
-            ->where('id_usuarios', $usuarioId)
+            ->whereIn('id_usuarios', $idsConsulta)
             ->where('deleted', 0)
             ->where('fecha_inicio', '<=', $hasta)
             ->where('fecha_fin', '>=', $desde)
-            ->get(['tipo', 'fecha_inicio', 'fecha_fin']);
+            ->get(['id_usuarios', 'tipo', 'fecha_inicio', 'fecha_fin'])
+            ->groupBy('id_usuarios');
 
         $horarios = DB::table('vm_horarios')
-            ->where('id_usuario', $usuarioId)
+            ->whereIn('id_usuario', $idsConsulta)
             ->whereBetween('fecha', [$desde, $hasta])
             ->where('tipo', '!=', 'turno')
-            ->get(['fecha', 'tipo']);
+            ->get(['id_usuario', 'fecha', 'tipo'])
+            ->groupBy('id_usuario');
 
         $imputadoPorDia = DB::table('vm_imputaciones')
-            ->where('id_usuario', $usuarioId)
+            ->whereIn('id_usuario', $idsConsulta)
             ->whereBetween('fecha_imputacion', [$desde, $hasta])
-            ->selectRaw('fecha_imputacion, SUM(duracion) as total')
-            ->groupBy('fecha_imputacion')
-            ->pluck('total', 'fecha_imputacion');
+            ->selectRaw('id_usuario, fecha_imputacion, SUM(duracion) as total')
+            ->groupBy('id_usuario', 'fecha_imputacion')
+            ->get()
+            ->groupBy('id_usuario')
+            ->map(fn($rows) => $rows->pluck('total', 'fecha_imputacion'));
 
-        $pendientesPorDia = $this->pendientesPorDia($usuarioId, $desde, $hasta);
+        $pendientesPorDia = $this->pendientesPorDia($idsConsulta, $desde, $hasta);
 
-        // Días a mostrar: los que tienen fichaje, ausencia o un horario especial (igual que la PWA).
-        $fechas = collect($registros->keys());
-        foreach ($ausencias as $a) {
-            $ini = Carbon::parse(max($a->fecha_inicio, $desde));
-            $fin = Carbon::parse(min($a->fecha_fin, $hasta));
-            for ($d = $ini->copy(); $d->lte($fin); $d->addDay()) {
-                $fechas->push($d->toDateString());
+        // Sede y "departamento de turnos" (horario visible) de cada usuario consultado --
+        // mismo criterio que VmHorasService::esDeptoTurno(), en una sola consulta en lote.
+        $deptoInfo = DB::table('vm_usuarios as u')
+            ->leftJoin('vm_departamentos as d', 'd.id', '=', 'u.id_departamento')
+            ->whereIn('u.id', $idsConsulta)
+            ->get(['u.id', 'u.sede', DB::raw('COALESCE(d.visible_horarios, false) as es_turno')])
+            ->keyBy('id');
+
+        $festivosPorSede = [];
+        $festivosParaSede = function (string $sede) use (&$festivosPorSede, $desde, $hasta) {
+            return $festivosPorSede[$sede] ??= VmHorasService::festivosSet($sede, $desde, $hasta);
+        };
+
+        // Días a mostrar: TODOS los del mes (o hasta hoy si es el mes en curso), tengan o no
+        // datos, para poder ver el mes completo de un vistazo.
+        $diasMes = collect();
+        for ($d = $inicioMes->copy(); $d->lte($finMes); $d->addDay()) {
+            $diasMes->push($d->toDateString());
+        }
+        $diasMes = $diasMes->sortDesc()->values();
+
+        $usuariosConsulta = $modoTodos ? $usuarios : $usuarios->where('id', $usuarioId)->values();
+
+        $filas = collect();
+        foreach ($usuariosConsulta as $u) {
+            $uid = (int) $u->id;
+            $regsUsuario = $registros->get($uid, collect());
+            $ausUsuario  = $ausencias->get($uid, collect());
+            $horUsuario  = $horarios->get($uid, collect());
+            $impUsuario  = $imputadoPorDia->get($uid, collect());
+            $pendUsuario = $pendientesPorDia[$uid] ?? [];
+
+            $sede    = $deptoInfo[$uid]->sede ?? '';
+            $esTurno = (bool) ($deptoInfo[$uid]->es_turno ?? false);
+            $festivosSet = $festivosParaSede((string) $sede);
+
+            foreach ($diasMes as $fecha) {
+                $f = $regsUsuario->get($fecha);
+                $hor = $horUsuario->firstWhere('fecha', $fecha);
+                $aus = $ausUsuario->first(fn($a) => $fecha >= $a->fecha_inicio && $fecha <= $a->fecha_fin);
+
+                // Mismo algoritmo de badges que el informe mensual
+                // (informe-imputaciones.blade.php), para que ambas pantallas muestren
+                // exactamente el mismo estado de cada día.
+                $isFestivo      = isset($festivosSet[$fecha]);
+                $entrada        = $f && $f->hora_inicio;
+                $isDescansoEf   = VmHorasService::esDescansoEfectivo($fecha, $hor->tipo ?? null, $esTurno);
+                $isFestTrab     = $isFestivo && (bool) $f;
+                $isRotatorio    = $isFestTrab && $isDescansoEf;
+                $trabajaFestivo  = $entrada && $isFestivo;
+                $trabajaDescanso = $entrada && $isDescansoEf && !$isFestivo;
+
+                $badges = collect();
+                if ($isRotatorio) {
+                    $badges->push(['Desc. Fest.', '#6f42c1', '#fff']);
+                } elseif ($isFestTrab || $trabajaFestivo) {
+                    $badges->push(['Trab. fest.', '#0d6efd', '#fff']);
+                } elseif ($trabajaDescanso) {
+                    $badges->push(['Trab. desc.', '#0d6efd', '#fff']);
+                } elseif ($aus) {
+                    $badges->push([$aus->tipo, self::tipoColor($aus->tipo), '#fff']);
+                } elseif ($entrada) {
+                    $badges->push(['Trabajo', '#74aaf8', '#fff']);
+                } elseif ($isFestivo) {
+                    $badges->push(['Festivo', '#ffe0e0', '#cc0000']);
+                }
+                if ($esTurno && $isDescansoEf && !$trabajaFestivo && !$trabajaDescanso) {
+                    $badges->push(['Descanso', '#F3F4F6', '#6B7280']);
+                }
+
+                $minP = ($f && $f->pausa_inicio && $f->pausa_fin)
+                    ? VmHorasService::hmsToMinutes($f->pausa_fin) - VmHorasService::hmsToMinutes($f->pausa_inicio)
+                    : null;
+
+                $diffMin = null;
+                if ($f && $f->hora_inicio && $f->hora_fin) {
+                    $bruto     = VmHorasService::hmsToMinutes($f->hora_fin) - VmHorasService::hmsToMinutes($f->hora_inicio);
+                    $efectivas = $bruto - ($minP ?? 0);
+                    $diffMin   = $efectivas - (int) ($impUsuario[$fecha] ?? 0);
+                }
+
+                $pendDia = $pendUsuario[$fecha] ?? null;
+
+                $filas->push((object) [
+                    'usuarioId'     => $uid,
+                    'usuarioNombre' => $u->nombre,
+                    'esTurno'    => $esTurno,
+                    'id'         => $f->id ?? null,
+                    'fecha'      => $fecha,
+                    'diaSemana'  => self::DIAS_SEMANA[Carbon::parse($fecha)->dayOfWeek],
+                    'horaInicio' => $f->hora_inicio ?? null,
+                    'horaFin'    => $f->hora_fin ?? null,
+                    'pausaMin'   => $minP,
+                    'badges'     => $badges,
+                    'diffMin'    => $diffMin,
+                    'pendientes' => $pendDia['count'] ?? 0,
+                    'pendientesUrl' => $pendDia
+                        ? route('listado', [$project->slug, $pendDia['tabla']]) . '?ids=' . implode(',', $pendDia['ids'])
+                        : null,
+                    'conflicto'  => $badges->count() > 1,
+                ]);
             }
         }
-        foreach ($horarios as $h) {
-            $fechas->push((string) $h->fecha);
+
+        if ($modoTodos) {
+            $filas = $filas->sortBy([['usuarioNombre', 'asc'], ['fecha', 'desc']])->values();
         }
-        $fechas = $fechas->unique()->sortDesc()->values();
-
-        $filas = $fechas->map(function ($fecha) use ($registros, $ausencias, $horarios, $imputadoPorDia, $pendientesPorDia) {
-            $f = $registros->get($fecha);
-
-            $badges = collect();
-            foreach ($ausencias as $a) {
-                if ($fecha >= $a->fecha_inicio && $fecha <= $a->fecha_fin) $badges->push($a->tipo);
-            }
-            foreach ($horarios as $h) {
-                if ((string) $h->fecha === $fecha) $badges->push($h->tipo);
-            }
-            $badges = $badges->unique()->values();
-
-            $minP = ($f && $f->pausa_inicio && $f->pausa_fin)
-                ? VmHorasService::hmsToMinutes($f->pausa_fin) - VmHorasService::hmsToMinutes($f->pausa_inicio)
-                : null;
-
-            $diffMin = null;
-            if ($f && $f->hora_inicio && $f->hora_fin) {
-                $bruto     = VmHorasService::hmsToMinutes($f->hora_fin) - VmHorasService::hmsToMinutes($f->hora_inicio);
-                $efectivas = $bruto - ($minP ?? 0);
-                $diffMin   = $efectivas - (int) ($imputadoPorDia[$fecha] ?? 0);
-            }
-
-            return (object) [
-                'id'         => $f->id ?? null,
-                'fecha'      => $fecha,
-                'diaSemana'  => self::DIAS_SEMANA[Carbon::parse($fecha)->dayOfWeek],
-                'horaInicio' => $f->hora_inicio ?? null,
-                'horaFin'    => $f->hora_fin ?? null,
-                'pausaMin'   => $minP,
-                'badges'     => $badges,
-                'diffMin'    => $diffMin,
-                'pendientes' => $pendientesPorDia[$fecha] ?? 0,
-                'conflicto'  => $f && $badges->isNotEmpty(),
-            ];
-        });
 
         $mesLabel     = $inicioMes->translatedFormat('F Y');
         $anterior     = $inicioMes->copy()->subMonth();
@@ -185,6 +241,7 @@ class FichajeController extends Controller
             'project'         => $project,
             'usuarios'        => $usuarios,
             'usuarioId'       => $usuarioId,
+            'modoTodos'       => $modoTodos,
             'mostrarSelector' => $visibleIds === null || count($visibleIds) > 1,
             'anio'            => $anio,
             'mes'             => $mes,
@@ -192,44 +249,90 @@ class FichajeController extends Controller
             'urlAnterior'     => $urlAnterior,
             'urlSiguiente'    => $urlSiguiente,
             'filas'           => $filas,
-            'tipoLabels'      => self::TIPO_LABELS,
-            'tipoColores'     => self::TIPO_COLORES,
             'breadcrumb'      => [
                 ['label' => 'Fichajes', 'url' => ''],
             ],
         ]);
     }
 
-    // Nº de tareas planificadas de ese usuario, en el rango de fechas dado, sin ninguna
-    // imputación suya todavía — mismo criterio que VacationmarbellaPwaController::fichajeHoy().
-    private function pendientesPorDia(int $usuarioId, string $desde, string $hasta): array
+    // Mismo color/criterio que tipoColor() en informe-imputaciones.blade.php, para que el
+    // badge de un tipo de ausencia se vea exactamente igual en ambas pantallas.
+    private static function tipoColor(string $nombre): string
+    {
+        $mapa = [
+            'Asuntos propios' => '#34c163',
+            'Baja'            => '#7b3f8c',
+            'Compensación'    => '#e83e8c',
+            'Revisar'         => '#fd7e14',
+            'Vacaciones'      => '#e8b800',
+            'Absentismo'      => '#dc3545',
+        ];
+        if (isset($mapa[$nombre])) return $mapa[$nombre];
+        $n = mb_strtolower($nombre);
+        if (str_starts_with($n, 'comp'))    return '#e83e8c';
+        if (str_contains($n, 'vacac'))      return '#e8b800';
+        if (str_contains($n, 'baja'))       return '#7b3f8c';
+        if (str_contains($n, 'asunto'))     return '#34c163';
+        return '#888';
+    }
+
+    // Tareas planificadas de cada usuario del array dado, en el rango de fechas, sin ninguna
+    // imputación suya todavía — mismo criterio que
+    // VacationmarbellaPwaController::fichajeHoy(). Devuelve
+    // [id_usuario][fecha] => ['count' => n, 'tabla' => 'tareas_limpieza', 'ids' => [...]].
+    private function pendientesPorDia(array $usuarioIds, string $desde, string $hasta): array
     {
         $pendientes = [];
         $tablasPorTipo = [
-            'vm_tareas_limpieza'      => 'limpieza',
-            'vm_tareas_mantenimiento' => 'mantenimiento',
-            'vm_tareas_piscinas'      => 'piscina',
+            'tareas_limpieza'      => 'limpieza',
+            'tareas_mantenimiento' => 'mantenimiento',
+            'tareas_piscinas'      => 'piscina',
         ];
 
-        foreach ($tablasPorTipo as $tabla => $tipoLabel) {
-            $tareasDia = DB::table($tabla)
+        foreach ($tablasPorTipo as $tablaBare => $tipoLabel) {
+            $tareasDia = DB::table('vm_' . $tablaBare)
                 ->where('deleted', 0)
                 ->whereBetween('fecha_planificada', [$desde, $hasta])
-                ->whereRaw('control_user::jsonb @> ?::jsonb', [json_encode([$usuarioId])])
-                ->get(['id', 'fecha_planificada']);
+                // Mismo criterio de "tarea todavía abierta" que TareaController/NovacionesController:
+                // una tarea Completada/Cancelada/Descartada no es trabajo pendiente. Sin este
+                // filtro, una Descartada (que además queda oculta automáticamente, ver
+                // BreezewaySyncTasksCommand) se contaba como pendiente pero el enlace a verla
+                // no mostraba nada, al estar filtrada por el listado genérico.
+                ->where(fn($q) => $q->whereNull('estado')->orWhereNotIn('estado', ['Completada', 'Cancelada', 'Descartada']))
+                ->get(['id', 'fecha_planificada', 'control_user']);
 
             if ($tareasDia->isEmpty()) continue;
 
-            $idsConImputacion = DB::table('vm_imputaciones')
-                ->where('tipo', $tipoLabel)
-                ->where('id_usuario', $usuarioId)
-                ->whereIn('id_tarea', $tareasDia->pluck('id'))
-                ->pluck('id_tarea')
-                ->unique();
-
+            // control_user es un array jsonb de ids; se filtra en PHP contra $usuarioIds (el
+            // conjunto ya viene acotado por la visibilidad del rol desde listado()).
+            $tareasPorUsuario = []; // uid => fecha => [taskIds]
             foreach ($tareasDia as $t) {
-                if (!$idsConImputacion->contains($t->id)) {
-                    $pendientes[$t->fecha_planificada] = ($pendientes[$t->fecha_planificada] ?? 0) + 1;
+                $asignados = json_decode($t->control_user ?? '[]', true) ?: [];
+                foreach ($asignados as $uid) {
+                    $uid = (int) $uid;
+                    if (!in_array($uid, $usuarioIds, true)) continue;
+                    $tareasPorUsuario[$uid][$t->fecha_planificada][] = $t->id;
+                }
+            }
+
+            foreach ($tareasPorUsuario as $uid => $porFecha) {
+                $todosLosIds = collect($porFecha)->flatten()->unique();
+                $idsConImputacion = DB::table('vm_imputaciones')
+                    ->where('tipo', $tipoLabel)
+                    ->where('id_usuario', $uid)
+                    ->whereIn('id_tarea', $todosLosIds)
+                    ->pluck('id_tarea')
+                    ->unique();
+
+                foreach ($porFecha as $fecha => $taskIds) {
+                    $pendientesIds = array_values(array_diff($taskIds, $idsConImputacion->all()));
+                    if (!$pendientesIds) continue;
+
+                    if (!isset($pendientes[$uid][$fecha])) {
+                        $pendientes[$uid][$fecha] = ['count' => 0, 'tabla' => $tablaBare, 'ids' => []];
+                    }
+                    $pendientes[$uid][$fecha]['count'] += count($pendientesIds);
+                    $pendientes[$uid][$fecha]['ids'] = array_merge($pendientes[$uid][$fecha]['ids'], $pendientesIds);
                 }
             }
         }

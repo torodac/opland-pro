@@ -745,6 +745,10 @@ class VacationmarbellaPwaController extends Controller
                     ->where('deleted', 0)
                     ->whereBetween('fecha_planificada', [$desde, $ayer])
                     ->whereRaw("control_user::jsonb @> ?::jsonb", [json_encode([(int) $user->id])])
+                    // Mismo criterio de "tarea todavía abierta" que TareaController/
+                    // NovacionesController/FichajeController::pendientesPorDia(): una tarea
+                    // Completada/Cancelada/Descartada no es trabajo pendiente.
+                    ->where(fn($q) => $q->whereNull('estado')->orWhereNotIn('estado', ['Completada', 'Cancelada', 'Descartada']))
                     ->get(['id', 'fecha_planificada']);
 
                 if ($tareasDia->isEmpty()) continue;
