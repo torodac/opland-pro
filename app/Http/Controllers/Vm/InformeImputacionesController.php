@@ -936,6 +936,7 @@ class InformeImputacionesController extends Controller
         $histExtras    = VmHorasService::saldoAcumuladoHoras($userId, $me);
         $yearStats     = $this->getYearStats($userId, $year, $month, $tipos, $contratos, $sede);
         $saldoPrevYear = VmHorasService::saldoAcumuladoHoras($userId, ($year - 1) . '-12-31');
+        $festivosCompensados = $this->getFestivosCompensados($userId, $year, $sede);
 
         return [
             'usuario'          => $usuario,
@@ -958,7 +959,62 @@ class InformeImputacionesController extends Controller
             'is_liquidado'     => false,
             'liquidado_fecha'  => null,
             'fecha_horas_extra'=> null,
+            'festivos_compensados' => $festivosCompensados,
         ];
+    }
+
+    // Lista, en orden cronológico, los festivos trabajados del año emparejados posicionalmente
+    // (1º con 1º, 2º con 2º...) con los días de "Comp. festivo" tomados ese mismo año. No hay
+    // vínculo real festivo↔compensación en la base de datos, así que un festivo puede quedar sin
+    // compensación a la derecha (aún no descansado) o una compensación sin festivo a la izquierda
+    // (sobrante) si los conteos no coinciden.
+    private function getFestivosCompensados(int $userId, int $year, string $sede): array
+    {
+        $desde = "{$year}-01-01";
+        $hasta = "{$year}-12-31";
+
+        $festivosYear = VmHorasService::festivosSet($sede, $desde, $hasta);
+
+        $festivosTrabajados = DB::table('vm_fichaje')
+            ->where('control_user', $userId)
+            ->where('deleted', 0)
+            ->whereNotNull('hora_fin')
+            ->whereIn('fecha_fichaje', array_keys($festivosYear))
+            ->orderBy('fecha_fichaje')
+            ->pluck('fecha_fichaje')
+            ->map(fn($d) => (string) $d)
+            ->values()
+            ->all();
+
+        $compensaciones = DB::table('vm_ausencias')
+            ->where('id_usuarios', $userId)
+            ->where('tipo', 'Comp. festivo')
+            ->where('fecha_inicio', '<=', $hasta)
+            ->where('fecha_fin', '>=', $desde)
+            ->where(function ($q) { $q->where('deleted', 0)->orWhereNull('deleted'); })
+            ->orderBy('fecha_inicio')
+            ->get(['fecha_inicio', 'fecha_fin']);
+
+        $diasCompensacion = [];
+        foreach ($compensaciones as $a) {
+            $cur = max($a->fecha_inicio, $desde);
+            $lim = min($a->fecha_fin, $hasta);
+            while ($cur <= $lim) {
+                $diasCompensacion[] = $cur;
+                $cur = date('Y-m-d', strtotime('+1 day', strtotime($cur)));
+            }
+        }
+        sort($diasCompensacion);
+
+        $total = max(count($festivosTrabajados), count($diasCompensacion));
+        $filas = [];
+        for ($i = 0; $i < $total; $i++) {
+            $filas[] = [
+                'compensacion' => $diasCompensacion[$i] ?? null,
+                'festivo'      => $festivosTrabajados[$i] ?? null,
+            ];
+        }
+        return $filas;
     }
 
     private function getYearStats(int $userId, int $year, int $hastaMs, $tipos, $contratos, string $sede = ''): array

@@ -383,6 +383,30 @@ function firmarPaso(url, confirmMsg) {
             <p style="font-size:11px;color:#374151;margin:6px 0 0;">Días de vacaciones saldados en la liquidación.</p>
             @endif
         </div>
+
+        {{-- Festivos trabajados y compensaciones del año --}}
+        @if(!empty($festivos_compensados))
+        <div class="informe-panel">
+            <h6>Festivos trabajados {{ $year }}</h6>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="color:#4e8ef7">Festivo</th>
+                        <th style="color:#f0960a">Compensado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach($festivos_compensados as $fc)
+                    <tr>
+                        <td>{{ $fc['festivo'] ? \Carbon\Carbon::parse($fc['festivo'])->format('d/m/Y') : '—' }}</td>
+                        <td>{{ $fc['compensacion'] ? \Carbon\Carbon::parse($fc['compensacion'])->format('d/m/Y') : '—' }}</td>
+                    </tr>
+                @endforeach
+                </tbody>
+            </table>
+            <p style="font-size:11px;color:#9ca3af;margin:6px 0 0;">Emparejados por orden cronológico.</p>
+        </div>
+        @endif
         @endif
 
     </div>{{-- /informe-left --}}
