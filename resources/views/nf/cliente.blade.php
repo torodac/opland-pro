@@ -269,7 +269,15 @@ $urlContratoArchivarTpl = route('ficha.archive', [$project->slug, 'contratos', '
       </tr></thead>
       <tbody>
         @foreach($contratos as $c)
+        @php
+          $mesInicioContrato = (int) \Carbon\Carbon::parse($c->fecha_inicio)->format('n');
+          $ejercicioContrato = $mesInicioContrato >= 9
+              ? (int) \Carbon\Carbon::parse($c->fecha_inicio)->format('Y')
+              : (int) \Carbon\Carbon::parse($c->fecha_inicio)->format('Y') - 1;
+          $esVigente = $ejercicioContrato === $anioActualEjercicio;
+        @endphp
         <tr class="trow trow-click"
+            style="{{ !$esVigente ? 'opacity:.4;' : '' }}"
             data-contrato="{{ json_encode(['nombre' => $c->nombre, 'id_tipo' => (int) $c->id_tipo, 'id_grupo' => $c->id_grupo, 'fecha_inicio' => $c->fecha_inicio, 'fecha_fin' => $c->fecha_fin, 'dia1' => (bool) $c->dia1, 'dia2' => (bool) $c->dia2, 'importe' => $c->importe, 'descripcion' => $c->descripcion, 'hidden' => (bool) $c->hidden]) }}"
             onclick="abrirModalEditar({{ $c->id }}, this)">
           <td>
@@ -317,7 +325,7 @@ $urlContratoArchivarTpl = route('ficha.archive', [$project->slug, 'contratos', '
               <span style="color:#bbb;">—</span>
             @endif
           </td>
-          <td style="text-align:right;font-weight:600;">
+          <td style="text-align:right;font-weight:{{ $esVigente ? 600 : 400 }};">
             {{ number_format($c->importe, 0, ',', '.') }} €<span class="importe-mes">{{ (int) $c->id_tipo === 2 ? '/mes' : '' }}</span>
           </td>
         </tr>

@@ -31,6 +31,11 @@ class FitnessController extends Controller
         $hoy = now()->toDateString();
         $activo = $contratos->contains(fn($c) => $c->fecha_inicio <= $hoy && $c->fecha_fin >= $hoy);
 
+        // Ejercicio = temporada sept-agosto, identificada por su año de inicio (mismo criterio
+        // que FitnessController::dashboard()): un contrato es del ejercicio vigente si su
+        // fecha_inicio cae dentro de la temporada en curso.
+        $anioActualEjercicio = now()->month >= 9 ? now()->year : now()->year - 1;
+
         // Desglose mensual de cobro (solo Fitness): un círculo por mes del contrato, verde si ese
         // mes tiene un pago generado y cobrado (Pagada), rojo en cualquier otro caso (pendiente,
         // anulado o sin pago generado todavía).
@@ -47,7 +52,7 @@ class FitnessController extends Controller
         $gruposFitness = DB::table('nf_grupo')->where('id_tipo', 2)->where('deleted', false)->orderBy('nombre')->get();
         $colorGrupo = $this->colorGrupo();
 
-        return view('nf.cliente', compact('project', 'cliente', 'contratos', 'activo', 'generos', 'gruposFitness', 'colorGrupo'));
+        return view('nf.cliente', compact('project', 'cliente', 'contratos', 'activo', 'generos', 'gruposFitness', 'colorGrupo', 'anioActualEjercicio'));
     }
 
     // Array de ['estado' => 'pagado'|'pendiente'|'anulado'|'sin_generar', 'pago_id' => ?int,
