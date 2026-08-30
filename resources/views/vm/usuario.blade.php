@@ -391,7 +391,7 @@ td{padding:8px;font-size:13px;}
       <p class="sec-title" style="margin:0;"><i class="ti ti-calendar-stats" style="font-size:16px;"></i>Horario anual</p>
       <div style="display:flex;align-items:center;gap:10px;">
         <div style="display:flex;gap:8px;font-size:11px;flex-wrap:wrap;">
-          @foreach(['Trabajo'=>['#DBEAFE','#1E40AF'],'Descanso'=>['#F3F4F6','#6B7280'],'Vacaciones'=>['#FEF3C7','#92400E'],'Baja'=>['#EDE9FE','#5B21B6'],'Compensación'=>['#FCE7F3','#9D174D'],'Asuntos propios'=>['#D1FAE5','#065F46'],'Absentismo'=>['#FEE2E2','#991B1B']] as $tipo=>[$bg,$col])
+          @foreach(['Trabajo'=>['#DBEAFE','#1E40AF'],'Trab. fest.'=>['#93C5FD','#1E3A8A'],'Descanso'=>['#F3F4F6','#6B7280'],'Vacaciones'=>['#FEF3C7','#92400E'],'Baja'=>['#EDE9FE','#5B21B6'],'Compensación'=>['#FCE7F3','#9D174D'],'Comp. festivo'=>['#F9A8D4','#831843'],'Asuntos propios'=>['#D1FAE5','#065F46'],'Absentismo'=>['#FEE2E2','#991B1B']] as $tipo=>[$bg,$col])
           <span style="display:flex;align-items:center;gap:3px;">
             <span style="width:10px;height:10px;border-radius:2px;background:{{ $bg }};border:0.5px solid {{ $col }}33;display:inline-block;"></span>
             <span style="color:#888;">{{ $tipo }}</span>
@@ -1108,7 +1108,7 @@ const HOR_COLORS = {
     descanso:    ['#F3F4F6','#6B7280'],
     vacaciones:  ['#FEF3C7','#92400E'],
     baja:        ['#EDE9FE','#5B21B6'],
-    comp_festivo:['#FCE7F3','#9D174D'],
+    comp_festivo:['#F9A8D4','#831843'],
     comp_horas:  ['#FCE7F3','#9D174D'],
     asuntos:     ['#D1FAE5','#065F46'],
     absentismo:  ['#FEE2E2','#991B1B'],
@@ -1118,7 +1118,7 @@ const AUS_COLORS = {
     'Vacaciones':    ['#FEF3C7','#92400E'],
     'Baja':          ['#EDE9FE','#5B21B6'],
     'Asuntos propios':['#D1FAE5','#065F46'],
-    'Comp. festivo': ['#FCE7F3','#9D174D'],
+    'Comp. festivo': ['#F9A8D4','#831843'],
     'Comp. horas':   ['#FCE7F3','#9D174D'],
     'Compensación':  ['#FCE7F3','#9D174D'],
     'Absentismo':    ['#FEE2E2','#991B1B'],
@@ -1250,17 +1250,26 @@ function renderHorarioGrid(year) {
             }
             const fecha = `${year}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
             const h = horMap[fecha];
+            const fichDia = FICHAJES[fecha] ?? null;
 
-            // Color de fondo: horario > ausencia > vacío
+            // Color de fondo: festivo trabajado > ausencia > horario > vacío -- la ausencia es la
+            // fuente de verdad del tipo real (igual que en la vista de planificación semanal,
+            // horario.blade.php, donde también gana sobre el horario planificado); un festivo
+            // trabajado se destaca con un azul más intenso que el "Trabajo" normal, tanto si
+            // coincide con turno como si era su día de descanso (rotatorio).
             let bg = null, col = null, titleParts = [];
             const ausDelDia = AUSENCIAS.find(a => fecha >= a.desde && fecha <= a.hasta) || null;
-            if (h) {
-                [bg, col] = HOR_COLORS[h.tipo] || ['#F9FAFB','#374151'];
-                titleParts.push(h.tipo);
+            const esFestTrab = !!fichDia && FESTIVOS.has(fecha);
+            if (esFestTrab) {
+                [bg, col] = ['#93C5FD', '#1E3A8A'];
+                titleParts.push('Trab. fest.');
             } else if (ausDelDia) {
                 const ausColor = AUS_COLORS[ausDelDia.tipo] || null;
                 if (ausColor) { [bg, col] = ausColor; }
                 titleParts.push(ausDelDia.tipo);
+            } else if (h) {
+                [bg, col] = HOR_COLORS[h.tipo] || ['#F9FAFB','#374151'];
+                titleParts.push(h.tipo);
             }
 
             // Flecha de horas extra
