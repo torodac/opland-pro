@@ -206,7 +206,11 @@
         @if($esBonusReferencia)
             @php
                 $opcionesCargo = ['Responsable propietarios','Jefe Mantenimiento','Recepcionista','Jefe finanzas','Revenue manager','RRHH','Contable','Oficial mantenimiento','Ayte. mantenimiento','Limpiadora','Gobernanta','Captador clientes','Ayte diseño','Rpble propietarios'];
-                $opcionesDepto = ['Adm/Finanzas','Dirección','Expansión','Laboral','Limpieza','Mantenimiento','Operaciones','Proveedor ext','Proyectos','RRHH','Recepción','Reservas'];
+                // A diferencia de "cargo" (lista fija sin tabla propia), los departamentos sí
+                // tienen tabla real (vm_departamentos) -- se lee de ahí en vez de duplicar los
+                // nombres a mano, para que un departamento nuevo/renombrado aparezca solo.
+                $opcionesDepto = \Illuminate\Support\Facades\DB::table('vm_departamentos')
+                    ->where('deleted', 0)->orderBy('nombre')->pluck('nombre')->all();
             @endphp
             <select data-alcance-tipo="cargo" class="{{ $base }}"
                     style="{{ $alcanceActual !== 'cargo' ? 'display:none;' : '' }}"
