@@ -25,15 +25,13 @@ class RentabilidadExport implements FromArray, WithHeadings, ShouldAutoSize, Wit
             $f['beneficio'],
             $f['margen'],
             $f['dias_reservados'],
-            $f['adr'],
             $f['ocupacion'],
-            $f['revpar'],
         ], $this->filas);
     }
 
     public function headings(): array
     {
-        return ['Propiedad', 'Ingresos', 'Beneficio', 'Margen %', 'Días ocupados', 'ADR', '% Ocupación', 'RevPAR'];
+        return ['Propiedad', 'Ingresos', 'Beneficio', 'Margen %', 'Días ocupados', '% Ocupación'];
     }
 
     public function styles(Worksheet $sheet): array

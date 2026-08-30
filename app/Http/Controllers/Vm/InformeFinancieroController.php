@@ -286,12 +286,6 @@ class InformeFinancieroController extends Controller
                 'dias_reservados'  => $diasReservados,
                 'dias_disponibles' => $diasDisponibles,
                 'ocupacion'        => $o['ocupacion'] ?? null,
-                // ADR (precio medio de las noches vendidas) y RevPAR (ingreso medio por noche
-                // disponible, vendida o no) -- mismos Ingresos/noches ya calculados arriba, las
-                // noches "Propietario" ya están fuera de ambos denominadores (dias_reservados no
-                // las cuenta como vendidas, dias_disponibles ya las resta).
-                'adr'    => $diasReservados > 0  ? round($ingresos / $diasReservados)  : null,
-                'revpar' => $diasDisponibles > 0 ? round($ingresos / $diasDisponibles) : null,
             ];
         }
 

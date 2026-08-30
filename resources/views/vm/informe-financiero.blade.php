@@ -171,7 +171,7 @@
             <div style="padding:14px 18px;border-bottom:1px solid #f3f4f6;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
                 <div>
                     <div style="font-size:13.5px;font-weight:700;color:#111827;">Rentabilidad por propiedad — {{ $anioActual }}</div>
-                    <div style="font-size:11px;color:#9ca3af;margin-top:1px;">Margen = beneficio/ingresos del ejercicio · % ocupación = noches reservadas / noches disponibles · ADR = ingresos/noches vendidas · RevPAR = ingresos/noches disponibles · en todos los casos se excluyen las noches bloqueadas por "Propietario" · clic en un encabezado para ordenar</div>
+                    <div style="font-size:11px;color:#9ca3af;margin-top:1px;">Margen = beneficio/ingresos del ejercicio · % ocupación = noches reservadas / noches disponibles · en todos los casos se excluyen las noches bloqueadas por "Propietario" · clic en un encabezado para ordenar</div>
                 </div>
                 @if(!empty($rentabilidad))
                 <a href="{{ route('informe-financiero.rentabilidad.export', $project->slug) }}?{{ http_build_query(request()->only(['anio', 'filtro', 'tipo_renta'])) }}"
@@ -193,26 +193,21 @@
                             <th data-sort="beneficio" data-tipo="num" style="text-align:right;padding:8px 18px;color:#6b7280;font-weight:600;cursor:pointer;white-space:nowrap;">Beneficio ⇅</th>
                             <th data-sort="margen" data-tipo="num" style="text-align:right;padding:8px 18px;color:#6b7280;font-weight:600;cursor:pointer;white-space:nowrap;">Margen ⇅</th>
                             <th data-sort="dias_reservados" data-tipo="num" style="text-align:right;padding:8px 18px;color:#6b7280;font-weight:600;cursor:pointer;white-space:nowrap;">Días ocupados ⇅</th>
-                            <th data-sort="adr" data-tipo="num" style="text-align:right;padding:8px 24px 8px 18px;color:#6b7280;font-weight:600;cursor:pointer;white-space:nowrap;">ADR ⇅</th>
                             <th data-sort="ocupacion" data-tipo="num" style="text-align:right;padding:8px 18px;color:#6b7280;font-weight:600;cursor:pointer;white-space:nowrap;">% Ocupación ⇅</th>
-                            <th data-sort="revpar" data-tipo="num" style="text-align:right;padding:8px 18px;color:#6b7280;font-weight:600;cursor:pointer;white-space:nowrap;">RevPAR ⇅</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach($rentabilidad as $f)
                         <tr style="border-bottom:1px solid #f3f4f6;"
                             data-propiedad="{{ $f['propiedad'] }}" data-ingresos="{{ $f['ingresos'] }}" data-beneficio="{{ $f['beneficio'] }}"
-                            data-margen="{{ $f['margen'] ?? '' }}" data-dias_reservados="{{ $f['dias_reservados'] }}" data-ocupacion="{{ $f['ocupacion'] ?? '' }}"
-                            data-adr="{{ $f['adr'] ?? '' }}" data-revpar="{{ $f['revpar'] ?? '' }}">
+                            data-margen="{{ $f['margen'] ?? '' }}" data-dias_reservados="{{ $f['dias_reservados'] }}" data-ocupacion="{{ $f['ocupacion'] ?? '' }}">
                             <td class="fila-num" style="padding:8px 6px 8px 18px;text-align:right;color:#9ca3af;">{{ $loop->iteration }}</td>
                             <td style="padding:8px 18px;font-weight:600;color:#111827;white-space:nowrap;">{{ $f['propiedad'] }}</td>
                             <td style="padding:8px 18px;text-align:right;color:#374151;">{{ number_format($f['ingresos'], 0, ',', '.') }} €</td>
                             <td style="padding:8px 18px;text-align:right;color:{{ $f['beneficio'] >= 0 ? '#1f2937' : '#b91c1c' }};">{{ number_format($f['beneficio'], 0, ',', '.') }} €</td>
                             <td style="padding:8px 18px;text-align:right;color:{{ $f['margen'] === null ? '#9ca3af' : ($f['margen'] >= 0 ? '#15803d' : '#b91c1c') }};">{{ $f['margen'] !== null ? number_format($f['margen'], 0, ',', '.') . ' %' : '—' }}</td>
                             <td style="padding:8px 18px;text-align:right;color:#374151;">{{ number_format($f['dias_reservados'], 0, ',', '.') }}</td>
-                            <td style="padding:8px 24px 8px 18px;text-align:right;color:#374151;white-space:nowrap;">{{ $f['adr'] !== null ? number_format($f['adr'], 0, ',', '.') . ' €' : '—' }}</td>
                             <td style="padding:8px 18px;text-align:right;color:#374151;">{{ $f['ocupacion'] !== null ? number_format($f['ocupacion'], 0, ',', '.') . ' %' : '—' }}</td>
-                            <td style="padding:8px 18px;text-align:right;color:#374151;">{{ $f['revpar'] !== null ? number_format($f['revpar'], 0, ',', '.') . ' €' : '—' }}</td>
                         </tr>
                         @endforeach
                     </tbody>
