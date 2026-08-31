@@ -436,14 +436,19 @@ class ListadoController extends Controller
             }
         }
 
-        // Búsqueda global por texto (ILIKE en PostgreSQL, LIKE en SQLite)
+        // Búsqueda global por texto (ILIKE + unaccent en PostgreSQL, para ignorar tildes; LIKE
+        // normal en SQLite, donde unaccent() no existe).
         if ($request->filled('q')) {
-            $q      = $request->q;
-            $likeOp = DB::connection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
-            $query->where(function ($sub) use ($q, $projectTable, $likeOp) {
+            $q     = $request->q;
+            $esPg  = DB::connection()->getDriverName() === 'pgsql';
+            $query->where(function ($sub) use ($q, $projectTable, $esPg) {
                 foreach ($projectTable->listFields as $field) {
                     if (in_array($field->type, ['string', 'text', 'email', 'telefono'])) {
-                        $sub->orWhere($field->name, $likeOp, "%{$q}%");
+                        if ($esPg) {
+                            $sub->orWhereRaw('unaccent("' . $field->name . '") ilike unaccent(?)', ["%{$q}%"]);
+                        } else {
+                            $sub->orWhere($field->name, 'like', "%{$q}%");
+                        }
                     }
                 }
             });
@@ -504,6 +509,11 @@ class ListadoController extends Controller
             } else {
                 $query->orderByRaw('"' . $sortField . '" ' . $sortDir . ' NULLS LAST');
             }
+        } elseif ($projectTable->name === 'usuarios') {
+            // La tabla "usuarios" existe en todos los proyectos (Project::createUsuariosTable()) y
+            // siempre tiene el campo de sistema "nombre" -- por defecto se ordena por ahí en vez
+            // de por id descendente, para cualquier slug.
+            $query->orderBy('nombre');
         } else {
             $query->orderByDesc('id');
         }
