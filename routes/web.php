@@ -21,6 +21,7 @@ use App\Http\Controllers\Vm\KmController;
 use App\Http\Controllers\Vm\NovacionesController;
 use App\Http\Controllers\Vm\InformeFinancieroController;
 use App\Http\Controllers\Vm\InformeOperativoController;
+use App\Http\Controllers\Vm\InformeRrhhController;
 use App\Http\Controllers\Vmf\FacturasUploadController;
 
 // Autenticación
@@ -153,6 +154,7 @@ Route::middleware('auth')->group(function () {
         Route::get('informe-financiero', [InformeFinancieroController::class, 'index'])->name('informe-financiero');
         Route::get('informe-financiero/rentabilidad/export', [InformeFinancieroController::class, 'exportRentabilidad'])->name('informe-financiero.rentabilidad.export');
         Route::get('informe-operativo', [InformeOperativoController::class, 'index'])->name('informe-operativo');
+        Route::get('informe-rrhh', [InformeRrhhController::class, 'index'])->name('informe-rrhh');
 
         Route::get('costes-laborales-propiedad', [\App\Http\Controllers\Vm\CostesLaboralesController::class, 'index'])->name('vm.costes-laborales');
         Route::post('costes-laborales-propiedad/recalcular', [\App\Http\Controllers\Vm\CostesLaboralesController::class, 'recalcular'])->name('vm.costes-laborales.recalcular');
