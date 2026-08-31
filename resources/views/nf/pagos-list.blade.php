@@ -139,12 +139,12 @@ $sortLinkFor = fn ($columna) => route('nf.pagos_list', array_filter([
         <select name="grupo">
             <option value="">Todos los grupos</option>
             @foreach($grupos as $g)
-            <option value="{{ $g->id }}" {{ (string) $grupo === (string) $g->id ? 'selected' : '' }}>{{ $g->nombre }}</option>
+            <option value="{{ $g }}" {{ $grupo === $g ? 'selected' : '' }}>{{ $g }}</option>
             @endforeach
         </select>
         <button type="submit" class="btn">Filtrar</button>
         @if($nombre || $grupo)
-        <a href="{{ $linkFor($estado) }}" class="btn">Limpiar</a>
+        <a href="{{ route('nf.pagos_list', array_filter(['project'=>$project->slug,'mes'=>$mes,'estado'=>$estado])) }}" class="btn">Limpiar</a>
         @endif
     </form>
 </div>
@@ -159,7 +159,7 @@ $sortLinkFor = fn ($columna) => route('nf.pagos_list', array_filter([
         @php $flecha = fn ($col) => $sort === $col ? ($dir === 'asc' ? ' ↑' : ' ↓') : ''; @endphp
         <thead><tr>
             <th><a href="{{ $sortLinkFor('cliente') }}" class="th-sort">Cliente{{ $flecha('cliente') }}</a></th>
-            <th><a href="{{ $sortLinkFor('servicio') }}" class="th-sort">Servicio{{ $flecha('servicio') }}</a></th>
+            <th style="text-align:center;"><a href="{{ $sortLinkFor('servicio') }}" class="th-sort">Servicio{{ $flecha('servicio') }}</a></th>
             <th style="text-align:right;"><a href="{{ $sortLinkFor('importe') }}" class="th-sort">Importe{{ $flecha('importe') }}</a></th>
             <th class="col-estado"><a href="{{ $sortLinkFor('estado') }}" class="th-sort">Estado{{ $flecha('estado') }}</a></th>
             <th class="col-fecha"><a href="{{ $sortLinkFor('fecha') }}" class="th-sort">Fecha pago{{ $flecha('fecha') }}</a></th>
@@ -167,7 +167,7 @@ $sortLinkFor = fn ($columna) => route('nf.pagos_list', array_filter([
         </tr></thead>
         <tbody>
             @foreach($pagos as $p)
-            @php $badge = $badgeColorFor($p->contrato_nombre, $p->contrato_id_tipo); $estBadge = $estadoBadgeFor($p->estado_nombre); @endphp
+            @php $badge = $badgeColorFor($p->grupo_nombre, $p->contrato_id_tipo); $estBadge = $estadoBadgeFor($p->estado_nombre); @endphp
             <tr class="trow" style="cursor:pointer;" onclick="window.location='{{ route('ficha', [$project->slug, 'pagos', $p->id]) }}'">
                 <td>
                     {{ $p->cliente_nombre }}
@@ -176,8 +176,8 @@ $sortLinkFor = fn ($columna) => route('nf.pagos_list', array_filter([
                         {{ \Carbon\Carbon::parse($p->fecha_pago)->format('d/m/Y') }}
                     </div>
                 </td>
-                <td>
-                    <span class="badge" style="background:{{ $badge['bg'] }};color:{{ $badge['fg'] }};">{{ $p->contrato_nombre ?? '—' }}</span>
+                <td style="text-align:center;">
+                    <span class="badge" style="background:{{ $badge['bg'] }};color:{{ $badge['fg'] }};">{{ $p->grupo_nombre ?? '—' }}</span>
                 </td>
                 <td style="text-align:right;font-weight:600;">{{ number_format($p->cantidad, 2, ',', '.') }} €</td>
                 <td class="col-estado">

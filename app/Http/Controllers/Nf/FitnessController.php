@@ -184,10 +184,12 @@ class FitnessController extends Controller
             ->whereBetween('p.fecha_pago', [$inicioMes->toDateString(), $inicioMes->copy()->endOfMonth()->toDateString()]);
 
         if ($nombre) {
-            $base->where('cli.nombre', 'ilike', "%{$nombre}%");
+            // unaccent() para que la búsqueda ignore tildes, mismo criterio que la búsqueda
+            // por texto del listado genérico (ListadoController::filteredSortedQuery()).
+            $base->whereRaw('unaccent(cli.nombre) ilike unaccent(?)', ["%{$nombre}%"]);
         }
         if ($grupo) {
-            $base->where('c.id_grupo', $grupo);
+            $base->where('p.grupo_nombre', $grupo);
         }
 
         $totalPendiente = (clone $base)->where('p.id_estado_pagos', 1)->sum('p.cantidad');
@@ -196,7 +198,7 @@ class FitnessController extends Controller
         // Ordenación por columna: mapa nombre público -> columna real (tras los joins de abajo).
         $columnasOrdenables = [
             'cliente'  => 'cli.nombre',
-            'servicio' => 'c.nombre',
+            'servicio' => 'p.grupo_nombre',
             'importe'  => 'p.cantidad',
             'estado'   => 'e.nombre',
             'fecha'    => 'p.fecha_pago',
@@ -204,6 +206,8 @@ class FitnessController extends Controller
         $sort = array_key_exists($request->input('sort'), $columnasOrdenables) ? $request->input('sort') : 'cliente';
         $dir  = $request->input('dir', 'asc') === 'desc' ? 'desc' : 'asc';
 
+        // c.id_tipo se mantiene por el join (solo para el color especial de Osteopatía en el
+        // badge); el nombre del grupo/servicio en sí ya no depende de él, viene de p.grupo_nombre.
         $pagos = (clone $base)
             ->when($estado !== 'todos', fn ($q) => $q->where('p.id_estado_pagos', $estado === 'cobrado' ? 2 : 1))
             ->leftJoin('nf_estado_pagos as e', 'e.id', '=', 'p.id_estado_pagos')
@@ -213,14 +217,21 @@ class FitnessController extends Controller
                 'p.*',
                 'cli.nombre as cliente_nombre',
                 'cli.telefono as cliente_telefono',
-                'c.nombre as contrato_nombre',
                 'c.id_tipo as contrato_id_tipo',
                 'e.nombre as estado_nombre',
                 'fp.nombre as forma_pago_nombre'
             )
             ->get();
 
-        $grupos = DB::table('nf_grupo')->where('deleted', false)->orderBy('id_tipo')->orderBy('nombre')->get();
+        // Grupos disponibles para el filtro: los que de verdad aparecen en pagos ya generados
+        // (dato persistido), no el catálogo vivo de nf_grupo -- así el filtro sigue funcionando
+        // igual para pagos de un grupo ya renombrado o eliminado.
+        $grupos = DB::table('nf_pagos')
+            ->where('deleted', false)
+            ->whereNotNull('grupo_nombre')
+            ->distinct()
+            ->orderBy('grupo_nombre')
+            ->pluck('grupo_nombre');
 
         return view('nf.pagos-list', [
             'project' => $project,
@@ -312,6 +323,7 @@ class FitnessController extends Controller
             DB::table('nf_pagos')->insert([
                 'id_clientes' => $clienteId,
                 'id_contratos' => $idContrato,
+                'grupo_nombre' => $grupo->nombre,
                 'cantidad' => $data['importe'],
                 'fecha_pago' => $data['fecha_inicio'],
                 'fecha_pagado' => $data['fecha_inicio'],
@@ -440,6 +452,7 @@ class FitnessController extends Controller
             DB::table('nf_pagos')->insert([
                 'id_clientes' => $contrato->id_clientes,
                 'id_contratos' => $contrato->id,
+                'grupo_nombre' => $contrato->nombre,
                 'cantidad' => $contrato->importe,
                 'fecha_pago' => $inicioMes,
                 'id_estado_pagos' => 1,
