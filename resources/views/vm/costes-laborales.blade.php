@@ -3,6 +3,8 @@
 <x-slot name="actions"></x-slot>
 
 <style>
+.btn{font-size:13px;padding:6px 14px;border-radius:6px;cursor:pointer;border:0.5px solid rgba(0,0,0,.15);background:#fff}
+.dark .btn{background:#222;border-color:rgba(255,255,255,.15);color:#eee}
 .cl-card{background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px;padding:1.25rem;margin-bottom:16px;}
 .dark .cl-card{background:#1a1a1a;border-color:rgba(255,255,255,.08);}
 .cl-empty{font-size:13px;color:#9ca3af;text-align:center;padding:1.5rem 0;}
@@ -11,6 +13,18 @@
 .cl-nav .mes-label{font-size:15px;font-weight:500;min-width:140px;text-align:center;text-transform:capitalize;}
 .cl-subtitle{font-size:13px;font-weight:600;margin:0 0 10px;color:#555;}
 .dark .cl-subtitle{color:#ccc;}
+.cl-stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
+@media (max-width:760px){ .cl-stat-row{grid-template-columns:1fr 1fr;} }
+.cl-stat-tile{background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px;padding:14px 16px;}
+.dark .cl-stat-tile{background:#1a1a1a;border-color:rgba(255,255,255,.08);}
+.cl-stat-label{font-size:11.5px;color:#6b7280;font-weight:600;}
+.dark .cl-stat-label{color:#9ca3af;}
+.cl-stat-value{font-size:22px;font-weight:650;margin:4px 0 2px;font-variant-numeric:tabular-nums;color:#111827;}
+.dark .cl-stat-value{color:#f3f4f6;}
+.cl-stat-delta{font-size:12px;color:#6b7280;}
+.dark .cl-stat-delta{color:#9ca3af;}
+.cl-stat-delta.cl-off{color:#dc2626;font-weight:700;}
+@keyframes cl-spin { to { transform: rotate(360deg); } }
 </style>
 
 <div style="padding:0 0 3rem;">
@@ -22,6 +36,23 @@
     <button class="btn" style="margin-left:auto;" id="btn-recalcular" onclick="recalcular()">
       <i class="ti ti-refresh" style="font-size:14px;vertical-align:-2px;"></i> {{ $tieneCalculo ? 'Recalcular' : 'Calcular este mes' }}
     </button>
+  </div>
+
+  <div class="cl-stat-row">
+    @foreach($statsRecalculo as $s)
+      @php $decimales = $s['unidad'] === '€' ? 2 : 1; @endphp
+      <div class="cl-stat-tile">
+        <div class="cl-stat-label">{{ $s['label'] }}</div>
+        <div class="cl-stat-value">{{ number_format($s['actual'], $decimales, ',', '.') }} {{ $s['unidad'] }}</div>
+        <div class="cl-stat-delta {{ $s['fueraDeRango'] ? 'cl-off' : '' }}">
+          @if($s['variacion'] === null)
+            Sin calcular todavía
+          @else
+            {{ $s['variacion'] >= 0 ? '+' : '' }}{{ number_format($s['variacion'], 1, ',', '.') }}% vs. repartido
+          @endif
+        </div>
+      </div>
+    @endforeach
   </div>
 
   @if(!$tieneCalculo)
@@ -119,10 +150,37 @@
 
 </div>
 
+<div id="cl-loading-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:12px;padding:36px 48px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+        <svg style="width:48px;height:48px;margin-bottom:16px;animation:cl-spin 1s linear infinite;" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="10" stroke="#e5e7eb" stroke-width="3"/>
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="#7367f0" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+        <div style="font-size:16px;font-weight:600;color:#333;margin-bottom:6px;">Calculando coste laboral</div>
+        <div style="font-size:13px;color:#666;">Repartiendo las nóminas de Limpieza y Mantenimiento entre propiedades&hellip;</div>
+        <div style="font-size:12px;color:#999;margin-top:4px;">Normalmente tarda unos segundos</div>
+        <div id="cl-timer" style="font-size:20px;font-weight:700;color:#7367f0;margin-top:10px;font-variant-numeric:tabular-nums;">0:00</div>
+    </div>
+</div>
+
 <script>
 function recalcular() {
     const btn = document.getElementById('btn-recalcular');
+    const overlay = document.getElementById('cl-loading-overlay');
+    const timerEl = document.getElementById('cl-timer');
     btn.disabled = true;
+    overlay.style.display = 'flex';
+
+    const inicio = Date.now();
+    timerEl.textContent = '0:00';
+    const timerInterval = setInterval(() => {
+        const segs = Math.floor((Date.now() - inicio) / 1000);
+        const m = Math.floor(segs / 60);
+        const s = String(segs % 60).padStart(2, '0');
+        timerEl.textContent = `${m}:${s}`;
+    }, 1000);
+    const pararTimer = () => clearInterval(timerInterval);
+
     fetch('{{ route("vm.costes-laborales.recalcular", $project->slug) }}', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
@@ -130,10 +188,10 @@ function recalcular() {
     })
     .then(r => r.json())
     .then(data => {
-        if (data.error) { alert(data.error); btn.disabled = false; return; }
+        if (data.error) { pararTimer(); alert(data.error); btn.disabled = false; overlay.style.display = 'none'; return; }
         location.reload();
     })
-    .catch(() => { alert('Error al recalcular.'); btn.disabled = false; });
+    .catch(() => { pararTimer(); alert('Error al recalcular.'); btn.disabled = false; overlay.style.display = 'none'; });
 }
 </script>
 

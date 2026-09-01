@@ -25,8 +25,19 @@ class CostesLaboralesController extends Controller
     {
         $this->authorize($project);
 
-        $anio = (int) ($request->input('anio') ?: now()->year);
-        $mes  = (int) ($request->input('mes') ?: now()->month);
+        // Por defecto (sin anio/mes en la URL) se ancla al último mes con nómina importada, no al
+        // mes natural de hoy: la nómina va con retraso (importación manual desde el resumen
+        // contable), así que el mes actual normalmente no tiene nada que repartir todavía y el
+        // botón "Calcular este mes" parecía no hacer nada (calculaba 0 € por falta de datos).
+        if ($request->filled('anio') || $request->filled('mes')) {
+            $anio = (int) ($request->input('anio') ?: now()->year);
+            $mes  = (int) ($request->input('mes') ?: now()->month);
+        } else {
+            $ultimaNomina = DB::table('vm_nominas')->where('deleted', 0)->max('mes');
+            $fechaDefault = $ultimaNomina ? Carbon::parse($ultimaNomina) : now();
+            $anio = $fechaDefault->year;
+            $mes  = $fechaDefault->month;
+        }
 
         $inicioMes = Carbon::create($anio, $mes, 1);
         $finMes    = $inicioMes->copy()->endOfMonth();
@@ -123,6 +134,8 @@ class CostesLaboralesController extends Controller
                     'mantenimiento'  => (int) $n->id_departamento === 2 ? $costeTotal : 0,
                     'total'          => $costeTotal,
                     'horas'          => $horas,
+                    'horas_limpieza'      => (int) $n->id_departamento === 1 ? $horas : 0,
+                    'horas_mantenimiento' => (int) $n->id_departamento === 2 ? $horas : 0,
                     'horas_fichadas' => $horasFichadas,
                     'coste_hora'     => $horas > 0 ? round($costeTotal / $horas, 2) : null,
                 ];
@@ -134,12 +147,34 @@ class CostesLaboralesController extends Controller
             'mantenimiento'  => round($filasTrabajadores->sum('mantenimiento'), 2),
             'total'          => round($filasTrabajadores->sum('total'), 2),
             'horas'          => $totalHorasTrabajadores,
+            'horas_limpieza'      => round($filasTrabajadores->sum('horas_limpieza'), 1),
+            'horas_mantenimiento' => round($filasTrabajadores->sum('horas_mantenimiento'), 1),
             'horas_fichadas' => round($filasTrabajadores->sum('horas_fichadas'), 1),
             'coste_hora'     => $totalHorasTrabajadores > 0 ? round($filasTrabajadores->sum('total') / $totalHorasTrabajadores, 2) : null,
         ];
 
         $hayCalculo = DB::table('vm_costes_laborales_propiedad')
             ->where('anio', $anio)->where('mes', $mes)->where('deleted', 0)->exists();
+
+        // "¿Hace falta recalcular?": importe de nómina y horas imputadas ACTUALES (de
+        // $totalesTrabajadores, siempre al día) frente a lo que quedó guardado en el último
+        // reparto ($totales, de vm_costes_laborales_propiedad) -- si la variación supera el 2% (o
+        // no hay nada repartido todavía), se marca para avisar de que conviene recalcular.
+        $variacion = function (float $actual, float $repartido) {
+            if (!$repartido) return $actual != 0.0 ? 100.0 : 0.0;
+            return (($actual - $repartido) / $repartido) * 100;
+        };
+        $statsRecalculo = [
+            ['label' => 'Nómina Limpieza',      'actual' => $totalesTrabajadores->limpieza,           'repartido' => $totales->limpieza,           'unidad' => '€'],
+            ['label' => 'Nómina Mantenimiento', 'actual' => $totalesTrabajadores->mantenimiento,      'repartido' => $totales->mantenimiento,      'unidad' => '€'],
+            ['label' => 'Horas Limpieza',       'actual' => $totalesTrabajadores->horas_limpieza,     'repartido' => $totales->horas_limpieza,     'unidad' => 'h'],
+            ['label' => 'Horas Mantenimiento',  'actual' => $totalesTrabajadores->horas_mantenimiento,'repartido' => $totales->horas_mantenimiento,'unidad' => 'h'],
+        ];
+        foreach ($statsRecalculo as &$s) {
+            $s['variacion'] = $hayCalculo ? $variacion($s['actual'], $s['repartido']) : null;
+            $s['fueraDeRango'] = $s['variacion'] !== null && abs($s['variacion']) > 2;
+        }
+        unset($s);
 
         $mesLabel = $inicioMes->translatedFormat('F Y');
         $anterior = Carbon::create($anio, $mes, 1)->subMonth();
@@ -156,6 +191,7 @@ class CostesLaboralesController extends Controller
             'urlSiguiente' => $urlSiguiente,
             'filas'               => $filasListado,
             'totales'             => $totales,
+            'statsRecalculo'      => $statsRecalculo,
             'filasTrabajadores'   => $filasTrabajadores,
             'totalesTrabajadores' => $totalesTrabajadores,
             'tieneCalculo' => $hayCalculo,
