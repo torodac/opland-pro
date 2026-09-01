@@ -24,11 +24,31 @@ class InformeRrhhController extends Controller
     private const DEPTO_LIMPIEZA      = 1;
     private const DEPTO_MANTENIMIENTO = 2;
 
+    // Solo Dirección general (id_rol=3) y Director RRHH (id_rol=11) -- mismo criterio de roles
+    // ya usado para otras pantallas sensibles (ver ROLES_SIN_LIMITE en FichajeController, o el
+    // resumen de todos los informes mensuales). Un admin del proyecto siempre tiene acceso.
+    private function authorize(Project $project): void
+    {
+        $user = auth()->user();
+        if ($user->isProjectAdmin($project)) return;
+
+        $currentVmUserId = $user->projectUserId($project);
+        $authRol = $currentVmUserId ? DB::table('vm_usuarios')->where('id', $currentVmUserId)->value('id_rol') : null;
+
+        abort_unless(in_array((int) $authRol, [3, 11], true), 403, 'No tienes permiso para acceder a esta sección.');
+    }
+
     public function index(Request $request, Project $project)
     {
-        $hoy       = Carbon::today();
-        $anio      = $hoy->year;
-        $mesActual = $hoy->month;
+        $this->authorize($project);
+
+        // El informe se ancla al último mes con nómina importada (no al mes natural en curso):
+        // así "mes actual" en todo el informe significa "el último mes con datos reales", no un
+        // mes que todavía puede estar vacío por retraso en la importación.
+        $ultimaNomina   = DB::table('vm_nominas')->where('deleted', 0)->max('mes');
+        $fechaRef       = $ultimaNomina ? Carbon::parse($ultimaNomina)->endOfMonth() : Carbon::today();
+        $anio      = $fechaRef->year;
+        $mesActual = $fechaRef->month;
         $meses     = range(1, $mesActual);
         $mesesEs   = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
@@ -67,17 +87,17 @@ class InformeRrhhController extends Controller
 
         // Bonus (vm_bonus.meses = "1,6,12", números de mes) aplicables a un usuario en un mes
         // concreto del año en curso -- mismo criterio de alcance que VmUsuarioController.php
-        // (usuario->nombre, usuario->cargo, nombre del departamento), evaluado aquí para todos
-        // los usuarios/meses en vez de uno solo.
-        $bonusAplicables = function ($usuario, int $mes) use ($bonusTodos, $departamentos, $anio) {
-            $deptoNombre = $departamentos[$usuario->id_departamento]->nombre ?? null;
-            $inicioMes   = Carbon::create($anio, $mes, 1);
-            $finMes      = $inicioMes->copy()->endOfMonth();
-            return $bonusTodos->filter(function ($b) use ($usuario, $deptoNombre, $mes, $inicioMes, $finMes) {
+        // (usuario->id, usuario->cargo, id de departamento -- id_referencia guarda ids reales
+        // para usuario/departamento desde la migración 2026_09_01_100000, texto libre solo para
+        // cargo), evaluado aquí para todos los usuarios/meses en vez de uno solo.
+        $bonusAplicables = function ($usuario, int $mes) use ($bonusTodos, $anio) {
+            $inicioMes = Carbon::create($anio, $mes, 1);
+            $finMes    = $inicioMes->copy()->endOfMonth();
+            return $bonusTodos->filter(function ($b) use ($usuario, $mes, $inicioMes, $finMes) {
                 $coincideAlcance =
-                    ($b->alcance === 'usuario' && $b->id_referencia === $usuario->nombre) ||
+                    ($b->alcance === 'usuario' && $b->id_referencia === (string) $usuario->id) ||
                     ($b->alcance === 'cargo' && $b->id_referencia === $usuario->cargo) ||
-                    ($b->alcance === 'departamento' && $deptoNombre !== null && $b->id_referencia === $deptoNombre);
+                    ($b->alcance === 'departamento' && $usuario->id_departamento !== null && $b->id_referencia === (string) $usuario->id_departamento);
                 if (!$coincideAlcance) return false;
                 if (!in_array($mes, array_map('intval', explode(',', $b->meses)), true)) return false;
                 if ($b->fecha_inicio && $finMes->lt(Carbon::parse($b->fecha_inicio))) return false;
@@ -147,15 +167,15 @@ class InformeRrhhController extends Controller
         $antiguedadSumDias = 0;
         foreach ($usuarios as $uid => $u) {
             $contratos = $contratosPorUsuario[$uid] ?? collect();
-            if ($contratoActivoEn($contratos, $hoy->toDateString())) {
+            if ($contratoActivoEn($contratos, $fechaRef->toDateString())) {
                 $plantillaActual++;
-                $antiguedadSumDias += Carbon::parse($contratos->first()->fecha_alta)->diffInDays($hoy);
+                $antiguedadSumDias += Carbon::parse($contratos->first()->fecha_alta)->diffInDays($fechaRef);
             }
         }
         $antiguedadMediaAnios = $plantillaActual > 0 ? round($antiguedadSumDias / $plantillaActual / 365, 1) : 0;
 
         // Rotación anualizada: bajas de los últimos 12 meses / plantilla media de los últimos 12 meses.
-        $hace12 = $hoy->copy()->subMonths(12);
+        $hace12 = $fechaRef->copy()->subMonths(12);
         $bajas12m = 0;
         $sumaPlantillaMensual = 0;
         foreach ($contratosPorUsuario as $contratos) {
@@ -165,7 +185,7 @@ class InformeRrhhController extends Controller
             }
         }
         for ($i = 0; $i < 12; $i++) {
-            $fin = $hoy->copy()->subMonths($i)->endOfMonth()->toDateString();
+            $fin = $fechaRef->copy()->subMonths($i)->endOfMonth()->toDateString();
             $sumaPlantillaMensual += $usuarios->filter(fn($u, $uid) => $contratoActivoEn($contratosPorUsuario[$uid] ?? collect(), $fin))->count();
         }
         $plantillaMedia12m = $sumaPlantillaMensual / 12;
@@ -190,11 +210,15 @@ class InformeRrhhController extends Controller
         $matriz = [];
         foreach ($usuarios as $uid => $u) {
             $contratos = $contratosPorUsuario[$uid] ?? collect();
-            $contratoActivo = $contratoActivoEn($contratos, $hoy->toDateString());
+            $contratoActivo = $contratoActivoEn($contratos, $fechaRef->toDateString());
             if (!$contratoActivo) continue; // solo plantilla activa hoy
 
             $plusDpto = $plusPuesto = $plusPersonal = 0.0;
             foreach ($meses as $mes) {
+                // Un bonus solo cuenta en los meses en que la persona ya estaba contratada --
+                // si empezó en junio, un bonus de "todos los meses" no debe sumar enero-mayo.
+                $finDeMes = Carbon::create($anio, $mes, 1)->endOfMonth()->toDateString();
+                if (!$contratoActivoEn($contratos, $finDeMes)) continue;
                 foreach ($bonusAplicables($u, $mes) as $b) {
                     if ($b->alcance === 'departamento') $plusDpto += (float) $b->importe;
                     elseif ($b->alcance === 'cargo') $plusPuesto += (float) $b->importe;
@@ -224,6 +248,10 @@ class InformeRrhhController extends Controller
             $lista = $sampled ? array_slice($empleados, 0, 5) : $empleados;
             $plantillaMatriz[] = [
                 'name'            => $nombre,
+                'deptAnual'       => array_sum(array_column($empleados, 'anual')),
+                'deptPlusDpto'    => array_sum(array_column($empleados, 'plusDpto')),
+                'deptPlusPuesto'  => array_sum(array_column($empleados, 'plusPuesto')),
+                'deptPlusPersonal'=> array_sum(array_column($empleados, 'plusPersonal')),
                 'deptTotal'       => array_sum(array_column($empleados, 'total')),
                 'deptPresupuesto' => array_sum(array_column($empleados, 'presupuesto')),
                 'sampled'         => $sampled,
@@ -273,7 +301,7 @@ class InformeRrhhController extends Controller
             [
                 'label' => 'Antigüedad media',
                 'value' => number_format($antiguedadMediaAnios, 1, ',', '.') . ' años',
-                'delta' => 'De la plantilla activa hoy',
+                'delta' => "De la plantilla activa en {$mesesEs[$mesActual]}",
                 'cls' => '',
             ],
         ];

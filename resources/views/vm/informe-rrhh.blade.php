@@ -78,8 +78,11 @@
   .dash-root :focus-visible{ outline: 2px solid var(--s1); outline-offset: 2px; }
 
   .stat-row{
-    display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr));
+    display:grid; grid-template-columns: repeat(5, 1fr);
     gap:12px; margin-bottom:26px;
+  }
+  @media (max-width: 900px){
+    .stat-row{ grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(150px,1fr); overflow-x:auto; }
   }
   .stat-tile{
     background:var(--surface); border:1px solid var(--border); border-radius:14px;
@@ -100,14 +103,14 @@
   .block-head .sub{ font-size:12.5px; color:var(--text-muted); }
 
   .grid-2{ display:grid; grid-template-columns: 1.4fr 1fr; gap:16px; }
-  @media (max-width: 860px){ .grid-2{ grid-template-columns: 1fr; } }
+  .grid-2-even{ display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+  @media (max-width: 860px){ .grid-2, .grid-2-even{ grid-template-columns: 1fr; } }
 
   .card{
     background:var(--surface); border:1px solid var(--border); border-radius:16px;
     padding:18px 18px 14px; position:relative;
   }
-  .card h3{ font-size:13.5px; font-weight:650; margin:0 0 2px; }
-  .card .card-sub{ font-size:11.5px; color:var(--text-muted); margin:0 0 10px; }
+  .card h3{ font-size:13.5px; font-weight:650; margin:0 0 12px; }
 
   .legend{ display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; color:var(--text-secondary); margin: 2px 0 10px; }
   .legend .item{ display:flex; align-items:center; gap:6px; }
@@ -138,11 +141,6 @@
   .dept-bars .bar{ width:60%; border-radius:6px 6px 0 0; cursor:pointer; min-height:2px; }
   .dept-labels{ display:flex; gap:14px; padding:6px 4px 0; }
   .dept-labels span{ flex:1; text-align:center; font-size:10.5px; color:var(--text-secondary); font-weight:600; }
-
-  .footnote{
-    margin-top: 30px; padding-top:14px; border-top:1px solid var(--border);
-    font-size:11px; color:var(--text-muted); line-height:1.6;
-  }
 
   /* ── Matriz de coste laboral por persona ─────────────────────────── */
   .matrix-scroll{ overflow-x:auto; }
@@ -196,7 +194,6 @@
     <div class="grid-2">
       <div class="card">
         <h3>Coste laboral mensual</h3>
-        <p class="card-sub">Real vs. presupuestado · miles de €</p>
         <div class="legend">
           <span class="item"><span class="swatch line" style="color:var(--s1);background:var(--s1);"></span>Coste real</span>
           <span class="item"><span class="swatch dashed" style="color:var(--s2);"></span>Presupuesto</span>
@@ -205,14 +202,12 @@
       </div>
       <div class="card">
         <h3>Coste acumulado por departamento</h3>
-        <p class="card-sub">Año en curso · miles de €</p>
         <div class="chart-wrap" id="chart-depto-coste"></div>
         <div class="dept-labels" id="chart-depto-coste-labels"></div>
       </div>
     </div>
     <div class="card" style="margin-top:16px;">
       <h3>Matriz de coste laboral por persona</h3>
-      <p class="card-sub">Agrupado por departamento · salario, pluses (bonus), coste real vs. presupuestado y desviación · año en curso, prorrateado</p>
       <div class="matrix-scroll"><div class="matrix" id="matrix-salarios"></div></div>
     </div>
   </section>
@@ -223,10 +218,9 @@
       <h2>Rotación de plantilla</h2>
       <span class="sub">Altas y bajas mensuales, y evolución de la plantilla por departamento</span>
     </div>
-    <div class="grid-2">
+    <div class="grid-2-even">
       <div class="card">
         <h3>Altas y bajas por mes</h3>
-        <p class="card-sub">Nº de personas</p>
         <div class="legend">
           <span class="item"><span class="swatch" style="background:var(--s1);"></span>Altas</span>
           <span class="item"><span class="swatch" style="background:var(--s2);"></span>Bajas</span>
@@ -235,16 +229,11 @@
       </div>
       <div class="card">
         <h3>Plantilla por departamento</h3>
-        <p class="card-sub">Nº de personas activas por mes</p>
         <div class="legend" id="legend-depto"></div>
         <div class="chart-wrap" id="chart-plantilla"></div>
       </div>
     </div>
   </section>
-
-  <p class="footnote">
-    Coste real de <code>vm_nominas</code>; presupuesto calculado a partir de <code>vm_contratos.salario_base</code> + <code>vm_bonus</code>. El departamento de cada persona es el actual (<code>vm_usuarios.id_departamento</code>), no está historizado por contrato: los meses pasados agrupan a cada persona en su departamento de hoy.
-  </p>
 
   <div class="tooltip" id="tooltip"></div>
 </div>
@@ -511,15 +500,17 @@
     head.innerHTML = `<span>Departamento / puesto</span><span>Salario (año en curso)</span><span>Plus dpto</span><span>Plus puesto</span><span>Plus personal</span><span>Total real</span><span>Presupuesto</span><span>Desviación</span>`;
     container.appendChild(head);
 
-    plantillaMatriz.forEach((dept, idx) => {
+    plantillaMatriz.forEach((dept) => {
       const det = document.createElement('details');
       det.className = 'dept';
-      if (idx === 0) det.setAttribute('open', '');
 
       const sum = document.createElement('summary');
       sum.innerHTML = `<div class="matrix-row">
         <span class="name"><span class="chev"></span>${dept.name}${dept.sampled ? ` <span style="font-weight:400;color:var(--text-muted);font-size:10.5px;">(${dept.sampleOf} personas)</span>` : ''}</span>
-        <span></span><span></span><span></span><span></span>
+        <span class="matrix-num">${eur(dept.deptAnual)}</span>
+        <span class="matrix-num">${eur(dept.deptPlusDpto)}</span>
+        <span class="matrix-num">${eur(dept.deptPlusPuesto)}</span>
+        <span class="matrix-num">${eur(dept.deptPlusPersonal)}</span>
         <span class="matrix-num col-total">${eur(dept.deptTotal)}</span>
         <span class="matrix-num">${eur(dept.deptPresupuesto)}</span>
         ${devCell(dept.deptTotal, dept.deptPresupuesto)}
@@ -547,11 +538,16 @@
       container.appendChild(det);
     });
 
-    const grandTotal = plantillaMatriz.reduce((s,d) => s + d.deptTotal, 0);
-    const grandPresu = plantillaMatriz.reduce((s,d) => s + d.deptPresupuesto, 0);
+    const sumBy = k => plantillaMatriz.reduce((s,d) => s + d[k], 0);
+    const grandTotal = sumBy('deptTotal');
+    const grandPresu = sumBy('deptPresupuesto');
     const totalRow = document.createElement('div');
     totalRow.className = 'matrix-row matrix-total';
-    totalRow.innerHTML = `<span>Total</span><span></span><span></span><span></span><span></span>` +
+    totalRow.innerHTML = `<span>Total</span>` +
+      `<span class="matrix-num">${eur(sumBy('deptAnual'))}</span>` +
+      `<span class="matrix-num">${eur(sumBy('deptPlusDpto'))}</span>` +
+      `<span class="matrix-num">${eur(sumBy('deptPlusPuesto'))}</span>` +
+      `<span class="matrix-num">${eur(sumBy('deptPlusPersonal'))}</span>` +
       `<span class="matrix-num col-total">${eur(grandTotal)}</span>` +
       `<span class="matrix-num">${eur(grandPresu)}</span>` +
       devCell(grandTotal, grandPresu);
