@@ -14,6 +14,10 @@ use Illuminate\Support\Facades\DB;
 // anual, ver "Salario bruto (€/año)" en usuario.blade.php) + los bonus teóricos de vm_bonus; el
 // coste real sale de vm_nominas.coste_total (importado desde el resumen contable en PDF).
 //
+// Dos fechas de referencia distintas, porque no llegan a la vez: la plantilla (altas/bajas,
+// antigüedad, rotación) se puede saber al día de hoy con solo vm_contratos, pero el coste real
+// depende de que la nómina del mes ya se haya importado -- suele ir 1-2 meses por detrás de hoy.
+//
 // Limitación aceptada: vm_usuarios.id_departamento es el departamento ACTUAL de la persona, no
 // está historizado por contrato -- los meses pasados de "plantilla por departamento" agrupan a
 // cada persona en su departamento de hoy, no en el que tuviera entonces.
@@ -23,6 +27,12 @@ class InformeRrhhController extends Controller
     // resto de departamentos se agregan como "SSCC".
     private const DEPTO_LIMPIEZA      = 1;
     private const DEPTO_MANTENIMIENTO = 2;
+
+    // "Ppto bruto" = salario_base/12 + bonus teóricos (lo que hasta ahora era todo el
+    // "presupuesto"). "Presupuesto" pasa a ser ese bruto + una carga fija del 30% (aproximando el
+    // coste de empresa -SS, etc.- que sí lleva vm_nominas.coste_total, para que sea comparable
+    // con el coste real). Decisión explícita del usuario, aplicada a todo el informe.
+    private const FACTOR_CARGAS_SOCIALES = 1.30;
 
     // Solo Dirección general (id_rol=3) y Director RRHH (id_rol=11) -- mismo criterio de roles
     // ya usado para otras pantallas sensibles (ver ROLES_SIN_LIMITE en FichajeController, o el
@@ -42,19 +52,28 @@ class InformeRrhhController extends Controller
     {
         $this->authorize($project);
 
-        // El informe se ancla al último mes con nómina importada (no al mes natural en curso):
-        // así "mes actual" en todo el informe significa "el último mes con datos reales", no un
-        // mes que todavía puede estar vacío por retraso en la importación.
-        $ultimaNomina   = DB::table('vm_nominas')->where('deleted', 0)->max('mes');
-        $fechaRef       = $ultimaNomina ? Carbon::parse($ultimaNomina)->endOfMonth() : Carbon::today();
-        $anio      = $fechaRef->year;
-        $mesActual = $fechaRef->month;
-        $meses     = range(1, $mesActual);
-        $mesesEs   = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+        $hoy    = Carbon::today();
+        $anio   = $hoy->year;
+        $mesHoy = $hoy->month;
+        $mesesEs = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
+        // El coste (nómina) se ancla al último mes importado, no al mes natural en curso: puede
+        // llevar 1-2 meses de retraso respecto a hoy. Si ese último mes cae en un año anterior
+        // (p. ej. en enero, antes de importar la primera nómina del año), no hay coste que mostrar
+        // este año todavía.
+        $ultimaNomina = DB::table('vm_nominas')->where('deleted', 0)->max('mes');
+        $fechaCostes  = $ultimaNomina ? Carbon::parse($ultimaNomina)->endOfMonth() : $hoy->copy()->endOfMonth();
+        $mesCostes    = $fechaCostes->year === $anio ? $fechaCostes->month : 0;
+
+        $mesesPlantilla = range(1, $mesHoy);
+        $mesesCostes    = $mesCostes > 0 ? range(1, $mesCostes) : [];
+
+        // Sin filtro por deleted: alguien archivado (vm_usuarios.deleted=1) puede seguir teniendo
+        // meses reales de plantilla/coste este año (p. ej. causó baja en mayo) -- excluirlo de
+        // partida infrarrepresentaría el histórico de plantilla y coste de los meses en que sí
+        // estuvo. El flag deleted se usa solo para estilo (gris) en la matriz, no para filtrar.
         $usuarios = DB::table('vm_usuarios')
-            ->where('deleted', 0)
-            ->get(['id', 'nombre', 'cargo', 'id_departamento'])
+            ->get(['id', 'nombre', 'cargo', 'id_departamento', 'deleted'])
             ->keyBy('id');
 
         $departamentos = DB::table('vm_departamentos')
@@ -115,36 +134,24 @@ class InformeRrhhController extends Controller
             return null;
         };
 
-        // ── Series mensuales: coste real/presupuesto, plantilla por grupo, altas/bajas ────────
-        $costeReal = $costePresu = $altas = $bajas = [];
+        // ── Plantilla por grupo / altas / bajas: hasta hoy (dato de contrato, sin retraso) ───────
         $plantillaPorGrupo = ['sscc' => [], 'mantenimiento' => [], 'limpieza' => []];
-
-        foreach ($meses as $mes) {
+        foreach ($mesesPlantilla as $mes) {
             $finMes = Carbon::create($anio, $mes, 1)->endOfMonth()->toDateString();
-            $presuMes = 0.0;
             $conteoGrupo = ['sscc' => 0, 'mantenimiento' => 0, 'limpieza' => 0];
-
             foreach ($usuarios as $uid => $u) {
                 $contratos = $contratosPorUsuario[$uid] ?? collect();
-                $contratoActivo = $contratoActivoEn($contratos, $finMes);
-                if (!$contratoActivo) continue;
-
+                if (!$contratoActivoEn($contratos, $finMes)) continue;
                 $conteoGrupo[$grupoDepto($u->id_departamento)]++;
-                $presuMes += ((float) $contratoActivo->salario_base / 12)
-                    + $bonusAplicables($u, $mes)->sum('importe');
             }
-
-            $realMes = (float) ($nominasPorMes[$mes] ?? 0);
-
-            $costeReal[] = round($realMes / 1000, 1);
-            $costePresu[] = round($presuMes / 1000, 1);
             foreach ($conteoGrupo as $g => $n) $plantillaPorGrupo[$g][] = $n;
         }
 
         // Altas = primer fecha_alta (de todos sus contratos) cae en el mes; bajas = último
         // fecha_baja cae en el mes y no hay contrato posterior que lo cubra (no es un hueco entre
-        // contratos, es una baja real).
-        foreach ($meses as $mes) {
+        // contratos, es una baja real). También hasta hoy, no hasta el mes de coste.
+        $altas = $bajas = [];
+        foreach ($mesesPlantilla as $mes) {
             $altaCount = $bajaCount = 0;
             foreach ($contratosPorUsuario as $contratos) {
                 $primero = $contratos->first();
@@ -162,20 +169,47 @@ class InformeRrhhController extends Controller
             $bajas[] = $bajaCount;
         }
 
-        // ── KPIs ───────────────────────────────────────────────────────────────────────────────
+        // Plantilla al cierre del año anterior (punto de partida de la cascada) y su evolución mes
+        // a mes, para comparar la evolución de este año con la del año pasado en el mismo gráfico.
+        $finAnioAnterior = Carbon::create($anio - 1, 12, 31)->toDateString();
+        $plantillaInicioAnio = $usuarios->filter(fn($u, $uid) => $contratoActivoEn($contratosPorUsuario[$uid] ?? collect(), $finAnioAnterior))->count();
+        $plantillaAnioAnterior = [];
+        foreach ($mesesPlantilla as $mes) {
+            $finMes = Carbon::create($anio - 1, $mes, 1)->endOfMonth()->toDateString();
+            $plantillaAnioAnterior[] = $usuarios->filter(fn($u, $uid) => $contratoActivoEn($contratosPorUsuario[$uid] ?? collect(), $finMes))->count();
+        }
+
+        // ── Coste real/presupuesto: solo hasta el último mes con nómina importada ────────────────
+        $costeReal = $costePresu = [];
+        foreach ($mesesCostes as $mes) {
+            $finMes = Carbon::create($anio, $mes, 1)->endOfMonth()->toDateString();
+            $presuMes = 0.0;
+            foreach ($usuarios as $uid => $u) {
+                $contratos = $contratosPorUsuario[$uid] ?? collect();
+                $contratoActivo = $contratoActivoEn($contratos, $finMes);
+                if (!$contratoActivo) continue;
+                $presuMes += ((float) $contratoActivo->salario_base / 12) + $bonusAplicables($u, $mes)->sum('importe');
+            }
+            $realMes = (float) ($nominasPorMes[$mes] ?? 0);
+            $costeReal[] = round($realMes / 1000, 1);
+            $costePresu[] = round($presuMes * self::FACTOR_CARGAS_SOCIALES / 1000, 1);
+        }
+
+        // ── KPIs de plantilla: a fecha de hoy ─────────────────────────────────────────────────────
         $plantillaActual = 0;
         $antiguedadSumDias = 0;
         foreach ($usuarios as $uid => $u) {
             $contratos = $contratosPorUsuario[$uid] ?? collect();
-            if ($contratoActivoEn($contratos, $fechaRef->toDateString())) {
+            if ($contratoActivoEn($contratos, $hoy->toDateString())) {
                 $plantillaActual++;
-                $antiguedadSumDias += Carbon::parse($contratos->first()->fecha_alta)->diffInDays($fechaRef);
+                $antiguedadSumDias += Carbon::parse($contratos->first()->fecha_alta)->diffInDays($hoy);
             }
         }
         $antiguedadMediaAnios = $plantillaActual > 0 ? round($antiguedadSumDias / $plantillaActual / 365, 1) : 0;
 
-        // Rotación anualizada: bajas de los últimos 12 meses / plantilla media de los últimos 12 meses.
-        $hace12 = $fechaRef->copy()->subMonths(12);
+        // Rotación anualizada: bajas de los últimos 12 meses / plantilla media de los últimos 12
+        // meses, ambos hasta hoy.
+        $hace12 = $hoy->copy()->subMonths(12);
         $bajas12m = 0;
         $sumaPlantillaMensual = 0;
         foreach ($contratosPorUsuario as $contratos) {
@@ -185,18 +219,22 @@ class InformeRrhhController extends Controller
             }
         }
         for ($i = 0; $i < 12; $i++) {
-            $fin = $fechaRef->copy()->subMonths($i)->endOfMonth()->toDateString();
+            $fin = $hoy->copy()->subMonths($i)->endOfMonth()->toDateString();
             $sumaPlantillaMensual += $usuarios->filter(fn($u, $uid) => $contratoActivoEn($contratosPorUsuario[$uid] ?? collect(), $fin))->count();
         }
         $plantillaMedia12m = $sumaPlantillaMensual / 12;
         $rotacionAnualizada = $plantillaMedia12m > 0 ? round($bajas12m / $plantillaMedia12m * 100) : 0;
 
+        // ── KPIs de coste: al último mes con nómina ───────────────────────────────────────────────
         $costeRealMesActual = $costeReal[count($costeReal) - 1] ?? 0;
         $costePresuMesActual = $costePresu[count($costePresu) - 1] ?? 0;
         $desviacionMesActual = $costePresuMesActual > 0
             ? round((($costeRealMesActual - $costePresuMesActual) / $costePresuMesActual) * 100)
             : 0;
-        $costeMedioEmpleado = $plantillaActual > 0 ? round($costeRealMesActual * 1000 / $plantillaActual) : 0;
+        $plantillaEnFechaCostes = $mesCostes > 0
+            ? $usuarios->filter(fn($u, $uid) => $contratoActivoEn($contratosPorUsuario[$uid] ?? collect(), $fechaCostes->toDateString()))->count()
+            : 0;
+        $costeMedioEmpleado = $plantillaEnFechaCostes > 0 ? round($costeRealMesActual * 1000 / $plantillaEnFechaCostes) : 0;
 
         // ── Coste acumulado por departamento (año en curso, agrupado a 3) ─────────────────────
         $costeDeptoAcumulado = ['sscc' => 0.0, 'mantenimiento' => 0.0, 'limpieza' => 0.0];
@@ -206,38 +244,70 @@ class InformeRrhhController extends Controller
         }
 
         // ── Matriz de coste laboral por persona (agrupada por departamento REAL, no por los 3
-        // grupos de los gráficos) ─────────────────────────────────────────────────────────────
+        // grupos de los gráficos). Incluye también a quien causó baja este año o fue archivado
+        // (deleted=1), siempre que tenga contrato o nómina relevante en el año -- su coste real ya
+        // pagado no debe desaparecer del informe solo porque hoy ya no esté en plantilla. ───────
         $matriz = [];
         foreach ($usuarios as $uid => $u) {
             $contratos = $contratosPorUsuario[$uid] ?? collect();
-            $contratoActivo = $contratoActivoEn($contratos, $fechaRef->toDateString());
-            if (!$contratoActivo) continue; // solo plantilla activa hoy
+            if ($contratos->isEmpty()) continue;
+
+            $contratoActivo = $mesCostes > 0 ? $contratoActivoEn($contratos, $fechaCostes->toDateString()) : null;
+            $contratoRelevante = $contratoActivo ?? $contratos->last();
+
+            // Meses (dentro de la ventana de coste, hasta el último mes con nómina) en que la
+            // persona tuvo contrato activo -- así el salario prorrateado y los bonus solo cuentan
+            // los meses realmente trabajados este año (no todo el año si empezó o se fue a mitad).
+            $mesesEmpleado = [];
+            foreach ($mesesCostes as $mes) {
+                $finDeMes = Carbon::create($anio, $mes, 1)->endOfMonth()->toDateString();
+                if ($contratoActivoEn($contratos, $finDeMes)) $mesesEmpleado[] = $mes;
+            }
+
+            $realYtd = ($nominasPorUsuario[$uid] ?? collect())->sum('coste_total');
+            if (empty($mesesEmpleado) && $realYtd == 0) continue; // sin actividad relevante este año
 
             $plusDpto = $plusPuesto = $plusPersonal = 0.0;
-            foreach ($meses as $mes) {
-                // Un bonus solo cuenta en los meses en que la persona ya estaba contratada --
-                // si empezó en junio, un bonus de "todos los meses" no debe sumar enero-mayo.
-                $finDeMes = Carbon::create($anio, $mes, 1)->endOfMonth()->toDateString();
-                if (!$contratoActivoEn($contratos, $finDeMes)) continue;
+            foreach ($mesesEmpleado as $mes) {
                 foreach ($bonusAplicables($u, $mes) as $b) {
                     if ($b->alcance === 'departamento') $plusDpto += (float) $b->importe;
                     elseif ($b->alcance === 'cargo') $plusPuesto += (float) $b->importe;
                     else $plusPersonal += (float) $b->importe;
                 }
             }
-            $salarioYtd = (float) $contratoActivo->salario_base * ($mesActual / 12);
-            $presupuesto = $salarioYtd + $plusDpto + $plusPuesto + $plusPersonal;
-            $realYtd = ($nominasPorUsuario[$uid] ?? collect())->sum('coste_total');
+            $salarioYtd = (float) ($contratoRelevante->salario_base ?? 0) * (count($mesesEmpleado) / 12);
+
+            // Redondeo por componente y luego suma de los ya redondeados, para que lo que se ve
+            // en pantalla (Salario + Bonus...) sume exactamente el Ppto bruto mostrado. El
+            // Presupuesto (con el que se compara el coste real) es ese bruto + la carga del 30%.
+            $salarioR = round($salarioYtd);
+            $plusDptoR = round($plusDpto);
+            $plusPuestoR = round($plusPuesto);
+            $plusPersonalR = round($plusPersonal);
+            $pptoBrutoR = $salarioR + $plusDptoR + $plusPuestoR + $plusPersonalR;
+            $presupuestoR = round($pptoBrutoR * self::FACTOR_CARGAS_SOCIALES);
+
+            // Alta/baja de la persona (no del contrato "relevante" para el salario): el alta más
+            // antigua de todos sus contratos, y la baja del contrato con el alta más reciente (que
+            // puede seguir sin baja si continúa en activo).
+            $primerContrato = $contratos->first();
+            $ultimoContrato = $contratos->last();
 
             $deptoNombre = $departamentos[$u->id_departamento]->nombre ?? 'Sin departamento';
             $matriz[$deptoNombre][] = [
-                'puesto'       => $u->nombre . ($u->cargo ? " ({$u->cargo})" : ''),
-                'anual'        => round($salarioYtd),
-                'plusDpto'     => round($plusDpto),
-                'plusPuesto'   => round($plusPuesto),
-                'plusPersonal' => round($plusPersonal),
+                'id'           => $uid,
+                'nombre'       => $u->nombre,
+                'cargo'        => $u->cargo,
+                'deleted'      => (int) ($u->deleted ?? 0) === 1,
+                'fechaAlta'    => $primerContrato->fecha_alta ? Carbon::parse($primerContrato->fecha_alta)->format('d/m/y') : null,
+                'fechaBaja'    => $ultimoContrato->fecha_baja ? Carbon::parse($ultimoContrato->fecha_baja)->format('d/m/y') : null,
+                'anual'        => $salarioR,
+                'plusDpto'     => $plusDptoR,
+                'plusPuesto'   => $plusPuestoR,
+                'plusPersonal' => $plusPersonalR,
                 'total'        => round($realYtd),
-                'presupuesto'  => round($presupuesto),
+                'pptoBruto'    => $pptoBrutoR,
+                'presupuesto'  => $presupuestoR,
             ];
         }
 
@@ -253,6 +323,7 @@ class InformeRrhhController extends Controller
                 'deptPlusPuesto'  => array_sum(array_column($empleados, 'plusPuesto')),
                 'deptPlusPersonal'=> array_sum(array_column($empleados, 'plusPersonal')),
                 'deptTotal'       => array_sum(array_column($empleados, 'total')),
+                'deptPptoBruto'   => array_sum(array_column($empleados, 'pptoBruto')),
                 'deptPresupuesto' => array_sum(array_column($empleados, 'presupuesto')),
                 'sampled'         => $sampled,
                 'sampleOf'        => $sampleOf,
@@ -263,15 +334,17 @@ class InformeRrhhController extends Controller
 
         // Mínimo de plantilla del año (para el KPI "Plantilla actual"), sumando los 3 grupos.
         $totalPorMes = [];
-        foreach ($meses as $i => $mes) {
+        foreach ($mesesPlantilla as $i => $mes) {
             $totalPorMes[$mes] = $plantillaPorGrupo['sscc'][$i] + $plantillaPorGrupo['mantenimiento'][$i] + $plantillaPorGrupo['limpieza'][$i];
         }
-        $mesMinimo = array_keys($totalPorMes, min($totalPorMes))[0] ?? $mesActual;
+        $mesMinimo = array_keys($totalPorMes, min($totalPorMes))[0] ?? $mesHoy;
         $plantillaMinima = $totalPorMes[$mesMinimo] ?? $plantillaActual;
+
+        $etiquetaMesCostes = $mesCostes > 0 ? $mesesEs[$mesCostes] : '—';
 
         $statsCards = [
             [
-                'label' => "Plantilla actual ({$mesesEs[$mesActual]})",
+                'label' => 'Plantilla actual (hoy)',
                 'value' => (string) $plantillaActual,
                 'delta' => $plantillaActual > $plantillaMinima
                     ? sprintf('+%d vs. mínimo del año (%s: %d)', $plantillaActual - $plantillaMinima, $mesesEs[$mesMinimo], $plantillaMinima)
@@ -279,7 +352,7 @@ class InformeRrhhController extends Controller
                 'cls' => $plantillaActual > $plantillaMinima ? 'up' : '',
             ],
             [
-                'label' => "Coste laboral ({$mesesEs[$mesActual]})",
+                'label' => "Coste laboral ({$etiquetaMesCostes})",
                 'value' => number_format($costeRealMesActual * 1000, 0, ',', '.') . ' €',
                 'delta' => $desviacionMesActual >= 0
                     ? "+{$desviacionMesActual}% sobre presupuesto (" . number_format($costePresuMesActual * 1000, 0, ',', '.') . ' €)'
@@ -287,33 +360,47 @@ class InformeRrhhController extends Controller
                 'cls' => $desviacionMesActual > 5 ? 'warn' : '',
             ],
             [
-                'label' => 'Coste medio / empleado·mes',
+                'label' => "Coste medio / empleado·mes ({$etiquetaMesCostes})",
                 'value' => number_format($costeMedioEmpleado, 0, ',', '.') . ' €',
-                'delta' => "Media de {$mesesEs[$mesActual]} {$anio}",
+                'delta' => "Sobre la plantilla de {$etiquetaMesCostes}",
                 'cls' => '',
             ],
             [
                 'label' => 'Rotación anualizada',
                 'value' => "{$rotacionAnualizada}%",
-                'delta' => 'Bajas de los últimos 12 meses sobre la plantilla media',
+                'delta' => 'Bajas de los últimos 12 meses hasta hoy sobre la plantilla media',
                 'cls' => $rotacionAnualizada >= 50 ? 'warn' : '',
             ],
             [
                 'label' => 'Antigüedad media',
                 'value' => number_format($antiguedadMediaAnios, 1, ',', '.') . ' años',
-                'delta' => "De la plantilla activa en {$mesesEs[$mesActual]}",
+                'delta' => 'De la plantilla activa hoy',
                 'cls' => '',
             ],
         ];
 
+        // Plantilla de URL a la ficha de usuario (con un id de relleno a sustituir en el cliente),
+        // para poder enlazar cada fila de la matriz sin llamar a route() una vez por persona.
+        $usuarioFormUrlTemplate = str_replace(
+            '999999999',
+            '__ID__',
+            route('vm.usuario_form', ['project' => $project->slug, 'id' => 999999999])
+        );
+
         return view('vm.informe-rrhh', [
             'project'    => $project,
             'anio'       => $anio,
-            'mesesLabels' => array_map(fn($m) => $mesesEs[$m], $meses),
+            'etiquetaMesCostes' => $etiquetaMesCostes,
+            'usuarioFormUrlTemplate' => $usuarioFormUrlTemplate,
+            'mesesLabels'       => array_map(fn($m) => $mesesEs[$m], $mesesPlantilla),
+            'mesesLabelsCostes' => array_map(fn($m) => $mesesEs[$m], $mesesCostes),
             'costeReal'  => $costeReal,
             'costePresu' => $costePresu,
             'altas'      => $altas,
             'bajas'      => $bajas,
+            'plantillaInicioAnio'   => $plantillaInicioAnio,
+            'plantillaAnioAnterior' => $plantillaAnioAnterior,
+            'anioAnterior'          => $anio - 1,
             'plantillaSscc'          => $plantillaPorGrupo['sscc'],
             'plantillaMantenimiento' => $plantillaPorGrupo['mantenimiento'],
             'plantillaLimpieza'      => $plantillaPorGrupo['limpieza'],
