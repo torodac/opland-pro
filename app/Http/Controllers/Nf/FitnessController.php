@@ -9,6 +9,7 @@ use App\Models\Project;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 class FitnessController extends Controller
@@ -382,6 +383,7 @@ class FitnessController extends Controller
         ]);
 
         $cliente = DB::table('nf_clientes')->where('id', $pago->id_clientes)->first();
+        $avisoEmail = null;
         if ($cliente && $cliente->email) {
             $details = [
                 'title' => 'Confirmación Automática de Pago',
@@ -389,10 +391,26 @@ class FitnessController extends Controller
                 'body' => 'Nature Fitness ha recibido el pago de ' . $pago->cantidad . ' euros en concepto del mes de '
                     . \Carbon\Carbon::parse($pago->fecha_pago)->translatedFormat('M Y') . '.',
             ];
-            Mail::to($cliente->email)->send(new NfPagoMail($details));
+            // Mail::to(...)->send($mailable) ignora el ->mailer('nf') que fija el propio Mailable en
+            // su build() (Illuminate\Mail\Mailer::sendMailable() ya fuerza el mailer por defecto
+            // antes de que el Mailable pueda cambiarlo) -- hay que elegir el mailer 'nf' aquí, en el
+            // punto de envío, o el correo sale por el SMTP por defecto (no_reply@opland.es) con un
+            // From de naturefitness@opland.es que ese SMTP rechaza por suplantación.
+            try {
+                Mail::mailer('nf')->to($cliente->email)->send(new NfPagoMail($details));
+            } catch (\Throwable $e) {
+                // El pago ya ha quedado registrado arriba: un fallo de envío de email no debe
+                // deshacer ni ocultar ese éxito, solo avisar de que la confirmación no ha llegado.
+                Log::warning('nf: fallo al enviar email de confirmación de pago', [
+                    'pago_id' => $id,
+                    'cliente_email' => $cliente->email,
+                    'exception' => $e->getMessage(),
+                ]);
+                $avisoEmail = 'El pago se ha confirmado, pero no se ha podido enviar el email de confirmación al cliente.';
+            }
         }
 
-        return back()->with('msg', 'Pago confirmado correctamente.');
+        return back()->with($avisoEmail ? 'error' : 'msg', $avisoEmail ?? 'Pago confirmado correctamente.');
     }
 
     // Envía por email el documento adjunto y lo marca como enviado.
@@ -411,7 +429,9 @@ class FitnessController extends Controller
             'file' => $documento->file_documento,
             'body' => 'Adjunto encontrarás el documento ' . $documento->nombre,
         ];
-        Mail::to($cliente->email)->send(new NfDocumentoMail($details));
+        // Ver comentario en pagarPago(): el mailer 'nf' hay que seleccionarlo aquí, no dentro del
+        // Mailable, o el envío sale por el SMTP por defecto y es rechazado por suplantación.
+        Mail::mailer('nf')->to($cliente->email)->send(new NfDocumentoMail($details));
 
         DB::table('nf_documentos')->where('id', $id)->update([
             'id_estado_documento' => 2,
