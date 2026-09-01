@@ -161,22 +161,16 @@
     @case('desplegable')
         @php
             $opciones = $fkOptions[$campo->name] ?? [];
-            // vm_bonus.id_referencia: el "alcance" (usuario/cargo/departamento) decide que tipo de
+            // vm_bonus.id_referencia: el "alcance" (usuario/cargo/departamento) decide qué tipo de
             // control corresponde -- desplegable de usuarios (este mismo, campo real ref:usuarios)
             // o uno de los dos <select> de valores fijos que se añaden justo debajo. Los tres
-            // comparten el mismo input hidden (el de este fk-combo) como unico portador del valor
-            // que se envia al servidor.
+            // comparten el mismo input hidden (el de este fk-combo) como único portador del valor
+            // que se envía al servidor.
             //
-            // OJO: para alcance=usuario, vm_bonus.id_referencia NO guarda el id numerico del
-            // usuario -- guarda su NOMBRE (texto), porque VmUsuarioController::ficha() cruza los
-            // bonus de un usuario con `alcance='usuario' AND id_referencia = usuario.nombre`
-            // (comprobado en el codigo, no una suposicion). Por eso aqui se reindexan las opciones
-            // de nombre=>nombre en vez de id=>nombre, para que el fk-combo (que envia el "id" del
-            // <li> clicado) acabe enviando el nombre, no el id real de vm_usuarios.
+            // Para alcance=usuario/departamento, id_referencia guarda el id real (vm_usuarios.id /
+            // vm_departamentos.id) -- el fk-combo de aquí ya envía eso directamente, sin trucos.
+            // Para alcance=cargo sigue siendo texto libre: no hay tabla catálogo de cargos.
             $esBonusReferencia = ($projectTable->name ?? null) === 'bonus' && $campo->name === 'id_referencia';
-            if ($esBonusReferencia) {
-                $opciones = collect($opciones)->mapWithKeys(fn($nombre) => [$nombre => $nombre])->all();
-            }
             $selLabel = ($valor !== null && $valor !== '' && isset($opciones[$valor])) ? $opciones[$valor] : null;
             $alcanceActual = $esBonusReferencia ? old('alcance', optional($registro ?? null)->alcance ?: request('alcance')) : null;
         @endphp
@@ -208,9 +202,10 @@
                 $opcionesCargo = ['Responsable propietarios','Jefe Mantenimiento','Recepcionista','Jefe finanzas','Revenue manager','RRHH','Contable','Oficial mantenimiento','Ayte. mantenimiento','Limpiadora','Gobernanta','Captador clientes','Ayte diseño','Rpble propietarios'];
                 // A diferencia de "cargo" (lista fija sin tabla propia), los departamentos sí
                 // tienen tabla real (vm_departamentos) -- se lee de ahí en vez de duplicar los
-                // nombres a mano, para que un departamento nuevo/renombrado aparezca solo.
+                // nombres a mano, y el valor que se envía es el id (id_referencia guarda el id
+                // real desde que se corrigió el vínculo por nombre, ver 3.6x en DOC_TECNICO).
                 $opcionesDepto = \Illuminate\Support\Facades\DB::table('vm_departamentos')
-                    ->where('deleted', 0)->orderBy('nombre')->pluck('nombre')->all();
+                    ->where('deleted', 0)->orderBy('nombre')->pluck('nombre', 'id');
             @endphp
             <select data-alcance-tipo="cargo" class="{{ $base }}"
                     style="{{ $alcanceActual !== 'cargo' ? 'display:none;' : '' }}"
@@ -224,8 +219,8 @@
                     style="{{ $alcanceActual !== 'departamento' ? 'display:none;' : '' }}"
                     onchange="document.getElementById('campo_id_referencia').value = this.value">
                 <option value="">— Selecciona —</option>
-                @foreach($opcionesDepto as $o)
-                    <option value="{{ $o }}" {{ $valor === $o ? 'selected' : '' }}>{{ $o }}</option>
+                @foreach($opcionesDepto as $idDepto => $nombreDepto)
+                    <option value="{{ $idDepto }}" {{ (string) $valor === (string) $idDepto ? 'selected' : '' }}>{{ $nombreDepto }}</option>
                 @endforeach
             </select>
         </div>

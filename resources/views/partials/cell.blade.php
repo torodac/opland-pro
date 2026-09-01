@@ -54,11 +54,21 @@
     @case('id')
     @case('desplegable')
         @php
-            // vm_bonus.id_referencia nunca es un id real (ni con alcance=usuario -- guarda el
-            // nombre en texto, ver nota en partials/field.blade.php), asi que no tiene sentido
-            // buscarlo en $fkOptions: el valor ya es directamente el texto a mostrar.
+            // vm_bonus.id_referencia: para alcance=usuario/departamento guarda un id real (ver
+            // partials/field.blade.php), así que sí hay que resolverlo -- pero contra la tabla que
+            // corresponda según el alcance de esa fila, nunca contra $fkOptions (que asume
+            // siempre usuarios, por el tipo declarado del campo). Para alcance=cargo sigue siendo
+            // texto libre: se muestra tal cual.
             $esBonusReferencia = ($projectTable->name ?? null) === 'bonus' && $campo->name === 'id_referencia';
-            $fkNombre = $esBonusReferencia ? $valor : ($fkOptions[$campo->name][$valor] ?? null);
+            if ($esBonusReferencia) {
+                $fkNombre = match ($alcanceBonus ?? null) {
+                    'usuario'      => \Illuminate\Support\Facades\DB::table('vm_usuarios')->where('id', $valor)->value('nombre'),
+                    'departamento' => \Illuminate\Support\Facades\DB::table('vm_departamentos')->where('id', $valor)->value('nombre'),
+                    default        => $valor,
+                };
+            } else {
+                $fkNombre = $fkOptions[$campo->name][$valor] ?? null;
+            }
         @endphp
         @if($campo->name === 'control_user' && $fkNombre)
             @php $inicial = strtoupper(mb_substr($fkNombre, 0, 1)); @endphp

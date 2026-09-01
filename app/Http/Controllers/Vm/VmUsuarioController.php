@@ -70,12 +70,15 @@ class VmUsuarioController extends Controller
         $bonus = DB::table('vm_bonus')
             ->where('deleted', 0)
             ->where(function ($q) use ($usuario) {
+                // alcance=usuario/departamento comparan por id real (vm_usuarios.id /
+                // vm_departamentos.id); alcance=cargo sigue siendo texto libre, sin tabla
+                // catálogo propia (ver nota histórica en partials/field.blade.php).
                 $q->where(function ($q2) use ($usuario) {
-                    $q2->where('alcance', 'usuario')->where('id_referencia', $usuario->nombre);
+                    $q2->where('alcance', 'usuario')->where('id_referencia', (string) $usuario->id);
                 })->orWhere(function ($q2) use ($usuario) {
                     $q2->where('alcance', 'cargo')->where('id_referencia', $usuario->cargo);
                 })->orWhere(function ($q2) use ($usuario) {
-                    $q2->where('alcance', 'departamento')->where('id_referencia', $usuario->departamento);
+                    $q2->where('alcance', 'departamento')->where('id_referencia', (string) $usuario->id_departamento);
                 });
             })
             ->orderBy('alcance')
@@ -301,7 +304,7 @@ class VmUsuarioController extends Controller
         $usuario = DB::table('vm_usuarios')->where('id', $id)->first();
         DB::table('vm_bonus')->insert([
             'alcance'       => 'usuario',
-            'id_referencia' => $usuario->nombre,
+            'id_referencia' => (string) $usuario->id,
             'meses'         => implode(',', $request->meses),
             'importe'       => $request->importe,
             'fecha_inicio'  => $request->fecha_inicio,

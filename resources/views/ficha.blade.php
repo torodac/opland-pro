@@ -448,6 +448,7 @@
                                                         'valor'      => $valor,
                                                         'fkOptions'  => $tabData['fkOptions'],
                                                         'usuariosMap' => $usuariosMap,
+                                                        'alcanceBonus' => $row->alcance ?? null,
                                                     ])
                                                 </td>
                                             @endif

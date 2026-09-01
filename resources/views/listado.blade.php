@@ -800,7 +800,7 @@
                                                         style="background:#bfdbfe;color:#1e40af;border:none;border-radius:0.375rem;padding:0.2rem 0.55rem;font-size:0.7rem;font-weight:600;cursor:pointer;white-space:nowrap">Cuotas</button>
                                             </div>
                                         @else
-                                            @include('partials.cell', ['campo' => $campo, 'valor' => $registro->{$campo->name} ?? null, 'fkOptions' => $fkOptions, 'usuariosMap' => $usuariosMap ?? []])
+                                            @include('partials.cell', ['campo' => $campo, 'valor' => $registro->{$campo->name} ?? null, 'fkOptions' => $fkOptions, 'usuariosMap' => $usuariosMap ?? [], 'alcanceBonus' => $registro->alcance ?? null])
                                         @endif
                                     </td>
                                 @endforeach
