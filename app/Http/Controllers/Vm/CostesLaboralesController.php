@@ -85,13 +85,21 @@ class CostesLaboralesController extends Controller
         // 'mantenimiento') -- mismo criterio de "minutos propios" que usa
         // CostesLaboralesPropiedadService para el reparto.
         $tipoPorDepartamento = [1 => 'limpieza', 2 => 'mantenimiento'];
-        $minutosPorUsuarioTipo = DB::table('vm_imputaciones')
+        $imputacionesDelMes = DB::table('vm_imputaciones')
             ->whereIn('tipo', ['limpieza', 'mantenimiento'])
             ->whereBetween('fecha_imputacion', [$inicioMes->toDateString(), $finMes->toDateString()])
             ->groupBy('id_usuario', 'tipo')
             ->selectRaw('id_usuario, tipo, sum(duracion) as minutos')
-            ->get()
-            ->groupBy('id_usuario');
+            ->get();
+        $minutosPorUsuarioTipo = $imputacionesDelMes->groupBy('id_usuario');
+
+        // Horas imputadas por tipo, directas de vm_imputaciones -- independientes de si la
+        // nómina de ese mes ya se ha importado o no. $totalesTrabajadores (más abajo) solo
+        // incluye a quien ya tiene nómina ese mes (join con vm_nominas), así que si la nómina va
+        // con retraso (normal: julio/agosto ya tienen horas fichadas pero aún no nómina) sus
+        // horas quedaban en 0 aunque el trabajo ya estuviera registrado.
+        $horasImputadasPorTipoMes = $imputacionesDelMes->groupBy('tipo')
+            ->map(fn($grupo) => round($grupo->sum('minutos') / 60, 1));
 
         // Minutos fichados por trabajador ese mes (vm_fichaje.control_user = vm_usuarios.id):
         // (hora_fin - hora_inicio) menos la pausa si está registrada, sumado por trabajador --
@@ -167,8 +175,8 @@ class CostesLaboralesController extends Controller
         $statsRecalculo = [
             ['label' => 'Nómina Limpieza',      'actual' => $totalesTrabajadores->limpieza,           'repartido' => $totales->limpieza,           'unidad' => '€'],
             ['label' => 'Nómina Mantenimiento', 'actual' => $totalesTrabajadores->mantenimiento,      'repartido' => $totales->mantenimiento,      'unidad' => '€'],
-            ['label' => 'Horas Limpieza',       'actual' => $totalesTrabajadores->horas_limpieza,     'repartido' => $totales->horas_limpieza,     'unidad' => 'h'],
-            ['label' => 'Horas Mantenimiento',  'actual' => $totalesTrabajadores->horas_mantenimiento,'repartido' => $totales->horas_mantenimiento,'unidad' => 'h'],
+            ['label' => 'Horas Limpieza',       'actual' => (float) ($horasImputadasPorTipoMes['limpieza'] ?? 0),      'repartido' => $totales->horas_limpieza,     'unidad' => 'h'],
+            ['label' => 'Horas Mantenimiento',  'actual' => (float) ($horasImputadasPorTipoMes['mantenimiento'] ?? 0), 'repartido' => $totales->horas_mantenimiento,'unidad' => 'h'],
         ];
         foreach ($statsRecalculo as &$s) {
             $s['variacion'] = $hayCalculo ? $variacion($s['actual'], $s['repartido']) : null;

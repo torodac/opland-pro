@@ -13,17 +13,29 @@
 .cl-nav .mes-label{font-size:15px;font-weight:500;min-width:140px;text-align:center;text-transform:capitalize;}
 .cl-subtitle{font-size:13px;font-weight:600;margin:0 0 10px;color:#555;}
 .dark .cl-subtitle{color:#ccc;}
-.cl-stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
-@media (max-width:760px){ .cl-stat-row{grid-template-columns:1fr 1fr;} }
-.cl-stat-tile{background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px;padding:14px 16px;}
-.dark .cl-stat-tile{background:#1a1a1a;border-color:rgba(255,255,255,.08);}
-.cl-stat-label{font-size:11.5px;color:#6b7280;font-weight:600;}
+.cl-stat-row{
+  display:flex; background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px;
+  padding:10px 4px; margin-bottom:16px;
+}
+.dark .cl-stat-row{background:#1a1a1a;border-color:rgba(255,255,255,.08);}
+@media (max-width:760px){ .cl-stat-row{flex-wrap:wrap;} .cl-stat-item{flex:1 1 45%!important;} }
+.cl-stat-item{flex:1;padding:2px 14px;position:relative;}
+.cl-stat-item + .cl-stat-item{border-left:1px solid rgba(0,0,0,.08);}
+.dark .cl-stat-item + .cl-stat-item{border-color:rgba(255,255,255,.08);}
+.cl-stat-top{display:flex;align-items:baseline;justify-content:space-between;gap:6px;}
+.cl-stat-label{font-size:10.5px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.03em;}
 .dark .cl-stat-label{color:#9ca3af;}
-.cl-stat-value{font-size:22px;font-weight:650;margin:4px 0 2px;font-variant-numeric:tabular-nums;color:#111827;}
+.cl-stat-pct{font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:9px;background:#ecfdf5;color:#15803d;white-space:nowrap;}
+.cl-stat-pct.off{background:#fef2f2;color:#dc2626;}
+.cl-stat-pct.na{background:transparent;color:#9ca3af;font-weight:600;padding:0;}
+.cl-stat-value{font-size:19px;font-weight:700;margin:2px 0 6px;font-variant-numeric:tabular-nums;color:#111827;}
 .dark .cl-stat-value{color:#f3f4f6;}
-.cl-stat-delta{font-size:12px;color:#6b7280;}
-.dark .cl-stat-delta{color:#9ca3af;}
-.cl-stat-delta.cl-off{color:#dc2626;font-weight:700;}
+.cl-stat-bar{height:5px;border-radius:3px;background:#e5e7eb;position:relative;}
+.dark .cl-stat-bar{background:#333;}
+.cl-stat-bar-fill{height:100%;border-radius:3px;background:#2563eb;transition:width .2s;}
+.cl-stat-bar-fill.off{background:#dc2626;}
+.cl-stat-bar-marker{position:absolute;top:-2px;width:2px;height:9px;background:#111827;border-radius:1px;}
+.dark .cl-stat-bar-marker{background:#f3f4f6;}
 @keyframes cl-spin { to { transform: rotate(360deg); } }
 </style>
 
@@ -40,15 +52,31 @@
 
   <div class="cl-stat-row">
     @foreach($statsRecalculo as $s)
-      @php $decimales = $s['unidad'] === '€' ? 2 : 1; @endphp
-      <div class="cl-stat-tile">
-        <div class="cl-stat-label">{{ $s['label'] }}</div>
+      @php
+        $decimales = $s['unidad'] === '€' ? 2 : 1;
+        // Barra: el mayor de los dos valores marca el 100% de la escala; la barra rellena hasta
+        // el actual, y una marca vertical señala dónde cae el repartido -- si coinciden, la marca
+        // queda justo al final del relleno; si hay hueco, se ve a simple vista.
+        $escala = max($s['actual'], $s['repartido'], 0.01);
+        $pctActual = min(100, ($s['actual'] / $escala) * 100);
+        $pctRepartido = min(100, ($s['repartido'] / $escala) * 100);
+      @endphp
+      <div class="cl-stat-item">
+        <div class="cl-stat-top">
+          <span class="cl-stat-label">{{ $s['label'] }}</span>
+          <span class="cl-stat-pct {{ $s['variacion'] === null ? 'na' : ($s['fueraDeRango'] ? 'off' : '') }}">
+            @if($s['variacion'] === null)
+              sin calcular
+            @else
+              {{ $s['variacion'] >= 0 ? '+' : '' }}{{ number_format($s['variacion'], 1, ',', '.') }}%
+            @endif
+          </span>
+        </div>
         <div class="cl-stat-value">{{ number_format($s['actual'], $decimales, ',', '.') }} {{ $s['unidad'] }}</div>
-        <div class="cl-stat-delta {{ $s['fueraDeRango'] ? 'cl-off' : '' }}">
-          @if($s['variacion'] === null)
-            Sin calcular todavía
-          @else
-            {{ $s['variacion'] >= 0 ? '+' : '' }}{{ number_format($s['variacion'], 1, ',', '.') }}% vs. repartido
+        <div class="cl-stat-bar">
+          <div class="cl-stat-bar-fill {{ $s['fueraDeRango'] ? 'off' : '' }}" style="width:{{ $pctActual }}%"></div>
+          @if($s['variacion'] !== null)
+            <div class="cl-stat-bar-marker" style="left:calc({{ $pctRepartido }}% - 1px)" title="Repartido: {{ number_format($s['repartido'], $decimales, ',', '.') }} {{ $s['unidad'] }}"></div>
           @endif
         </div>
       </div>
@@ -180,18 +208,26 @@ function recalcular() {
         timerEl.textContent = `${m}:${s}`;
     }, 1000);
     const pararTimer = () => clearInterval(timerInterval);
+    // Si algo revienta de forma síncrona (antes de que el fetch llegue a lanzarse), el modal y el
+    // temporizador se quedaban colgados para siempre sin ningún aviso -- con el try/catch, un
+    // error aquí para el timer y avisa igual que un fallo de red.
+    const fallo = (msg) => { pararTimer(); alert(msg); btn.disabled = false; overlay.style.display = 'none'; };
 
-    fetch('{{ route("vm.costes-laborales.recalcular", $project->slug) }}', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
-        body: JSON.stringify({ anio: {{ $anio }}, mes: {{ $mes }} }),
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.error) { pararTimer(); alert(data.error); btn.disabled = false; overlay.style.display = 'none'; return; }
-        location.reload();
-    })
-    .catch(() => { pararTimer(); alert('Error al recalcular.'); btn.disabled = false; overlay.style.display = 'none'; });
+    try {
+        fetch('{{ route("vm.costes-laborales.recalcular", $project->slug) }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+            body: JSON.stringify({ anio: {{ $anio }}, mes: {{ $mes }} }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { fallo(data.error); return; }
+            location.reload();
+        })
+        .catch(() => fallo('Error al recalcular.'));
+    } catch (e) {
+        fallo('Error al recalcular: ' + e.message);
+    }
 }
 </script>
 
