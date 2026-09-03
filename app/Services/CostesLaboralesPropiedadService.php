@@ -89,22 +89,27 @@ class CostesLaboralesPropiedadService
             ->where('n.deleted', 0)
             ->get(['n.id_usuario', 'n.coste_total']);
 
+        // Imputaciones propias de TODOS los trabajadores con nómina este mes, en una sola
+        // consulta (antes se lanzaba una consulta por trabajador dentro del foreach -- con
+        // meses de más plantilla, ese N+1 es lo que hacía que "Calcular este mes" tardase minutos
+        // en vez de segundos).
+        $propiosPorUsuario = DB::table('vm_imputaciones as i')
+            ->join("{$tareaTabla} as t", 't.id', '=', 'i.id_tarea')
+            ->where('i.tipo', $tipo)
+            ->whereIn('i.id_usuario', $nominas->pluck('id_usuario'))
+            ->whereBetween('i.fecha_imputacion', [$inicio->toDateString(), $fin->toDateString()])
+            ->whereNotNull('t.id_propiedades')
+            ->groupBy('i.id_usuario', 't.id_propiedades')
+            ->selectRaw('i.id_usuario, t.id_propiedades, sum(i.duracion) as mins')
+            ->get()
+            ->groupBy('id_usuario');
+
         $filas = [];
         $sinDatos = [];
 
         foreach ($nominas as $n) {
             $costeTotal = (float) $n->coste_total;
-
-            $propios = DB::table('vm_imputaciones as i')
-                ->join("{$tareaTabla} as t", 't.id', '=', 'i.id_tarea')
-                ->where('i.tipo', $tipo)
-                ->where('i.id_usuario', $n->id_usuario)
-                ->whereBetween('i.fecha_imputacion', [$inicio->toDateString(), $fin->toDateString()])
-                ->whereNotNull('t.id_propiedades')
-                ->groupBy('t.id_propiedades')
-                ->selectRaw('t.id_propiedades as id_propiedades, sum(i.duracion) as mins')
-                ->get();
-
+            $propios = $propiosPorUsuario->get($n->id_usuario, collect());
             $totalPropio = (int) $propios->sum('mins');
 
             if ($totalPropio > 0) {
