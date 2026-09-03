@@ -101,6 +101,11 @@
       <tbody id="ni-sin-match-body"></tbody>
     </table>
   </div>
+  <div id="ni-recalculo-wrap" style="display:none;margin-top:16px;padding-top:14px;border-top:1px solid #eaf1f6;">
+    <h3>Coste laboral por propiedad</h3>
+    <p style="font-size:12.5px;color:#7e93a1;margin:0 0 8px;">Se ha recalculado automáticamente el reparto por propiedad de cada mes con nómina nueva:</p>
+    <div id="ni-recalculo-body" style="font-size:13px;"></div>
+  </div>
 </div>
 
 {{-- Modal de previsualización: se muestra ANTES de escribir nada, con el resumen de cuántas se
@@ -287,6 +292,25 @@ async function aplicarFichero() {
       wrap.style.display = 'block';
     } else {
       wrap.style.display = 'none';
+    }
+
+    const recalculoWrap = document.getElementById('ni-recalculo-wrap');
+    const recalculoBody = document.getElementById('ni-recalculo-body');
+    const mesesRecalculo = Object.keys(data.recalculo || {});
+    if (mesesRecalculo.length) {
+      const mesesEs = {'01':'enero','02':'febrero','03':'marzo','04':'abril','05':'mayo','06':'junio','07':'julio','08':'agosto','09':'septiembre','10':'octubre','11':'noviembre','12':'diciembre'};
+      recalculoBody.innerHTML = mesesRecalculo.map(mes => {
+        const [anio, mesNum] = mes.split('-');
+        const r = data.recalculo[mes];
+        return `<div style="padding:6px 0;border-bottom:1px solid #f3f4f6;">
+          <strong>${mesesEs[mesNum] || mesNum} ${anio}</strong> —
+          Limpieza: ${r.limpieza.trabajadores_repartidos} trabajadores, ${fmtEuro(r.limpieza.coste_total)} ·
+          Mantenimiento: ${r.mantenimiento.trabajadores_repartidos} trabajadores, ${fmtEuro(r.mantenimiento.coste_total)}
+        </div>`;
+      }).join('');
+      recalculoWrap.style.display = 'block';
+    } else {
+      recalculoWrap.style.display = 'none';
     }
 
     resultBox.classList.add('show');

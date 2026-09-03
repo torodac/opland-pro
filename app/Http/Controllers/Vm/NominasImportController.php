@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Vm;
 
 use App\Http\Controllers\Controller;
 use App\Models\Project;
+use App\Services\CostesLaboralesPropiedadService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -51,13 +52,25 @@ class NominasImportController extends Controller
     // Mismo calculo que previsualizar(), pero esta vez sí escribe en vm_nominas. Se vuelve a
     // parsear el PDF entero en vez de reutilizar un resultado en cache -- es determinista y
     // barato (igual que el "Ejecutar" de mb/movs_mapeo), no hace falta guardar estado intermedio.
-    public function aplicar(Request $request, Project $project)
+    public function aplicar(Request $request, Project $project, CostesLaboralesPropiedadService $costesService)
     {
         [$error, $resumen] = $this->procesarPdf($request, aplicar: true);
         if ($error) {
             return response()->json(['error' => $error], 422);
         }
-        return response()->json(['ok' => true] + $resumen);
+
+        // Encadena el reparto de coste laboral por propiedad para cada mes que acaba de recibir
+        // nómina, sin que el usuario tenga que ir a /vm/costes-laborales-propiedad y pulsar el
+        // botón a mano -- la nómina y su reparto van siempre juntos, no tiene sentido dejarlo
+        // pendiente de un segundo paso manual.
+        $recalculo = [];
+        foreach ($resumen['meses_afectados'] as $mes) {
+            [$anio, $mesNum] = array_map('intval', explode('-', $mes));
+            $recalculo[$mes] = $costesService->recalcular($anio, $mesNum);
+        }
+        unset($resumen['meses_afectados']);
+
+        return response()->json(['ok' => true, 'recalculo' => $recalculo] + $resumen);
     }
 
     private function procesarPdf(Request $request, bool $aplicar): array
@@ -87,9 +100,10 @@ class NominasImportController extends Controller
         $importadas   = 0;
         $actualizadas = 0;
         $sinMatch     = [];
+        $mesesAfectados = [];
         $now          = now();
 
-        DB::transaction(function () use ($filas, $usuariosPorDni, $aplicar, &$importadas, &$actualizadas, &$sinMatch, $now) {
+        DB::transaction(function () use ($filas, $usuariosPorDni, $aplicar, &$importadas, &$actualizadas, &$sinMatch, &$mesesAfectados, $now) {
             foreach ($filas as $fila) {
                 $idUsuario = $usuariosPorDni[$fila['nif']] ?? null;
                 if (!$idUsuario) {
@@ -109,6 +123,9 @@ class NominasImportController extends Controller
                 }
 
                 if (!$aplicar) continue;
+
+                // "YYYY-MM-01" -> "YYYY-MM", una vez por mes con al menos una nómina escrita.
+                $mesesAfectados[substr($fila['mes'], 0, 7)] = true;
 
                 $data = [
                     'devengado'   => $fila['devengado'],
@@ -140,6 +157,7 @@ class NominasImportController extends Controller
                 'devengado' => $f['devengado'],
             ], $sinMatch),
             'anomalos'     => $this->detectarAnomalias($filas),
+            'meses_afectados' => array_keys($mesesAfectados),
         ]];
     }
 
