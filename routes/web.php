@@ -406,6 +406,10 @@ Route::middleware('auth')->group(function () {
             Route::post('pagos/generar', [\App\Http\Controllers\Nf\FitnessController::class, 'generarPagos'])->where('project', 'nf')->name('nf.pagos.generar');
             Route::get('pagos_list/{mes?}', [\App\Http\Controllers\Nf\FitnessController::class, 'pagosList'])->where(['project' => 'nf', 'mes' => '\d{4}-(0[1-9]|1[0-2])'])->name('nf.pagos_list');
             Route::get('dashboard/{ejercicio?}', [\App\Http\Controllers\Nf\FitnessController::class, 'dashboard'])->where(['project' => 'nf', 'ejercicio' => '\d{4}'])->name('nf.dashboard');
+            // Sin entrada en el sidebar todavía (a petición expresa) -- accesible solo por URL directa.
+            Route::get('dashboard2', [\App\Http\Controllers\Nf\FitnessController::class, 'rentabilidad'])->where('project', 'nf')->name('nf.dashboard2');
+            Route::get('dashboard2/objetivos', [\App\Http\Controllers\Nf\FitnessController::class, 'objetivosData'])->where('project', 'nf')->name('nf.dashboard2.objetivos');
+            Route::get('dashboard2/marketing', [\App\Http\Controllers\Nf\FitnessController::class, 'marketingData'])->where('project', 'nf')->name('nf.dashboard2.marketing');
         }); // fin nf.only
 
         // Embed de Power BI: generico, disponible para cualquier proyecto con fila(s) en

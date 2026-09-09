@@ -101,10 +101,339 @@ class FitnessController extends Controller
     private function colorGrupo(): array
     {
         return [
-            'Verde' => '#3D8B5A', 'Azul' => '#3B6FA6', 'Rojo' => '#B5432F',
+            'Verde' => '#3D8B5A', 'Azul' => '#5B9BD5', 'Rojo' => '#B5432F',
             'Morado' => '#7B4FA0', 'Amarillo' => '#D2A72C', 'Rosa' => '#C9698B',
-            'Naranja' => '#D2762C',
+            'Naranja' => '#D2762C', 'Consulta' => '#9CA3AF',
         ];
+    }
+
+    // "Evolución de rentabilidad por hora": €/h = facturación de pagos Fitness del mes / horas de
+    // clase de ese mes, asumiendo un fijo de 8h por grupo activo al mes (2 sesiones/semana x ~4
+    // semanas), tal y como lo describió el usuario -- NO son los días reales de cada patrón
+    // semanal (esa variante, más precisa, se probó antes y daba resultados muy distintos).
+    // Sin entrada en el sidebar todavía -- solo accesible por URL directa (nf.dashboard2).
+    private const HORAS_FIJAS_POR_GRUPO_MES = 8;
+
+    // Roster de cursos (curso = temporada sept-agosto) compartido entre pestañas -- mismo color
+    // fijo por curso en Rentabilidad, Evolución del negocio y Marketing, para que los pills se
+    // lean igual en toda la página. Color fijo por curso (a petición expresa): 21-22 y 22-23 (los
+    // dos más antiguos) toman el azul y el morado de las líneas de "Tique medio"/"Clientes
+    // activos" de la evolución del negocio; el amarillo que tenía 21-22 pasa a 24-25; el rojo
+    // queda reservado para cuando llegue el curso 27-28.
+    private function cursosDisponibles(): array
+    {
+        $primerContrato = DB::table('nf_contratos')->where('id_tipo', 2)->where('deleted', false)->min('fecha_inicio');
+        $primerAnio = $primerContrato ? (int) substr($primerContrato, 0, 4) : now()->year;
+        if ($primerContrato && (int) substr($primerContrato, 5, 2) < 9) {
+            $primerAnio--; // un contrato que empieza en ene-ago pertenece al ejercicio iniciado el septiembre anterior
+        }
+        $anioActualEjercicio = now()->month >= 9 ? now()->year : now()->year - 1;
+
+        $colorPorCurso = [
+            2021 => '#3B6FA6', // 21-22 -- azul (línea "Tique medio")
+            2022 => '#7B4FA0', // 22-23 -- morado (línea "Clientes activos")
+            2023 => '#3D8B5A', // 23-24 -- verde
+            2024 => '#D2A72C', // 24-25 -- amarillo (antes de 21-22)
+            2025 => '#26418F', // 25-26 -- azul oscuro
+            2026 => '#D2762C', // 26-27 -- naranja
+            2027 => '#B5432F', // 27-28 -- rojo (reservado)
+        ];
+        $coloresReserva = ['#c05e8f', '#5c8a3d', '#8a6d3b']; // fallback para cursos futuros más allá de 27-28
+
+        $cursos = [];
+        foreach (range($primerAnio, $anioActualEjercicio) as $i => $anioInicio) {
+            $cursos[] = [
+                'label'      => sprintf('%02d-%02d', $anioInicio % 100, ($anioInicio + 1) % 100),
+                'anioInicio' => $anioInicio,
+                'color'      => $colorPorCurso[$anioInicio] ?? $coloresReserva[$i % count($coloresReserva)],
+                // Por defecto solo se activan los 3 últimos cursos (contando el actual) --
+                // el resto empieza oculto en los pills.
+                'activo'     => $anioInicio > $anioActualEjercicio - 3,
+            ];
+        }
+
+        return ['cursos' => $cursos, 'anioActualEjercicio' => $anioActualEjercicio];
+    }
+
+    public function rentabilidad(Project $project)
+    {
+        ['cursos' => $cursos, 'anioActualEjercicio' => $anioActualEjercicio] = $this->cursosDisponibles();
+        $meses = [9 => 'SEP', 10 => 'OCT', 11 => 'NOV', 12 => 'DIC', 1 => 'ENE', 2 => 'FEB', 3 => 'MAR', 4 => 'ABR', 5 => 'MAY', 6 => 'JUN', 7 => 'JUL'];
+
+        $hoy = now()->toDateString();
+        $tabla = [];
+        $series = [];
+        $evolucion = []; // línea de tiempo continua (todos los meses de todos los cursos, en orden), para el gráfico de negocio -- los pills de curso ocultan/muestran tramos de esta misma serie.
+
+        foreach ($cursos as $curso) {
+            $valores = [];
+            foreach ($meses as $mesNum => $mesLabel) {
+                $anio      = $mesNum >= 9 ? $curso['anioInicio'] : $curso['anioInicio'] + 1;
+                $inicioMes = sprintf('%04d-%02d-01', $anio, $mesNum);
+                $finMes    = date('Y-m-t', strtotime($inicioMes));
+
+                if ($inicioMes > $hoy) {
+                    $tabla[$mesLabel][$curso['label']] = null;
+                    $valores[] = null;
+                    continue;
+                }
+
+                // "Grupos activos" (DAX): DISTINCTCOUNT sobre la tabla de contratos expandida
+                // día a día -- equivale a cualquier grupo cuyo contrato solape el mes en algún
+                // día, no un snapshot de un día concreto.
+                $gruposActivos = DB::table('nf_contratos')
+                    ->where('id_tipo', 2)->where('deleted', false)
+                    ->where('fecha_inicio', '<=', $finMes)
+                    ->where(fn($q) => $q->whereNull('fecha_fin')->orWhere('fecha_fin', '>=', $inicioMes))
+                    ->distinct()->pluck('id_grupo');
+
+                $horas = $gruposActivos->count() * self::HORAS_FIJAS_POR_GRUPO_MES;
+
+                // Facturación = Pendiente + Pagada (excluye solo Anulado) -- a petición expresa,
+                // en vez del id_estado_pagos=2 (solo Pagada) del DAX de Power BI.
+                $facturacion = (float) DB::table('nf_pagos as p')
+                    ->join('nf_contratos as c', 'c.id', '=', 'p.id_contratos')
+                    ->where('c.id_tipo', 2)
+                    ->where('p.deleted', false)
+                    ->where('p.id_estado_pagos', '!=', 3)
+                    ->whereBetween('p.fecha_pago', [$inicioMes, $finMes])
+                    ->sum('p.cantidad');
+
+                $euroHora = $horas > 0 ? round($facturacion / $horas, 1) : null;
+
+                $tabla[$mesLabel][$curso['label']] = [
+                    'gr'          => $gruposActivos->count(),
+                    'euroHora'    => $euroHora,
+                    'horas'       => $horas,
+                    'facturacion' => round($facturacion, 2),
+                ];
+                $valores[] = $euroHora;
+
+                // Tique medio = misma facturación (Pendiente+Pagada) / nº de pagos del mes.
+                $numPagos = DB::table('nf_pagos as p')
+                    ->join('nf_contratos as c', 'c.id', '=', 'p.id_contratos')
+                    ->where('c.id_tipo', 2)
+                    ->where('p.deleted', false)
+                    ->where('p.id_estado_pagos', '!=', 3)
+                    ->whereBetween('p.fecha_pago', [$inicioMes, $finMes])
+                    ->count();
+
+                $clientesActivos = DB::table('nf_contratos')
+                    ->where('id_tipo', 2)->where('deleted', false)
+                    ->where('fecha_inicio', '<=', $finMes)
+                    ->where(fn($q) => $q->whereNull('fecha_fin')->orWhere('fecha_fin', '>=', $inicioMes))
+                    ->distinct()->count('id_clientes');
+
+                $evolucion[] = [
+                    'ym'              => sprintf('%04d-%02d', $anio, $mesNum),
+                    'curso'           => $curso['label'],
+                    'facturacion'     => round($facturacion, 2),
+                    'tiqueMedio'      => $numPagos > 0 ? round($facturacion / $numPagos, 1) : null,
+                    'clientesActivos' => $clientesActivos,
+                ];
+            }
+            $series[] = ['label' => $curso['label'], 'color' => $curso['color'], 'data' => $valores];
+        }
+
+        return view('nf.dashboard2', [
+            'project'             => $project,
+            'meses'               => array_values($meses),
+            'cursos'              => $cursos,
+            'tabla'               => $tabla,
+            'series'              => $series,
+            'evolucion'           => $evolucion,
+            'anioActualEjercicio' => $anioActualEjercicio,
+        ]);
+    }
+
+    // Datos para la pestaña "Objetivos": un tacómetro por grupo (objetivo de nf_objetivos vs
+    // facturación real de ese grupo ese mes) + total mensual (suma de los grupos de ese mes) +
+    // total anual (suma de todo el curso seleccionado, sin depender del mes elegido). A
+    // diferencia del resto de la página, nf_objetivos sí tiene fila para agosto, así que aquí el
+    // selector de mes incluye los 12 meses del curso (SEP..AGO), no solo SEP..JUL.
+    public function objetivosData(Request $request, Project $project)
+    {
+        $anioActualEjercicio = now()->month >= 9 ? now()->year : now()->year - 1;
+        $anioInicio = (int) $request->query('anio', $anioActualEjercicio);
+        $mesNum     = (int) $request->query('mes', now()->month);
+
+        $anio      = $mesNum >= 9 ? $anioInicio : $anioInicio + 1;
+        $inicioMes = sprintf('%04d-%02d-01', $anio, $mesNum);
+        $finMes    = date('Y-m-t', strtotime($inicioMes));
+
+        // Roster fijo de grupos, en un orden estable (Consulta siempre al final) -- así el grid
+        // de la pestaña Objetivos no cambia de tamaño ni de orden según qué grupo tenga o no
+        // objetivo puesto ese mes en concreto.
+        $ordenGrupos = [1, 2, 3, 4, 6, 21, 8]; // Verde, Azul, Rojo, Morado, Amarillo, Rosa, Consulta
+        $gruposCatalogo = DB::table('nf_grupo')->whereIn('id', $ordenGrupos)->pluck('nombre', 'id');
+
+        $objetivosMes = DB::table('nf_objetivos')
+            ->where('deleted', false)
+            ->where('fecha_objetivo', $inicioMes)
+            ->whereIn('id_grupo', $ordenGrupos)
+            ->pluck('objetivo', 'id_grupo');
+
+        $colores = $this->colorGrupo();
+
+        // Sin filtrar por id_tipo: cada grupo ya pertenece a un único tipo de servicio (Fitness o
+        // Consulta/Osteopatía), no hace falta -- y forzar id_tipo=2 aquí dejaba a Consulta
+        // siempre en 0€ de "actual" aunque tuviera pagos reales.
+        $grupos = collect($ordenGrupos)->filter(fn($id) => $gruposCatalogo->has($id))->map(function ($id) use ($gruposCatalogo, $objetivosMes, $inicioMes, $finMes, $colores) {
+            $nombre   = $gruposCatalogo[$id];
+            $objetivo = (float) ($objetivosMes[$id] ?? 0);
+
+            $actual = (float) DB::table('nf_pagos as p')
+                ->join('nf_contratos as c', 'c.id', '=', 'p.id_contratos')
+                ->where('c.id_grupo', $id)
+                ->where('p.deleted', false)
+                ->where('p.id_estado_pagos', '!=', 3)
+                ->whereBetween('p.fecha_pago', [$inicioMes, $finMes])
+                ->sum('p.cantidad');
+
+            return [
+                'nombre'   => $nombre,
+                'color'    => $colores[$nombre] ?? '#6b7280',
+                'objetivo' => $objetivo,
+                'actual'   => round($actual, 2),
+                'pct'      => $objetivo > 0 ? round($actual / $objetivo * 100, 2) : 0,
+            ];
+        })->values();
+
+        $totalMensualObjetivo = (float) $objetivosMes->sum();
+        $totalMensualActual   = (float) $grupos->sum('actual');
+
+        $inicioAnio = sprintf('%04d-09-01', $anioInicio);
+        $finAnio    = sprintf('%04d-08-31', $anioInicio + 1);
+
+        $totalAnualObjetivo = (float) DB::table('nf_objetivos')
+            ->where('deleted', false)
+            ->whereBetween('fecha_objetivo', [$inicioAnio, $finAnio])
+            ->sum('objetivo');
+        $totalAnualActual = (float) DB::table('nf_pagos as p')
+            ->join('nf_contratos as c', 'c.id', '=', 'p.id_contratos')
+            ->where('p.deleted', false)
+            ->where('p.id_estado_pagos', '!=', 3)
+            ->whereBetween('p.fecha_pago', [$inicioAnio, $finAnio])
+            ->sum('p.cantidad');
+
+        return response()->json([
+            'grupos'      => $grupos,
+            'totalMensual' => [
+                'objetivo' => round($totalMensualObjetivo, 2),
+                'actual'   => round($totalMensualActual, 2),
+                'pct'      => $totalMensualObjetivo > 0 ? round($totalMensualActual / $totalMensualObjetivo * 100, 2) : 0,
+            ],
+            'totalAnual' => [
+                'objetivo' => round($totalAnualObjetivo, 2),
+                'actual'   => round($totalAnualActual, 2),
+                'pct'      => $totalAnualObjetivo > 0 ? round($totalAnualActual / $totalAnualObjetivo * 100, 2) : 0,
+            ],
+        ]);
+    }
+
+    // Datos para la pestaña "Marketing":
+    // 1) Foto actual (hoy) de los clientes con contrato Fitness en curso -- histograma de edades
+    //    (tramos de 5 años) apilado por género + reparto total por género.
+    // 2) Evolución histórica, mes a mes y curso a curso (mismo roster/colores que Rentabilidad),
+    //    del % de hombres y de la edad media de los clientes activos ese mes.
+    public function marketingData(Project $project)
+    {
+        $hoy = now()->toDateString();
+
+        $activosHoy = DB::table('nf_contratos as c')
+            ->join('nf_clientes as cl', 'cl.id', '=', 'c.id_clientes')
+            ->where('c.id_tipo', 2)->where('c.deleted', false)
+            ->where('c.fecha_inicio', '<=', $hoy)
+            ->where(fn($q) => $q->whereNull('c.fecha_fin')->orWhere('c.fecha_fin', '>=', $hoy))
+            ->select('cl.id', 'cl.fecha_nacimiento', 'cl.id_genero')
+            ->distinct()
+            ->get();
+
+        $edadesPorGenero = [];
+        $generoTotales   = ['H' => 0, 'M' => 0, 'B' => 0];
+
+        foreach ($activosHoy as $cl) {
+            $genero = $cl->id_genero == 1 ? 'H' : ($cl->id_genero == 2 ? 'M' : 'B');
+            $generoTotales[$genero]++;
+
+            $bucket = -5; // "Desconocida" -- sin fecha de nacimiento
+            if ($cl->fecha_nacimiento) {
+                $edad   = \Carbon\Carbon::parse($cl->fecha_nacimiento)->age;
+                $bucket = intdiv(max($edad, 0), 5) * 5;
+            }
+            $edadesPorGenero[$bucket][$genero] = ($edadesPorGenero[$bucket][$genero] ?? 0) + 1;
+        }
+        ksort($edadesPorGenero);
+
+        $edades = [];
+        foreach ($edadesPorGenero as $bucket => $g) {
+            $edades[] = [
+                'label' => $bucket < 0 ? 'Desconocida' : "{$bucket}-" . ($bucket + 5),
+                'H'     => $g['H'] ?? 0,
+                'M'     => $g['M'] ?? 0,
+                'B'     => $g['B'] ?? 0,
+            ];
+        }
+
+        ['cursos' => $cursos] = $this->cursosDisponibles();
+        $meses = [9 => 'SEP', 10 => 'OCT', 11 => 'NOV', 12 => 'DIC', 1 => 'ENE', 2 => 'FEB', 3 => 'MAR', 4 => 'ABR', 5 => 'MAY', 6 => 'JUN', 7 => 'JUL'];
+
+        $evolucion = [];
+        foreach ($cursos as $curso) {
+            $pctHombres = [];
+            $edadMedia  = [];
+            foreach ($meses as $mesNum => $mesLabel) {
+                $anio      = $mesNum >= 9 ? $curso['anioInicio'] : $curso['anioInicio'] + 1;
+                $inicioMes = sprintf('%04d-%02d-01', $anio, $mesNum);
+                $finMes    = date('Y-m-t', strtotime($inicioMes));
+
+                if ($inicioMes > $hoy) {
+                    $pctHombres[] = null;
+                    $edadMedia[]  = null;
+                    continue;
+                }
+
+                $fechaSnapshot = ($hoy >= $inicioMes && $hoy <= $finMes) ? $hoy : $finMes;
+
+                $activosMes = DB::table('nf_contratos as c')
+                    ->join('nf_clientes as cl', 'cl.id', '=', 'c.id_clientes')
+                    ->where('c.id_tipo', 2)->where('c.deleted', false)
+                    ->where('c.fecha_inicio', '<=', $fechaSnapshot)
+                    ->where(fn($q) => $q->whereNull('c.fecha_fin')->orWhere('c.fecha_fin', '>=', $fechaSnapshot))
+                    ->select('cl.id', 'cl.fecha_nacimiento', 'cl.id_genero')
+                    ->distinct()
+                    ->get();
+
+                $total = $activosMes->count();
+                if ($total === 0) {
+                    $pctHombres[] = null;
+                    $edadMedia[]  = null;
+                    continue;
+                }
+
+                $hombres = $activosMes->where('id_genero', 1)->count();
+                $pctHombres[] = round($hombres / $total * 100, 1);
+
+                $edadesMes = $activosMes->filter(fn($c) => $c->fecha_nacimiento)
+                    ->map(fn($c) => \Carbon\Carbon::parse($c->fecha_nacimiento)->diffInYears($fechaSnapshot));
+                $edadMedia[] = $edadesMes->count() ? round($edadesMes->avg(), 1) : null;
+            }
+
+            $evolucion[] = [
+                'label'      => $curso['label'],
+                'color'      => $curso['color'],
+                'activo'     => $curso['activo'],
+                'pctHombres' => $pctHombres,
+                'edadMedia'  => $edadMedia,
+            ];
+        }
+
+        return response()->json([
+            'edades'    => $edades,
+            'genero'    => $generoTotales,
+            'evolucion' => $evolucion,
+            'meses'     => array_values($meses),
+        ]);
     }
 
     // Dashboard con navegador de ejercicio (temporada sept-agosto) y matriz de grupos x día de

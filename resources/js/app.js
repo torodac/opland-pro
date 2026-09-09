@@ -3,15 +3,18 @@ import {
     Chart,
     BarController,
     LineController,
+    PieController,
+    DoughnutController,
     BarElement,
     LineElement,
     PointElement,
+    ArcElement,
     CategoryScale,
     LinearScale,
     Tooltip,
 } from 'chart.js';
 
-Chart.register(BarController, LineController, BarElement, LineElement, PointElement, CategoryScale, LinearScale, Tooltip);
+Chart.register(BarController, LineController, PieController, DoughnutController, BarElement, LineElement, PointElement, ArcElement, CategoryScale, LinearScale, Tooltip);
 
 window.Alpine = Alpine;
 Alpine.start();
@@ -464,3 +467,234 @@ window.renderWaterfallPyg = function (canvasId, steps) {
     opCharts[canvasId] = chart;
     return chart;
 };
+
+// Nf: "Evolución de rentabilidad por hora" -- barras agrupadas, una serie por curso, con hueco
+// (null) en los meses que aún no han llegado dentro del curso en curso. Tooltip nativo de
+// Chart.js (sin el HTML a medida de arriba, no hace falta para un caso tan simple).
+window.renderNfRentabilidadChart = function (canvasId, series, categorias) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return null;
+
+    if (opCharts[canvasId]) {
+        opCharts[canvasId].destroy();
+    }
+
+    const datasets = series.map((s) => ({
+        label: s.label,
+        data: s.data,
+        backgroundColor: s.color,
+    }));
+
+    const chart = new Chart(canvas, {
+        type: 'bar',
+        data: { labels: categorias, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11.5 } } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y === null ? 'sin datos' : ctx.parsed.y.toFixed(1) + ' €/h'}`,
+                    },
+                },
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { callback: (v) => v + ' €' },
+                    grid: { color: 'rgba(0,0,0,.06)' },
+                },
+                x: { grid: { display: false } },
+            },
+        },
+    });
+
+    opCharts[canvasId] = chart;
+    return chart;
+};
+
+// Nf: "Evolución del negocio" -- Facturación (barras, coloreadas por curso igual que en el
+// gráfico de rentabilidad) + Tique medio y Clientes activos (líneas). Los pills de este gráfico
+// (independientes de los de "rentabilidad") no solo ocultan los valores de un curso: quitan
+// también sus meses del eje X. Sin etiquetas fijas sobre el gráfico -- solo tooltip al pasar el
+// ratón, igual que el resto de gráficos de la página.
+window.renderNfEvolucionChart = function (canvasId, evolucion, cursoColorMap) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return null;
+
+    if (opCharts[canvasId]) {
+        opCharts[canvasId].destroy();
+    }
+
+    const colorTique    = '#3B6FA6'; // azul -- distinto de los colores de curso de las barras
+    const colorClientes = '#7B4FA0'; // morado
+
+    const labels          = evolucion.map((e) => e.ym);
+    const facturacionData = evolucion.map((e) => e.facturacion);
+    const tiqueData       = evolucion.map((e) => e.tiqueMedio);
+    const clientesData    = evolucion.map((e) => e.clientesActivos);
+    const coloresBarras   = evolucion.map((e) => cursoColorMap[e.curso] || '#E8987A');
+
+    const chart = new Chart(canvas, {
+        data: {
+            labels,
+            datasets: [
+                { type: 'bar', label: 'Facturación', data: facturacionData, backgroundColor: coloresBarras, yAxisID: 'y', order: 2, borderRadius: 3 },
+                { type: 'line', label: 'Tique medio', data: tiqueData, borderColor: colorTique, backgroundColor: colorTique, yAxisID: 'y1', order: 1, tension: 0.25, pointRadius: 3, spanGaps: false },
+                { type: 'line', label: 'Clientes activos', data: clientesData, borderColor: colorClientes, backgroundColor: colorClientes, yAxisID: 'y1', order: 1, tension: 0.25, pointRadius: 3, spanGaps: false },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: { padding: { top: 20 } },
+            // mode:'index' + intersect:false -- un único tooltip por mes con los 3 valores
+            // juntos (Facturación, Tique medio, Clientes activos), no uno distinto por
+            // barra/línea según a cuál se acerque el ratón.
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        boxWidth: 12,
+                        font: { size: 11.5 },
+                        // Facturación no tiene un color único (varía por curso, ya explicado por
+                        // las barras + los pills) -- solo tiene sentido un swatch de leyenda para
+                        // las dos líneas.
+                        filter: (item) => item.text !== 'Facturación',
+                    },
+                },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            if (ctx.parsed.y === null || ctx.parsed.y === undefined) return `${ctx.dataset.label}: sin datos`;
+                            if (ctx.dataset.label === 'Facturación') return `Facturación: ${ctx.parsed.y.toLocaleString('es-ES')} €`;
+                            if (ctx.dataset.label === 'Tique medio') return `Tique medio: ${ctx.parsed.y.toFixed(1)} €`;
+                            return `Clientes activos: ${ctx.parsed.y}`;
+                        },
+                    },
+                },
+            },
+            scales: {
+                y:  { beginAtZero: true, position: 'left',  grid: { color: 'rgba(0,0,0,.06)' }, ticks: { callback: (v) => v + ' €' } },
+                y1: { beginAtZero: true, position: 'right', grid: { display: false } },
+                x:  { grid: { display: false } },
+            },
+        },
+    });
+
+    opCharts[canvasId] = chart;
+    return chart;
+};
+
+// Nf "Marketing" -- reparto de clientes activos por género, anillo (doughnut).
+window.renderNfGeneroChart = function (canvasId, genero) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return null;
+    if (opCharts[canvasId]) opCharts[canvasId].destroy();
+
+    const orden = [
+        { key: 'M', label: 'M', color: '#B5439E' },
+        { key: 'H', label: 'H', color: '#3B6FA6' },
+        { key: 'B', label: '(En blanco)', color: '#D2A72C' },
+    ].filter((s) => genero[s.key] > 0);
+
+    const chart = new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+            labels: orden.map((s) => s.label),
+            datasets: [{ data: orden.map((s) => genero[s.key]), backgroundColor: orden.map((s) => s.color) }],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11.5 } } },
+                tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${ctx.parsed}` } },
+            },
+        },
+    });
+
+    opCharts[canvasId] = chart;
+    return chart;
+};
+
+// Nf "Marketing" -- histograma de edades (tramos de 5 años) de los clientes Fitness activos hoy,
+// apilado por género -- mismos colores que el gráfico de tarta de al lado.
+window.renderNfEdadesChart = function (canvasId, edades) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return null;
+    if (opCharts[canvasId]) opCharts[canvasId].destroy();
+
+    const chart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: edades.map((e) => e.label),
+            datasets: [
+                { label: 'M', data: edades.map((e) => e.M), backgroundColor: '#B5439E', stack: 'edad' },
+                { label: 'H', data: edades.map((e) => e.H), backgroundColor: '#3B6FA6', stack: 'edad' },
+                { label: '(En blanco)', data: edades.map((e) => e.B), backgroundColor: '#D2A72C', stack: 'edad' },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11.5 } } },
+                tooltip: { mode: 'index', intersect: false },
+            },
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: { stacked: true, grid: { display: false } },
+                y: { stacked: true, beginAtZero: true, grid: { color: 'rgba(0,0,0,.06)' } },
+            },
+        },
+    });
+
+    opCharts[canvasId] = chart;
+    return chart;
+};
+
+// Nf "Marketing" -- línea genérica con una serie por curso (reutilizada para "% hombres" y "edad
+// media"), mismo patrón de colores/pills que "Evolución de rentabilidad por hora".
+window.renderNfLineaCursoChart = function (canvasId, series, categorias, sufijo) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return null;
+    if (opCharts[canvasId]) opCharts[canvasId].destroy();
+
+    const datasets = series.map((s) => ({
+        label: s.label,
+        data: s.data,
+        borderColor: s.color,
+        backgroundColor: s.color,
+        tension: 0.25,
+        pointRadius: 3,
+        spanGaps: false,
+    }));
+
+    const chart = new Chart(canvas, {
+        type: 'line',
+        data: { labels: categorias, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11.5 } } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y === null ? 'sin datos' : ctx.parsed.y + sufijo}`,
+                    },
+                },
+            },
+            scales: {
+                y: { beginAtZero: false, grid: { color: 'rgba(0,0,0,.06)' }, ticks: { callback: (v) => v + sufijo } },
+                x: { grid: { display: false } },
+            },
+        },
+    });
+
+    opCharts[canvasId] = chart;
+    return chart;
+};
+
