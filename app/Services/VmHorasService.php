@@ -64,6 +64,18 @@ class VmHorasService
         return (int) date('N', strtotime($fecha)) >= 6; // 6=sábado, 7=domingo (ISO-8601)
     }
 
+    // Minutos esperados de un día de jornada completa según el contrato: horas_semana repartidas
+    // entre los días/turnos que trabaja a la semana (vm_contratos.dias_semana, 5 por defecto para
+    // la jornada partida habitual). Caso real que motivó el campo: Mykola Krupa, contrato de
+    // 3h/semana trabajadas en un único turno semanal (dias_semana=1) -- con el /5 fijo de antes,
+    // esperaba solo 0,6h ese día y contaba +2,4h de "extra" cada vez, aunque cumplía su contrato
+    // exacto.
+    public static function esperadoMinDia(object $contrato): int
+    {
+        $dias = (float) ($contrato->dias_semana ?: 5);
+        return (int) round(($contrato->horas_semana / $dias) * 60);
+    }
+
     // ── Cálculo HE diario (lógica compartida) ────────────────────────────────
 
     /**
@@ -87,7 +99,7 @@ class VmHorasService
 
         $heMin = null;
         if ($contrato && $contrato->horas_semana) {
-            $esperadoMin = (int) round(($contrato->horas_semana / 5) * 60);
+            $esperadoMin = self::esperadoMinDia($contrato);
             $dedPausa    = self::pausaDeducible($pMin, (float) $contrato->horas_semana);
 
             if ($isFestTrab && $tfMin !== null) {
@@ -176,7 +188,7 @@ class VmHorasService
             ->where('id_usuarios', $userId)
             ->where(function ($q) { $q->where('deleted', 0)->orWhereNull('deleted'); })
             ->orderBy('fecha_alta')
-            ->get(['fecha_alta', 'fecha_baja', 'horas_semana']);
+            ->get(['fecha_alta', 'fecha_baja', 'horas_semana', 'dias_semana']);
 
         $result = [];
         $cur    = new \DateTime($ms);
@@ -241,33 +253,48 @@ class VmHorasService
         $sede    = $usuario->sede ?? '';
         $esTurno = self::esDeptoTurno($userId);
 
+        // Saldo inicial de la migración desde el sistema anterior (ver reconciliación julio
+        // 2026): si está fijado, el histórico NO se reconstruye desde vm_fichaje antes de esa
+        // fecha (puede no tener datos completos de años anteriores) -- se parte del saldo ya
+        // conciliado contra el informe mensual firmado, y solo se suma lo que pase después.
+        $total = 0.0; // en MINUTOS -- igual que el resto de la función, se pasa a horas al final
+        $desde = null;
+        if ($usuario->saldo_horas_inicial !== null && $usuario->saldo_inicial_a_fecha !== null) {
+            $total = ((float) $usuario->saldo_horas_inicial) * 60;
+            $desde = $usuario->saldo_inicial_a_fecha;
+            if ($hasta <= $desde) {
+                return ['total' => (float) $usuario->saldo_horas_inicial, 'dias_fest' => 0.0, 'horas_resto' => 0.0];
+            }
+        }
+
         $contratos = DB::table('vm_contratos')
             ->where('id_usuarios', $userId)
             ->where(function ($q) { $q->where('deleted', 0)->orWhereNull('deleted'); })
             ->orderBy('fecha_alta')
-            ->get(['fecha_alta', 'fecha_baja', 'horas_semana']);
+            ->get(['fecha_alta', 'fecha_baja', 'horas_semana', 'dias_semana']);
 
-        $fichajes = DB::table('vm_fichaje')
+        $fichajesQuery = DB::table('vm_fichaje')
             ->where('control_user', $userId)
             ->where('deleted', 0)
             ->whereNotNull('hora_inicio')
-            ->where('fecha_fichaje', '<=', $hasta)
-            ->get(['fecha_fichaje', 'hora_inicio', 'hora_fin',
+            ->where('fecha_fichaje', '<=', $hasta);
+        if ($desde) $fichajesQuery->where('fecha_fichaje', '>', $desde);
+        $fichajes = $fichajesQuery->get(['fecha_fichaje', 'hora_inicio', 'hora_fin',
                    'pausa_inicio', 'pausa_fin', 'ajuste_he']);
 
-        $festivosHist = self::festivosSet($sede, '2000-01-01', $hasta);
+        $festivosHist = self::festivosSet($sede, $desde ? date('Y-m-d', strtotime("{$desde} +1 day")) : '2000-01-01', $hasta);
 
-        $descansosDias = DB::table('vm_horarios')
+        $descansosDiasQuery = DB::table('vm_horarios')
             ->where('id_usuario', $userId)
             ->where('tipo', 'descanso')
-            ->where('fecha', '<=', $hasta)
-            ->pluck('fecha')->flip()->all();
+            ->where('fecha', '<=', $hasta);
+        if ($desde) $descansosDiasQuery->where('fecha', '>', $desde);
+        $descansosDias = $descansosDiasQuery->pluck('fecha')->flip()->all();
 
         $esDescanso = fn(string $fecha) => $esTurno
             ? isset($descansosDias[$fecha])
             : ((int) date('N', strtotime($fecha)) >= 6); // 6=sábado, 7=domingo
 
-        $total      = 0.0;
         $festMin    = 0; // horas extra (con ajuste) de los días "Trab. fest." trabajados
         $trabajoMin = 0; // horas extra (con ajuste) de los días "Trabajo"/"Trab. desc."
         foreach ($fichajes as $f) {
@@ -287,7 +314,7 @@ class VmHorasService
             }
             if (!$contratoDia || !$contratoDia->horas_semana) continue;
 
-            $esperadoMin = (int) round(($contratoDia->horas_semana / 5) * 60);
+            $esperadoMin = self::esperadoMinDia($contratoDia);
             $diaMin = 0;
             if ($hasFin) {
                 $tf   = self::hmsToMinutes($f->hora_fin) - self::hmsToMinutes($f->hora_inicio);
@@ -332,7 +359,7 @@ class VmHorasService
                 if ($tieneF) continue;
                 foreach ($contratos as $c) {
                     if ($c->fecha_alta <= $fDate && (is_null($c->fecha_baja) || $c->fecha_baja >= $fDate)) {
-                        $total += (int) round(($c->horas_semana / 5) * 60);
+                        $total += self::esperadoMinDia($c);
                         break;
                     }
                 }
@@ -340,12 +367,13 @@ class VmHorasService
         }
 
         // Descontar días de compensación (cualquier tipo de ausencia de categoría 'C')
-        $compAus = DB::table('vm_ausencias')
+        $compAusQuery = DB::table('vm_ausencias')
             ->where('id_usuarios', $userId)
             ->where('tipo', 'ilike', 'comp%')
             ->where('fecha_fin', '<=', $hasta)
-            ->where(function ($q) { $q->where('deleted', 0)->orWhereNull('deleted'); })
-            ->get(['fecha_inicio', 'fecha_fin', 'tipo']);
+            ->where(function ($q) { $q->where('deleted', 0)->orWhereNull('deleted'); });
+        if ($desde) $compAusQuery->where('fecha_inicio', '>', $desde);
+        $compAus = $compAusQuery->get(['fecha_inicio', 'fecha_fin', 'tipo']);
 
         $compFestMin = 0; // horas descontadas específicamente por "Comp. festivo"
 
@@ -355,7 +383,7 @@ class VmHorasService
             while ($cur <= $lim) {
                 foreach ($contratos as $c) {
                     if ($c->fecha_alta <= $cur && (is_null($c->fecha_baja) || $c->fecha_baja >= $cur)) {
-                        $ded = (int) round(($c->horas_semana / 5) * 60);
+                        $ded = self::esperadoMinDia($c);
                         $total -= $ded;
                         if ($a->tipo === 'Comp. festivo') $compFestMin += $ded;
                         break;
@@ -376,7 +404,7 @@ class VmHorasService
         }
         $contratoRef ??= $contratos->last();
         $esperadoRefMin = ($contratoRef && $contratoRef->horas_semana)
-            ? (int) round(($contratoRef->horas_semana / 5) * 60)
+            ? self::esperadoMinDia($contratoRef)
             : 0;
 
         $diasFest = $esperadoRefMin > 0 ? round(($festMin - $compFestMin) / $esperadoRefMin, 1) : 0.0;

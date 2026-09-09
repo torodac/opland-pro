@@ -854,7 +854,7 @@ class InformeImputacionesController extends Controller
             ->where('id_usuarios', $userId)
             ->where(function ($q) { $q->where('deleted', 0)->orWhereNull('deleted'); })
             ->orderBy('fecha_alta')
-            ->get(['fecha_alta', 'fecha_baja', 'horas_semana']);
+            ->get(['fecha_alta', 'fecha_baja', 'horas_semana', 'dias_semana']);
 
         $dowLabels = ['D','L','M','X','J','V','S'];
         $dias = [];
@@ -1073,7 +1073,7 @@ class InformeImputacionesController extends Controller
                 $tCount++;
 
                 if ($contratoDia && $contratoDia->horas_semana) {
-                    $esperadoMin = (int) round(($contratoDia->horas_semana / 5) * 60);
+                    $esperadoMin = VmHorasService::esperadoMinDia($contratoDia);
                     if ($hasFin) {
                         $tf   = VmHorasService::hmsToMinutes($f->hora_fin) - VmHorasService::hmsToMinutes($f->hora_inicio);
                         $pMin = (($f->pausa_inicio ?? null) && ($f->pausa_fin ?? null))
@@ -1105,7 +1105,7 @@ class InformeImputacionesController extends Controller
                     if (!$esDescanso($fDate)) continue;
                     foreach ($contratos as $c) {
                         if ($c->fecha_alta <= $fDate && (is_null($c->fecha_baja) || $c->fecha_baja >= $fDate)) {
-                            $ep += (int) round(($c->horas_semana / 5) * 60);
+                            $ep += VmHorasService::esperadoMinDia($c);
                             break;
                         }
                     }
@@ -1132,7 +1132,7 @@ class InformeImputacionesController extends Controller
                     if ($cat === 'C') {
                         foreach ($contratos as $c) {
                             if ($c->fecha_alta <= $cur && (is_null($c->fecha_baja) || $c->fecha_baja >= $cur)) {
-                                $en -= (int) round(($c->horas_semana / 5) * 60);
+                                $en -= VmHorasService::esperadoMinDia($c);
                                 break;
                             }
                         }

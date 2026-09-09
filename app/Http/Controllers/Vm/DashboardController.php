@@ -571,7 +571,7 @@ class DashboardController extends Controller
                 ->where('fecha_alta', '<=', $hoy)
                 ->where(function ($q) { $q->where('deleted', 0)->orWhereNull('deleted'); })
                 ->orderByDesc('fecha_alta')
-                ->first(['horas_semana']);
+                ->first(['horas_semana', 'dias_semana']);
 
             $ini   = strtotime($fichaje->hora_inicio);
             $fin   = strtotime($fichaje->hora_fin);

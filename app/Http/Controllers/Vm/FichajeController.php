@@ -509,10 +509,10 @@ class FichajeController extends Controller
             })
             ->where(function ($q) { $q->where('deleted', 0)->orWhereNull('deleted'); })
             ->orderByDesc('fecha_alta')
-            ->first(['fecha_alta', 'fecha_baja', 'horas_semana']);
+            ->first(['fecha_alta', 'fecha_baja', 'horas_semana', 'dias_semana']);
 
         $esperadoMin = $contrato?->horas_semana
-            ? (int) round(($contrato->horas_semana / 5) * 60)
+            ? VmHorasService::esperadoMinDia($contrato)
             : null;
 
         $dedPausa = ($contrato && $pMin !== null)

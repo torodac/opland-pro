@@ -29,6 +29,18 @@ Schedule::command('vm:generar-tarea-informes-rrhh')->dailyAt('06:30')->withoutOv
 // ya puedan cruzarse sin esperar a la ejecución siguiente.
 Schedule::command('breezeway:sync-properties')->dailyAt('07:15')->withoutOverlapping();
 
+// Trae las tareas de Breezeway (limpieza/mantenimiento) de cada propiedad con
+// breezeway_home_id -- antes vivía solo en el crontab del sistema (usuario ubuntu), movida aquí
+// para que quede junto al resto del scheduling de la app y sea visible con `schedule:list`.
+Schedule::command('breezeway:sync-tasks')->hourlyAt(0)->between('08:00', '20:00')->withoutOverlapping()
+    ->appendOutputTo(storage_path('logs/breezeway-sync-tasks.log'));
+
+// Revisa storage/logs/laravel.log en busca de ERROR/WARNING del día anterior (de cualquier
+// comando -- todos pasan por el mismo canal de log) y envía un correo si encuentra alguno. A las
+// 07:45, después de icnea:sync-importes (06:00), vm:generar-tarea-informes-rrhh (06:30),
+// icnea:sync-pro (07:00, cron de sistema) y breezeway:sync-properties (07:15).
+Schedule::command('admin:informe-fallos-diario')->dailyAt('07:45')->withoutOverlapping();
+
 // Cierra automáticamente los fichajes del día anterior que siguen abiertos
 Schedule::call(function () {
     // Se ejecuta a las 08:00 — procesa fichajes del día anterior
@@ -83,7 +95,7 @@ Schedule::call(function () {
 
         DB::table('vm_fichaje')
             ->where('id', $fichaje->id)
-            ->update(['hora_fin' => $horaFin, 'hora_fin_auto' => $horaFin, 'updatedat' => now()]);
+            ->update(['hora_fin' => $horaFin, 'updatedat' => now()]);
 
         // Notificación push
         foreach (DB::table('vm_push_subscriptions')->where('id_usuario', $fichaje->control_user)->get() as $sub) {
@@ -123,7 +135,7 @@ Schedule::call(function () {
 
         DB::table('vm_fichaje')
             ->where('id', $fichaje->id)
-            ->update(['pausa_fin' => $pausaFin, 'pausa_fin_auto' => $pausaFin, 'updatedat' => now()]);
+            ->update(['pausa_fin' => $pausaFin, 'updatedat' => now()]);
     }
 
     foreach ($webPush->flush() as $report) {
