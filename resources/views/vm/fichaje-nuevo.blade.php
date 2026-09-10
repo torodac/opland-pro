@@ -34,7 +34,7 @@
 
     <div class="form-row">
       <label class="form-label">Entrada</label>
-      <input type="time" name="hora_inicio" value="{{ old('hora_inicio') }}">
+      <input type="time" name="hora_inicio" value="{{ old('hora_inicio') }}" required>
     </div>
 
     <div class="form-row">
@@ -50,16 +50,6 @@
     <div class="form-row">
       <label class="form-label">Salida</label>
       <input type="time" name="hora_fin" value="{{ old('hora_fin') }}">
-    </div>
-
-    <div class="form-check">
-      <input type="checkbox" id="festivo" name="festivo" value="1" @checked(old('festivo'))>
-      <label for="festivo" style="font-size:13px">Festivo trabajado</label>
-    </div>
-
-    <div class="form-check">
-      <input type="checkbox" id="fuera_de_turno" name="fuera_de_turno" value="1" @checked(old('fuera_de_turno'))>
-      <label for="fuera_de_turno" style="font-size:13px">Fuera de turno</label>
     </div>
 
     <div class="form-row">

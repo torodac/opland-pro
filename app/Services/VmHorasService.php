@@ -90,19 +90,25 @@ class VmHorasService
         ?object $contrato,
         bool $isFestivo,
         bool $isFestTrab,
-        bool $hasFichaje,
         bool $isDescanso,
         int $ajusteMin = 0,
         bool $esTurno = false
     ): ?int {
         $isCompensacion = $tipoAusencia && self::categoriaAusencia($tipoAusencia) === 'C';
 
+        // "Trabajado" de verdad significa horas fichadas reales (tfMin), no solo que exista una
+        // fila en vm_fichaje -- una fila sin hora_inicio/hora_fin (p.ej. festivo que cae en el
+        // descanso asignado, sin fichar) no debe tratarse como festivo trabajado, o el bono de
+        // abajo se suprime sin motivo y ese día se queda sin las horas extra que le corresponden.
+        $trabajoFestivoReal = $isFestTrab && $tfMin !== null;
+        $huboFichajeReal    = $tfMin !== null;
+
         $heMin = null;
         if ($contrato && $contrato->horas_semana) {
             $esperadoMin = self::esperadoMinDia($contrato);
             $dedPausa    = self::pausaDeducible($pMin, (float) $contrato->horas_semana);
 
-            if ($isFestTrab && $tfMin !== null) {
+            if ($trabajoFestivoReal) {
                 // Festivo trabajado: la extra es siempre la jornada diaria del contrato, no el
                 // tiempo realmente fichado ese día.
                 $heMin = $esperadoMin;
@@ -115,13 +121,13 @@ class VmHorasService
             // Bono: trabajar un festivo o un día de descanso (real horario si es de turnos, o
             // sábado/domingo si no) cuenta siempre como extra completo -- la resta de esperado en
             // la rama normal + este bono dan el resultado correcto por cancelación algebraica, sin
-            // necesitar una rama propia. Sin fichaje, solo si coinciden festivo Y descanso a la vez
-            // (recuperar un festivo que cae en tu día libre) -- y solo para departamentos con
-            // horario visible (vm_departamentos.visible_horarios): para el resto, un festivo que
-            // cae en fin de semana no genera nada, ya que su descanso por defecto ya es ese mismo
-            // fin de semana sin que exista un horario real detrás.
-            $bono = $hasFichaje
-                ? ($isFestivo || $isDescanso) && !$isFestTrab
+            // necesitar una rama propia. Sin fichaje real, solo si coinciden festivo Y descanso a
+            // la vez (recuperar un festivo que cae en tu día libre) -- y solo para departamentos
+            // con horario visible (vm_departamentos.visible_horarios): para el resto, un festivo
+            // que cae en fin de semana no genera nada, ya que su descanso por defecto ya es ese
+            // mismo fin de semana sin que exista un horario real detrás.
+            $bono = $huboFichajeReal
+                ? ($isFestivo || $isDescanso) && !$trabajoFestivoReal
                 : ($esTurno && $isFestivo && $isDescanso);
             if ($bono) {
                 $heMin = ($heMin ?? 0) + $esperadoMin;
@@ -224,7 +230,6 @@ class VmHorasService
                 $contratoDia,
                 isset($festivosDia[$fecha]),
                 isset($festivosDia[$fecha]) && (bool) $f,
-                (bool) $f,
                 self::esDescansoEfectivo($fecha, $hor->tipo ?? null, $esTurno),
                 (int) ($f->ajuste_he ?? 0),
                 $esTurno
@@ -349,9 +354,11 @@ class VmHorasService
 
         // Bono festivo por días de descanso en festivo (sin fichaje) -- las horas de contrato del
         // día, no un fijo de 8h (relevante para contratos con jornada diaria distinta de 8h).
-        // Solo para departamentos con horario visible (visible_horarios): para el resto, un
-        // festivo en fin de semana no genera nada (su descanso por defecto ya es ese fin de
-        // semana, sin un horario real detrás).
+        // Cuenta también como día de festivo en el desglose $festMin (dias_fest), igual que un
+        // "Trab. fest." -- si no, el totalizador de saldo suma las horas pero el desglose por
+        // días de festivo no las refleja. Solo para departamentos con horario visible
+        // (visible_horarios): para el resto, un festivo en fin de semana no genera nada (su
+        // descanso por defecto ya es ese fin de semana, sin un horario real detrás).
         if ($esTurno) {
             foreach ($festivosHist as $fDate => $_) {
                 if (!$esDescanso($fDate)) continue;
@@ -359,7 +366,9 @@ class VmHorasService
                 if ($tieneF) continue;
                 foreach ($contratos as $c) {
                     if ($c->fecha_alta <= $fDate && (is_null($c->fecha_baja) || $c->fecha_baja >= $fDate)) {
-                        $total += self::esperadoMinDia($c);
+                        $bonoMin = self::esperadoMinDia($c);
+                        $total  += $bonoMin;
+                        $festMin += $bonoMin;
                         break;
                     }
                 }

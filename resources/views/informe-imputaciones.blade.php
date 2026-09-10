@@ -445,7 +445,7 @@ function firmarPaso(url, confirmMsg) {
                     elseif ($dia['tipo'])            $badges[] = [$dia['tipo']->nombre, tipoColor($dia['tipo']->nombre, $tipo_color)];
                     elseif ($dia['entrada'])         $badges[] = ['Trabajo', $color_trabajo];
                     elseif ($dia['is_festivo'])      $badges[] = ['Festivo', '#ffe0e0', '#cc0000'];
-                    if ($es_turno && $dia['es_descanso_efectivo'] && !$trabajaFestivo && !$trabajaDescanso) $badges[] = ['Descanso', '#F3F4F6', '#6B7280'];
+                    if ($es_turno && $dia['es_descanso_efectivo'] && !$trabajaFestivo && !$trabajaDescanso && !$dia['is_rotatorio']) $badges[] = ['Descanso', '#F3F4F6', '#6B7280'];
                     $conflicto = count($badges) > 1;
                 @endphp
                 <tr class="{{ $dia['weekend'] ? 'weekend' : '' }}" @if($conflicto) style="background:#ffff00;" @endif>

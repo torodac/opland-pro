@@ -596,7 +596,6 @@ class DashboardController extends Controller
                 contrato:     $contrato,
                 isFestivo:    $esFestivo,
                 isFestTrab:   $esFestivo, // festivo trabajado = vm_festivos, ya no depende de vm_fichaje.festivo
-                hasFichaje:   true,
                 isDescanso:   VmHorasService::esDescansoEfectivo($hoy, $horario, VmHorasService::esDeptoTurno($user->id)),
                 esTurno:      VmHorasService::esDeptoTurno($user->id),
             );

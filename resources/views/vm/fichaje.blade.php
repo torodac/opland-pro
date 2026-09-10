@@ -229,16 +229,6 @@ a.imp-row:hover{background:rgba(0,0,0,.03)}
                max="{{ now()->toDateString() }}"
                @if(!($puedeSinLimiteFecha ?? false)) min="{{ now()->subDays(2)->toDateString() }}" @endif>
       </div>
-      <div style="grid-column:1/-1;display:flex;gap:20px;margin-top:4px">
-        <label class="toggle-wrap">
-          <span class="toggle"><input type="checkbox" id="e-festivo" {{ $fichaje->festivo ? 'checked' : '' }}><span class="toggle-slider"></span></span>
-          <span class="toggle-lbl">Festivo trabajado</span>
-        </label>
-        <label class="toggle-wrap">
-          <span class="toggle"><input type="checkbox" id="e-fuera_de_turno" {{ $fichaje->fuera_de_turno ? 'checked' : '' }}><span class="toggle-slider"></span></span>
-          <span class="toggle-lbl">Fuera de turno</span>
-        </label>
-      </div>
     </div>
   </div>
   <div id="v-badges" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
@@ -302,7 +292,7 @@ a.imp-row:hover{background:rgba(0,0,0,.03)}
       ] as [$lbl,$col])
         <div>
           <div style="font-size:11px;color:#999;margin-bottom:4px">{{ $lbl }}</div>
-          <input type="time" id="e-{{ $col }}" class="f-input f-time" value="{{ $fichaje->$col ? substr($fichaje->$col,0,5) : '' }}">
+          <input type="time" id="e-{{ $col }}" class="f-input f-time" value="{{ $fichaje->$col ? substr($fichaje->$col,0,5) : '' }}" @if($col === 'hora_inicio') required @endif>
         </div>
       @endforeach
     </div>
@@ -609,8 +599,6 @@ async function guardar() {
     hora_fin_auto:   val('e-hora_fin_auto')  || null,
     pausa_ini_auto:  val('e-pausa_ini_auto') || null,
     pausa_fin_auto:  val('e-pausa_fin_auto') || null,
-    festivo:         chk('e-festivo'),
-    fuera_de_turno:  chk('e-fuera_de_turno'),
     validado:        chk('e-validado'),
     km:              val('e-km')             || null,
     trayecto:        val('e-trayecto')       || null,

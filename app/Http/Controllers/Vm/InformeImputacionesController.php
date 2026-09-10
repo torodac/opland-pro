@@ -895,13 +895,14 @@ class InformeImputacionesController extends Controller
             // Festivo trabajado y "rotatorio" ya no dependen de los checkboxes manuales
             // vm_fichaje.festivo/fuera_de_turno (sustituidos por vm_festivos y el horario real):
             // festivo trabajado = hay fichaje y el día es festivo según vm_festivos; rotatorio =
-            // ese festivo trabajado coincide además con el día de descanso asignado.
+            // ese día es festivo Y coincide con el descanso asignado (independiente de si hay
+            // fichaje: es un atributo del horario, no de si se trabajó o no).
             $isFestTrab  = $isFestivo && (bool) $f;
-            $isRotatorio = $isFestTrab && $isDescansoEf;
+            $isRotatorio = $isFestivo && $isDescansoEf;
 
             $heMin = VmHorasService::calcularHeDia(
                 $tfMin, $pMin, $tipoObj?->nombre ?? null, $contratoDia,
-                $isFestivo, $isFestTrab, (bool) $f,
+                $isFestivo, $isFestTrab,
                 $isDescansoEf,
                 (int) ($f?->ajuste_he ?? 0),
                 $esTurno

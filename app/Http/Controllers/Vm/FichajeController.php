@@ -171,7 +171,9 @@ class FichajeController extends Controller
                 $entrada        = $f && $f->hora_inicio;
                 $isDescansoEf   = VmHorasService::esDescansoEfectivo($fecha, $hor->tipo ?? null, $esTurno);
                 $isFestTrab     = $isFestivo && (bool) $f;
-                $isRotatorio    = $isFestTrab && $isDescansoEf;
+                // Rotatorio es un atributo del horario (festivo que coincide con el descanso
+                // asignado), no de si hubo fichaje ese día — ver InformeImputacionesController.
+                $isRotatorio    = $isFestivo && $isDescansoEf;
                 $trabajaFestivo  = $entrada && $isFestivo;
                 $trabajaDescanso = $entrada && $isDescansoEf && !$isFestivo;
 
@@ -189,7 +191,7 @@ class FichajeController extends Controller
                 } elseif ($isFestivo) {
                     $badges->push(['Festivo', '#ffe0e0', '#cc0000']);
                 }
-                if ($esTurno && $isDescansoEf && !$trabajaFestivo && !$trabajaDescanso) {
+                if ($esTurno && $isDescansoEf && !$trabajaFestivo && !$trabajaDescanso && !$isRotatorio) {
                     $badges->push(['Descanso', '#F3F4F6', '#6B7280']);
                 }
 
@@ -380,7 +382,7 @@ class FichajeController extends Controller
         $data = $request->validate([
             'control_user'   => 'required|integer',
             'fecha_fichaje'  => 'required|date',
-            'hora_inicio'    => 'nullable|date_format:H:i',
+            'hora_inicio'    => 'required|date_format:H:i',
             'hora_fin'       => 'nullable|date_format:H:i',
             'pausa_inicio'   => 'nullable|date_format:H:i',
             'pausa_fin'      => 'nullable|date_format:H:i',
@@ -538,7 +540,6 @@ class FichajeController extends Controller
             $tfMin, $pMin, null, $contrato,
             $isFestivo,
             $isFestivo, // festivo trabajado = vm_festivos, ya no depende de vm_fichaje.festivo
-            $tfMin !== null,
             VmHorasService::esDescansoEfectivo($fichaje->fecha_fichaje, $horario->tipo ?? null, $esTurno),
             (int) ($fichaje->ajuste_he ?? 0),
             $esTurno
@@ -589,7 +590,7 @@ class FichajeController extends Controller
         $data = $request->validate([
             'control_user'   => 'required|integer',
             'fecha_fichaje'  => 'required|date',
-            'hora_inicio'    => 'nullable|date_format:H:i',
+            'hora_inicio'    => 'required|date_format:H:i',
             'hora_fin'       => 'nullable|date_format:H:i',
             'pausa_inicio'   => 'nullable|date_format:H:i',
             'pausa_fin'      => 'nullable|date_format:H:i',
