@@ -125,7 +125,11 @@ class VmHorasService
             // la vez (recuperar un festivo que cae en tu día libre) -- y solo para departamentos
             // con horario visible (vm_departamentos.visible_horarios): para el resto, un festivo
             // que cae en fin de semana no genera nada, ya que su descanso por defecto ya es ese
-            // mismo fin de semana sin que exista un horario real detrás.
+            // mismo fin de semana sin que exista un horario real detrás. En ambos casos, el bono
+            // son las horas de contrato del día (no un fijo de 8h para todos): las horas extra no
+            // pueden superar lo que esa persona trabajaría en un día completo según su propio
+            // contrato. El "día completo" fijo solo aplica al CONTADOR de días de festivo del
+            // saldo histórico (ver saldoAcumuladoHoras/$diasFestCount), no a las horas.
             $bono = $huboFichajeReal
                 ? ($isFestivo || $isDescanso) && !$trabajoFestivoReal
                 : ($esTurno && $isFestivo && $isDescanso);
@@ -247,9 +251,10 @@ class VmHorasService
      * Saldo de horas extra acumulado hasta una fecha, para toda la vida laboral del usuario --
      * misma lógica que el "Σ horas extra" del informe mensual (antes duplicada allí).
      *
-     * Devuelve ['total' => saldo histórico real (horas), 'dias_fest' => (horas de "Trab. fest."
-     * menos las compensadas con "Comp. festivo") / horas de contrato, en días con 1 decimal --
-     * puede salir negativo si se ha compensado de más, o fraccionario si no es un día completo.
+     * Devuelve ['total' => saldo histórico real (horas), 'dias_fest' => nº de festivos
+     * trabajados/Desc.Fest. menos los ya compensados con "Comp. festivo", en días ENTEROS
+     * (independiente de las horas de contrato de cada día -- un festivo siempre cuenta como 1
+     * día) -- puede salir negativo si se ha compensado de más.
      * 'horas_resto' => suma de horas extra de los días "Trabajo" + "Trab. desc." (no festivo)]
      */
     public static function saldoAcumuladoHoras(int $userId, string $hasta): array
@@ -300,8 +305,10 @@ class VmHorasService
             ? isset($descansosDias[$fecha])
             : ((int) date('N', strtotime($fecha)) >= 6); // 6=sábado, 7=domingo
 
-        $festMin    = 0; // horas extra (con ajuste) de los días "Trab. fest." trabajados
-        $trabajoMin = 0; // horas extra (con ajuste) de los días "Trabajo"/"Trab. desc."
+        $trabajoMin    = 0; // horas extra (con ajuste) de los días "Trabajo"/"Trab. desc."
+        $diasFestCount = 0; // nº de festivos trabajados/Desc.Fest., en días ENTEROS (no minutos) --
+                             // es lo que alimenta dias_fest, independiente de las horas de contrato
+                             // de cada día (un festivo siempre es 1 día, tenga el contrato que tenga).
         foreach ($fichajes as $f) {
             $hasFin = !empty($f->hora_fin);
             $isFestivo   = isset($festivosHist[$f->fecha_fichaje]);
@@ -344,7 +351,7 @@ class VmHorasService
             // (normal o descanso trabajado) -> bloque "Trabajo"/"Trab. desc.".
             $trabajaFestivo = $hasFin && ($isFest || $isFestivo);
             if ($trabajaFestivo) {
-                $festMin += $diaTotal;
+                $diasFestCount++;
             } elseif ($hasFin) {
                 $trabajoMin += $diaTotal;
             }
@@ -353,12 +360,12 @@ class VmHorasService
         }
 
         // Bono festivo por días de descanso en festivo (sin fichaje) -- las horas de contrato del
-        // día, no un fijo de 8h (relevante para contratos con jornada diaria distinta de 8h).
-        // Cuenta también como día de festivo en el desglose $festMin (dias_fest), igual que un
-        // "Trab. fest." -- si no, el totalizador de saldo suma las horas pero el desglose por
-        // días de festivo no las refleja. Solo para departamentos con horario visible
-        // (visible_horarios): para el resto, un festivo en fin de semana no genera nada (su
-        // descanso por defecto ya es ese fin de semana, sin un horario real detrás).
+        // día (no un fijo de 8h: las horas extra no pueden superar la jornada real de esa
+        // persona), pero cuenta como 1 día ENTERO en $diasFestCount sea cual sea esa jornada --
+        // el contador de días de festivo no debe depender de las horas de contrato de cada uno.
+        // Solo para departamentos con horario visible (visible_horarios): para el resto, un
+        // festivo en fin de semana no genera nada (su descanso por defecto ya es ese fin de
+        // semana, sin un horario real detrás).
         if ($esTurno) {
             foreach ($festivosHist as $fDate => $_) {
                 if (!$esDescanso($fDate)) continue;
@@ -368,7 +375,7 @@ class VmHorasService
                     if ($c->fecha_alta <= $fDate && (is_null($c->fecha_baja) || $c->fecha_baja >= $fDate)) {
                         $bonoMin = self::esperadoMinDia($c);
                         $total  += $bonoMin;
-                        $festMin += $bonoMin;
+                        $diasFestCount++;
                         break;
                     }
                 }
@@ -384,7 +391,7 @@ class VmHorasService
         if ($desde) $compAusQuery->where('fecha_inicio', '>', $desde);
         $compAus = $compAusQuery->get(['fecha_inicio', 'fecha_fin', 'tipo']);
 
-        $compFestMin = 0; // horas descontadas específicamente por "Comp. festivo"
+        $compFestDiasCount = 0; // nº de días descontados específicamente por "Comp. festivo", en días ENTEROS
 
         foreach ($compAus as $a) {
             $cur = $a->fecha_inicio;
@@ -392,9 +399,8 @@ class VmHorasService
             while ($cur <= $lim) {
                 foreach ($contratos as $c) {
                     if ($c->fecha_alta <= $cur && (is_null($c->fecha_baja) || $c->fecha_baja >= $cur)) {
-                        $ded = self::esperadoMinDia($c);
-                        $total -= $ded;
-                        if ($a->tipo === 'Comp. festivo') $compFestMin += $ded;
+                        $total -= self::esperadoMinDia($c);
+                        if ($a->tipo === 'Comp. festivo') $compFestDiasCount++;
                         break;
                     }
                 }
@@ -402,21 +408,11 @@ class VmHorasService
             }
         }
 
-        // Días de contrato de referencia para expresar el saldo de festivos en "días": el vigente
-        // a la fecha del corte, o el último conocido si a esa fecha no hay ninguno activo.
-        $contratoRef = null;
-        foreach ($contratos as $c) {
-            if ($c->fecha_alta <= $hasta && (is_null($c->fecha_baja) || $c->fecha_baja >= $hasta)) {
-                $contratoRef = $c;
-                break;
-            }
-        }
-        $contratoRef ??= $contratos->last();
-        $esperadoRefMin = ($contratoRef && $contratoRef->horas_semana)
-            ? self::esperadoMinDia($contratoRef)
-            : 0;
-
-        $diasFest = $esperadoRefMin > 0 ? round(($festMin - $compFestMin) / $esperadoRefMin, 1) : 0.0;
+        // Contador de días de festivo pendientes: festivos trabajados/Desc.Fest. menos los ya
+        // compensados con "Comp. festivo", en días ENTEROS -- no una división de minutos entre
+        // una jornada de referencia, que daba fracciones raras (p.ej. 0,75 días) cuando el
+        // contrato de la persona cambiaba de horas entre el festivo y la fecha de corte.
+        $diasFest = $diasFestCount - $compFestDiasCount;
 
         return [
             'total'       => $total / 60,

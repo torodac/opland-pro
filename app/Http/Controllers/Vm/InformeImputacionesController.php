@@ -964,7 +964,9 @@ class InformeImputacionesController extends Controller
         ];
     }
 
-    // Lista, en orden cronológico, los festivos trabajados del año emparejados posicionalmente
+    // Lista, en orden cronológico, los festivos trabajados del año -- más los "Desc. Fest."
+    // (festivo que coincide con el descanso asignado, genera el mismo bono de horas extra aunque
+    // no haya fichaje real, ver VmHorasService::calcularHeDia) -- emparejados posicionalmente
     // (1º con 1º, 2º con 2º...) con los días de "Comp. festivo" tomados ese mismo año. No hay
     // vínculo real festivo↔compensación en la base de datos, así que un festivo puede quedar sin
     // compensación a la derecha (aún no descansado) o una compensación sin festivo a la izquierda
@@ -975,17 +977,36 @@ class InformeImputacionesController extends Controller
         $hasta = "{$year}-12-31";
 
         $festivosYear = VmHorasService::festivosSet($sede, $desde, $hasta);
+        $esTurno      = VmHorasService::esDeptoTurno($userId);
 
         $festivosTrabajados = DB::table('vm_fichaje')
             ->where('control_user', $userId)
             ->where('deleted', 0)
             ->whereNotNull('hora_fin')
             ->whereIn('fecha_fichaje', array_keys($festivosYear))
-            ->orderBy('fecha_fichaje')
             ->pluck('fecha_fichaje')
             ->map(fn($d) => (string) $d)
-            ->values()
             ->all();
+
+        // Desc. Fest.: solo genera bono (y por tanto entra en la cola a compensar) para
+        // departamentos con horario real (visible_horarios) -- para el resto, un festivo en fin
+        // de semana no genera nada, ver el mismo criterio en VmHorasService::calcularHeDia.
+        if ($esTurno) {
+            $horarioDia = DB::table('vm_horarios')
+                ->where('id_usuario', $userId)
+                ->whereIn('fecha', array_keys($festivosYear))
+                ->get(['fecha', 'tipo'])
+                ->keyBy('fecha');
+
+            foreach (array_keys($festivosYear) as $fecha) {
+                $horTipo = $horarioDia->get($fecha)?->tipo;
+                if (VmHorasService::esDescansoEfectivo($fecha, $horTipo, $esTurno)) {
+                    $festivosTrabajados[] = $fecha;
+                }
+            }
+        }
+
+        $festivosTrabajados = collect($festivosTrabajados)->unique()->sort()->values()->all();
 
         $compensaciones = DB::table('vm_ausencias')
             ->where('id_usuarios', $userId)
