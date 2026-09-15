@@ -917,6 +917,7 @@ new Chart(document.getElementById('salario-chart'), {
 
 const AUSENCIAS  = {!! $ausenciasJs !!};
 const FESTIVOS   = new Set({!! $festivos !!});
+const DESC_FESTIVOS = new Set({!! $descFestivos !!});
 const EXCL_FINDE = !['Mantenimiento','Limpiadora'].includes('{{ $usuario->cargo }}');
 let filtroTipo = null;
 let calYear    = {{ now()->year }};
@@ -1252,15 +1253,21 @@ function renderHorarioGrid(year) {
             const h = horMap[fecha];
             const fichDia = FICHAJES[fecha] ?? null;
 
-            // Color de fondo: festivo trabajado > ausencia > horario > vacío -- la ausencia es la
-            // fuente de verdad del tipo real (igual que en la vista de planificación semanal,
+            // Color de fondo: Desc. Fest. > festivo trabajado > ausencia > horario > vacío --
+            // mismo orden de prioridad que los badges del informe mensual (ver
+            // informe-imputaciones.blade.php): "Desc. Fest." (festivo que coincide con el
+            // descanso asignado, independiente de si hubo fichaje) va primero porque es un hecho
+            // del horario, no del día trabajado; la ausencia es la fuente de verdad del tipo real
+            // en el resto de casos (igual que en la vista de planificación semanal,
             // horario.blade.php, donde también gana sobre el horario planificado); un festivo
-            // trabajado se destaca con un azul más intenso que el "Trabajo" normal, tanto si
-            // coincide con turno como si era su día de descanso (rotatorio).
+            // trabajado se destaca con un azul más intenso que el "Trabajo" normal.
             let bg = null, col = null, titleParts = [];
             const ausDelDia = AUSENCIAS.find(a => fecha >= a.desde && fecha <= a.hasta) || null;
             const esFestTrab = !!fichDia && FESTIVOS.has(fecha);
-            if (esFestTrab) {
+            if (DESC_FESTIVOS.has(fecha)) {
+                [bg, col] = ['#6f42c1', '#fff'];
+                titleParts.push('Desc. Fest.');
+            } else if (esFestTrab) {
                 [bg, col] = ['#93C5FD', '#1E3A8A'];
                 titleParts.push('Trab. fest.');
             } else if (ausDelDia) {

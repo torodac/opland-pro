@@ -49,7 +49,7 @@ class VmUsuarioController extends Controller
             ->orderByDesc('fecha_inicio')
             ->get();
 
-        $festivos = DB::table('vm_festivos')
+        $festivosArr = DB::table('vm_festivos')
             ->where('deleted', 0)
             ->where(function ($q) use ($usuario) {
                 $q->whereNull('sede')
@@ -58,8 +58,8 @@ class VmUsuarioController extends Controller
             })
             ->pluck('fecha_fecha')
             ->map(fn($f) => substr($f, 0, 10))
-            ->values()
-            ->toJson();
+            ->values();
+        $festivos = $festivosArr->toJson();
 
         $nominas = DB::table('vm_nominas')
             ->where('id_usuario', $id)
@@ -97,6 +97,21 @@ class VmUsuarioController extends Controller
         $horarios = DB::table('vm_horarios')
             ->where('id_usuario', $id)
             ->get(['fecha', 'tipo', 'hora_inicio', 'hora_fin']);
+
+        // "Desc. Fest.": festivo que coincide con el descanso asignado (independiente de si hubo
+        // fichaje, ver VmHorasService::calcularHeDia) -- para pintarlo distinto en el Horario
+        // anual. Solo aplica a departamentos con horario visible, igual criterio que el bono.
+        $descFestivos = [];
+        if (VmHorasService::esDeptoTurno($id)) {
+            $horarioPorFecha = $horarios->keyBy('fecha');
+            foreach ($festivosArr as $fecha) {
+                $horTipo = $horarioPorFecha->get($fecha)?->tipo;
+                if (VmHorasService::esDescansoEfectivo($fecha, $horTipo, true)) {
+                    $descFestivos[] = $fecha;
+                }
+            }
+        }
+        $descFestivos = json_encode(array_values($descFestivos));
 
         $fichajes = DB::table('vm_fichaje')
             ->where('control_user', $id)
@@ -173,7 +188,7 @@ class VmUsuarioController extends Controller
 
         return view('vm.usuario', compact(
             'project','usuario','contratos','ausencias','nominas',
-            'bonus','ausenciasPorTipo','roles','departamentos','cargos','horarios','fichajes','tiposAusencia','festivos',
+            'bonus','ausenciasPorTipo','roles','departamentos','cargos','horarios','fichajes','tiposAusencia','festivos','descFestivos',
             'pushInactivo','diasHe','imputacionesPorFecha','fichadosPorFecha','ajustesHe',
             'horasConvenioAnio','horasConvenioHoyAnio','diasVacacionesCorrespondenAnio'
         ));
