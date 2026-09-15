@@ -36,6 +36,8 @@ function horarioCellHtml($h, bool $isFest = false): string {
     return "<span class=\"hc hc-{$h->tipo}\">{$lbl}</span>";
 }
 
+// Solo se usa cuando NO hay ningún horario (turno/descanso/...) puesto ese día -- si lo hay,
+// tiene prioridad y esta función ni se llama (ver el bucle de celdas más abajo).
 function ausenciaCellHtml(string $tipo): string {
     $t = mb_strtolower($tipo);
     $cls = 'hc-aus';
@@ -85,6 +87,10 @@ function ausenciaCellHtml(string $tipo): string {
 .hor-table td.cell-fest { background:#fff5f5; }
 .hor-table td.cell-edit { cursor:pointer; }
 .hor-table td.cell-edit:hover { background:#EFF6FF; }
+/* Ausencia registrada ese día -- mismo amarillo de conflicto que usa el informe mensual. El
+   horario (turno/descanso) sigue siendo el badge visible y editable; esto solo lo señala. */
+.hor-table td.cell-ausencia { background:#ffff00; }
+.hor-table td.cell-ausencia.cell-edit:hover { background:#fff44d; }
 
 /* La columna Usuario es la primera de la tabla, justo al lado del sidebar -- el tooltip por
    defecto se centra sobre el elemento y su mitad izquierda queda tapada por el sidebar. Aquí se
@@ -211,27 +217,46 @@ $deptLabel = $dept->nombre ?: 'Sin departamento';
                     $isFest = isset($festivosMap[$ds]);
                     $ausencia = $ausenciasMap[$u->id][$ds] ?? null;
                     $horario  = $horariosMap[$u->id . '_' . $ds] ?? null;
-                    $editable = !$ausencia && !$pastBlocked;
+                    // Si hay horario (turno/descanso/...), tiene prioridad de visualización sobre
+                    // la ausencia y sigue siendo editable/borrable -- la ausencia solo se señala
+                    // con el mismo amarillo de conflicto del informe mensual, y solo si de verdad
+                    // discrepan (horario="vacaciones" + ausencia="Vacaciones" no avisa de nada).
+                    // Si NO hay horario puesto ese día pero sí hay ausencia, no hay nada que
+                    // priorizar: se muestra la ausencia tal cual, en solo lectura (no tiene sentido
+                    // dejar fichar un horario debajo de una ausencia ya registrada sin más contexto).
+                    $mostrarSoloAusencia = $ausencia && !$horario;
+                    $editable  = !$pastBlocked && !$mostrarSoloAusencia;
+                    $mismoTipo = $ausencia && $horario && ($tipoLabels[$horario->tipo] ?? null) === $ausencia;
                     $tdCls  = 'cell-' . ($editable ? 'edit' : 'readonly');
                     $tdCls .= $isWk   ? ' cell-wk'   : '';
                     $tdCls .= $isFest ? ' cell-fest'  : '';
+                    $tdCls .= ($horario && $ausencia && !$mismoTipo) ? ' cell-ausencia' : '';
                 @endphp
-                @if($ausencia)
-                    <td class="{{ $tdCls }}">{!! ausenciaCellHtml($ausencia) !!}</td>
+                @if($mostrarSoloAusencia)
+                    <td class="{{ $tdCls }}"
+                        id="cell-{{ $u->id }}-{{ $ds }}"
+                        data-uid="{{ $u->id }}"
+                        data-fecha="{{ $ds }}"
+                        data-nombre="{{ $u->nombre }}"
+                        data-ausencia="{{ $ausencia }}"
+                        data-tipo="" data-hi="" data-hf="">{!! ausenciaCellHtml($ausencia) !!}</td>
                 @elseif($editable)
                     <td class="{{ $tdCls }}"
                         id="cell-{{ $u->id }}-{{ $ds }}"
                         data-uid="{{ $u->id }}"
                         data-fecha="{{ $ds }}"
                         data-nombre="{{ $u->nombre }}"
+                        data-ausencia="{{ $ausencia }}"
                         data-tipo="{{ $horario?->tipo ?? '' }}"
                         data-hi="{{ $horario?->hora_inicio ? substr($horario->hora_inicio,0,5) : '' }}"
                         data-hf="{{ $horario?->hora_fin   ? substr($horario->hora_fin,0,5)   : '' }}"
-                        onclick="openPop(this)">
+                        onclick="openPop(this)"
+                        @if($ausencia) title="Ausencia registrada: {{ $ausencia }}" @endif>
                         {!! horarioCellHtml($horario, $isFest) !!}
                     </td>
                 @else
-                    <td class="{{ $tdCls }}">
+                    <td class="{{ $tdCls }}"
+                        data-ausencia="{{ $ausencia }}">
                         @if($isPastWeek)
                             <span class="app-tooltip">{!! horarioCellHtml($horario, $isFest) !!}<span class="app-tooltip-box">Semana pasada — solo lectura</span></span>
                         @else
@@ -393,6 +418,49 @@ function cellHtml(tipo, hi, hf) {
     return `<span class="hc hc-${tipo}">${LABELS[tipo]||tipo}</span>`;
 }
 
+function ausenciaBadgeHtml(tipo) {
+    const t = tipo.toLowerCase();
+    let cls = 'hc-aus';
+    if (t.startsWith('comp'))          cls = 'hc-compensacion';
+    else if (t.includes('vacac'))      cls = 'hc-vacaciones';
+    else if (t.includes('baja'))       cls = 'hc-baja';
+    else if (t.includes('asunto'))     cls = 'hc-asuntos';
+    else if (t.includes('absent'))     cls = 'hc-absentismo';
+    return `<span class="hc aus-readonly ${cls}" title="Ausencia registrada">${tipo}</span>`;
+}
+
+// Reconstruye una celda tras guardar/borrar su horario, con la misma prioridad que en el
+// servidor (ver el bucle de celdas en PHP más arriba): sin horario y con ausencia -> ausencia en
+// solo lectura; con horario -> el horario manda, amarillo solo si el tipo no coincide con la
+// ausencia real.
+function renderCell(td, tipo, hi, hf) {
+    const ausencia = td.dataset.ausencia || '';
+    td.dataset.tipo = tipo || '';
+    td.dataset.hi   = hi || '';
+    td.dataset.hf   = hf || '';
+
+    if (ausencia && !tipo) {
+        // Sin horario, la ausencia manda: solo lectura, sin el amarillo de conflicto (no hay
+        // horario con el que comparar -- igual que en el servidor, ver $mostrarSoloAusencia).
+        td.innerHTML = ausenciaBadgeHtml(ausencia);
+        td.classList.remove('cell-edit', 'cell-ausencia');
+        td.classList.add('cell-readonly');
+        td.onclick = null;
+        td.removeAttribute('title');
+        return;
+    }
+
+    td.innerHTML = cellHtml(tipo, hi, hf);
+    td.classList.add('cell-edit');
+    td.classList.remove('cell-readonly');
+    td.onclick = () => openPop(td);
+
+    const mismo = ausencia && tipo && LABELS[tipo] === ausencia;
+    td.classList.toggle('cell-ausencia', !!(ausencia && tipo && !mismo));
+    if (ausencia) td.title = 'Ausencia registrada: ' + ausencia;
+    else td.removeAttribute('title');
+}
+
 function doSave() {
     if (!activeCell || !selTipo) { closePop(); return; }
     const hi = selTipo === 'turno' ? document.getElementById('pop-hi').value : null;
@@ -417,12 +485,7 @@ function doSave() {
         if (data.ok) {
             dates.forEach(fecha => {
                 const td = document.getElementById(`cell-${uid}-${fecha}`);
-                if (td) {
-                    td.dataset.tipo = selTipo;
-                    td.dataset.hi   = hi || '';
-                    td.dataset.hf   = hf || '';
-                    td.innerHTML = cellHtml(selTipo, hi, hf);
-                }
+                if (td) renderCell(td, selTipo, hi, hf);
             });
             if (data.aviso_aprobacion) alert(data.aviso_aprobacion);
         }
@@ -446,12 +509,7 @@ function doDelete() {
         if (data.ok) {
             dates.forEach(fecha => {
                 const td = document.getElementById(`cell-${uid}-${fecha}`);
-                if (td) {
-                    td.dataset.tipo = '';
-                    td.dataset.hi   = '';
-                    td.dataset.hf   = '';
-                    td.innerHTML = '<div class="hce"></div>';
-                }
+                if (td) renderCell(td, '', '', '');
             });
             if (data.aviso_aprobacion) alert(data.aviso_aprobacion);
         }
