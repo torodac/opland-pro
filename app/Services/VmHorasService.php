@@ -76,6 +76,83 @@ class VmHorasService
         return (int) round(($contrato->horas_semana / $dias) * 60);
     }
 
+    // ── Ajuste de la hora de salida al cerrar un fichaje ──────────────────────
+
+    // Margen de tolerancia (minutos) de la jornada respecto al contrato: por debajo de esta
+    // diferencia, el día se considera cumplido y la hora de salida se cuadra con el contrato.
+    public const MARGEN_AJUSTE_MIN = 15;
+
+    /**
+     * Devuelve la hora de salida ya ajustada al contrato, o la misma que se le pasa si no procede
+     * ajustarla. Resuelve el caso real que lo motivó: la gente ficha al llegar a la oficina (antes
+     * de empezar su turno) y ficha unos minutos después de su hora, generando horas extra que no
+     * son reales -- el turno se cumple, el horario exacto no.
+     *
+     * Regla acordada con el cliente (VM, 2026-09-17):
+     *  - Se mide el desvío de la jornada frente al contrato YA DESCONTADA la pausa deducible: si
+     *    alguien se pasa unos minutos no se le debe penalizar además por haberse excedido un poco
+     *    en la pausa.
+     *  - Si ese desvío neto es menor que el margen, se mueve la salida exactamente esos minutos,
+     *    de forma que el día quede a cero (ni extra ni déficit). Equivale a
+     *    entrada + jornada de contrato + exceso de pausa.
+     *  - Si iguala o supera el margen, se respeta la hora real: el desvío es lo bastante grande
+     *    como para ser trabajo real, no ruido de fichaje.
+     *  - La entrada no se toca nunca, y en festivo o compensación tampoco se toca la salida (esos
+     *    días no computan por duración, ver calcularHeDia()).
+     *
+     * Solo se llama al CERRAR o dar de alta un fichaje, nunca al editarlo: reajustar sobre una
+     * hora ya ajustada iría desplazando el valor en cada edición.
+     */
+    public static function ajustarHoraFinAlContrato(
+        int $userId,
+        string $fecha,
+        ?string $horaInicio,
+        ?string $horaFin,
+        ?string $pausaInicio = null,
+        ?string $pausaFin = null
+    ): ?string {
+        if (!$horaInicio || !$horaFin) return $horaFin;
+
+        $contrato = DB::table('vm_contratos')
+            ->where('id_usuarios', $userId)
+            ->where(function ($q) { $q->where('deleted', 0)->orWhereNull('deleted'); })
+            ->where('fecha_alta', '<=', $fecha)
+            ->where(fn($q) => $q->whereNull('fecha_baja')->orWhere('fecha_baja', '>=', $fecha))
+            ->orderByDesc('fecha_alta')
+            ->first(['horas_semana', 'dias_semana']);
+        if (!$contrato || !$contrato->horas_semana) return $horaFin;
+
+        $usuario = DB::table('vm_usuarios')->where('id', $userId)->first(['sede']);
+        if (self::festivosSet($usuario->sede ?? '', $fecha, $fecha)) return $horaFin;
+
+        $tipoAusencia = DB::table('vm_ausencias')
+            ->where('id_usuarios', $userId)
+            ->where('fecha_inicio', '<=', $fecha)
+            ->where('fecha_fin', '>=', $fecha)
+            ->where(function ($q) { $q->where('deleted', 0)->orWhereNull('deleted'); })
+            ->value('tipo');
+        if ($tipoAusencia && self::categoriaAusencia($tipoAusencia) === 'C') return $horaFin;
+
+        $finMin = self::hmsToMinutes($horaFin);
+        $tfMin  = $finMin - self::hmsToMinutes($horaInicio);
+        if ($tfMin <= 0) return $horaFin; // jornada que cruza medianoche: no se toca
+
+        $pMin = ($pausaInicio && $pausaFin)
+            ? self::hmsToMinutes($pausaFin) - self::hmsToMinutes($pausaInicio)
+            : null;
+
+        $desvio = $tfMin
+            - self::esperadoMinDia($contrato)
+            - self::pausaDeducible($pMin, (float) $contrato->horas_semana);
+
+        if ($desvio === 0 || abs($desvio) >= self::MARGEN_AJUSTE_MIN) return $horaFin;
+
+        $nuevoMin = $finMin - $desvio;
+        if ($nuevoMin <= self::hmsToMinutes($horaInicio) || $nuevoMin >= 24 * 60) return $horaFin;
+
+        return sprintf('%02d:%02d:00', intdiv($nuevoMin, 60), $nuevoMin % 60);
+    }
+
     // ── Cálculo HE diario (lógica compartida) ────────────────────────────────
 
     /**

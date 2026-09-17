@@ -857,13 +857,18 @@ class VacationmarbellaPwaController extends Controller
         }
 
         $hora = now()->format('H:i:s');
+        // hora_fin se cuadra con el contrato si el desvío es menor al margen; hora_fin_auto
+        // conserva siempre el fichaje real (ver VmHorasService::ajustarHoraFinAlContrato).
+        $horaAjustada = \App\Services\VmHorasService::ajustarHoraFinAlContrato(
+            (int) $user->id, $hoy, $fichaje->hora_inicio, $hora, $fichaje->pausa_inicio, $fichaje->pausa_fin
+        );
         DB::table('vm_fichaje')
             ->where('id', $fichaje->id)
-            ->update(['hora_fin' => $hora, 'hora_fin_auto' => $hora, 'updateuser' => $user->admin_user_id, 'updatedat' => now()]);
+            ->update(['hora_fin' => $horaAjustada, 'hora_fin_auto' => $hora, 'updateuser' => $user->admin_user_id, 'updatedat' => now()]);
 
         $aviso = InformeAprobacionGuard::checkAndLog((int) $user->id, $hoy, 'vm_fichaje', 'update', $fichaje->id, $request, $user->admin_user_id);
 
-        return response()->json(['ok' => true, 'hora_fin' => now()->format('H:i'), 'aviso_aprobacion' => $aviso]);
+        return response()->json(['ok' => true, 'hora_fin' => substr($horaAjustada, 0, 5), 'aviso_aprobacion' => $aviso]);
     }
 
     public function fichajePausa(Request $request)
@@ -1010,14 +1015,28 @@ class VacationmarbellaPwaController extends Controller
 
         $nombre = \Carbon\Carbon::parse($fecha)->format('Y.m.d') . '_' . $user->nombre;
 
+        $horaInicio  = $request->input('hora_inicio') . ':00';
+        $pausaInicio = $request->input('pausa_inicio') ? $request->input('pausa_inicio') . ':00' : null;
+        $pausaFin    = $request->input('pausa_fin')    ? $request->input('pausa_fin') . ':00'    : null;
+        // Alta manual (olvido de fichaje): la salida se cuadra con el contrato si el desvío es
+        // menor al margen (ver VmHorasService::ajustarHoraFinAlContrato).
+        $horaFin = \App\Services\VmHorasService::ajustarHoraFinAlContrato(
+            (int) $user->id,
+            $fecha,
+            $horaInicio,
+            $request->input('hora_fin') ? $request->input('hora_fin') . ':00' : null,
+            $pausaInicio,
+            $pausaFin,
+        );
+
         $fichajeId = DB::table('vm_fichaje')->insertGetId([
             'fecha_fichaje' => $fecha,
             'control_user'  => $user->id,
             'nombre'        => $nombre,
-            'hora_inicio'   => $request->input('hora_inicio') . ':00',
-            'hora_fin'      => $request->input('hora_fin')     ? $request->input('hora_fin') . ':00'     : null,
-            'pausa_inicio'  => $request->input('pausa_inicio') ? $request->input('pausa_inicio') . ':00' : null,
-            'pausa_fin'     => $request->input('pausa_fin')    ? $request->input('pausa_fin') . ':00'    : null,
+            'hora_inicio'   => $horaInicio,
+            'hora_fin'      => $horaFin,
+            'pausa_inicio'  => $pausaInicio,
+            'pausa_fin'     => $pausaFin,
             'observacion'   => $request->input('observacion') ?: null,
             'trayecto'      => $request->input('trayecto') ?: null,
             'km'            => $request->input('km') !== '' && $request->input('km') !== null ? $request->input('km') : null,

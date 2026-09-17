@@ -694,11 +694,16 @@ class DashboardController extends Controller
         }
 
         $hora = now()->format('H:i:s');
+        // hora_fin se cuadra con el contrato si el desvío es menor al margen; hora_fin_auto
+        // conserva siempre el fichaje real (ver VmHorasService::ajustarHoraFinAlContrato).
+        $horaAjustada = VmHorasService::ajustarHoraFinAlContrato(
+            (int) $user->id, $fichaje->fecha_fichaje, $fichaje->hora_inicio, $hora, $fichaje->pausa_inicio, $fichaje->pausa_fin
+        );
         DB::table('vm_fichaje')->where('id', $fichaje->id)
-            ->update(['hora_fin' => $hora, 'hora_fin_auto' => $hora, 'updateuser' => auth()->id(), 'updatedat' => now()]); // admin_users.id
+            ->update(['hora_fin' => $horaAjustada, 'hora_fin_auto' => $hora, 'updateuser' => auth()->id(), 'updatedat' => now()]); // admin_users.id
 
         $aviso = InformeAprobacionGuard::checkAndLog((int) $user->id, $fichaje->fecha_fichaje, 'vm_fichaje', 'update', $fichaje->id, $request);
 
-        return response()->json(['ok' => true, 'hora' => now()->format('H:i'), 'aviso_aprobacion' => $aviso]);
+        return response()->json(['ok' => true, 'hora' => substr($horaAjustada, 0, 5), 'aviso_aprobacion' => $aviso]);
     }
 }

@@ -433,12 +433,23 @@ class FichajeController extends Controller
             return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
         }
 
+        // Alta manual: la salida se cuadra con el contrato si el desvío es menor al margen
+        // (ver VmHorasService::ajustarHoraFinAlContrato). En la edición posterior no se reajusta.
+        $horaFin = VmHorasService::ajustarHoraFinAlContrato(
+            (int) $data['control_user'],
+            $data['fecha_fichaje'],
+            $data['hora_inicio'] ?? null,
+            $data['hora_fin']    ?? null,
+            $data['pausa_inicio'] ?? null,
+            $data['pausa_fin']    ?? null,
+        );
+
         $id = DB::table('vm_fichaje')->insertGetId([
             'nombre'         => $data['fecha_fichaje'] . '_' . $nombreUsuario,
             'control_user'   => $data['control_user'],
             'fecha_fichaje'  => $data['fecha_fichaje'],
             'hora_inicio'    => $data['hora_inicio']  ?? null,
-            'hora_fin'       => $data['hora_fin']     ?? null,
+            'hora_fin'       => $horaFin,
             'pausa_inicio'   => $data['pausa_inicio'] ?? null,
             'pausa_fin'      => $data['pausa_fin']    ?? null,
             'festivo'        => (int) ($data['festivo'] ?? 0),
