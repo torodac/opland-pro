@@ -177,7 +177,12 @@ class VmHorasService
         // fila en vm_fichaje -- una fila sin hora_inicio/hora_fin (p.ej. festivo que cae en el
         // descanso asignado, sin fichar) no debe tratarse como festivo trabajado, o el bono de
         // abajo se suprime sin motivo y ese día se queda sin las horas extra que le corresponden.
-        $trabajoFestivoReal = $isFestTrab && $tfMin !== null;
+        // Pagar la jornada de contrato fija por trabajar un festivo es cosa SOLO del personal de
+        // turnos, que además acumula un día compensable por ese festivo. El resto del personal
+        // cobra lo que realmente ficha (cae por la rama normal + bono de abajo), igual que
+        // cuando trabaja un fin de semana: para ellos un festivo no es una jornada tasada, es un
+        // día que no tocaba venir (acordado con el cliente 2026-09-19).
+        $trabajoFestivoReal = $isFestTrab && $tfMin !== null && $esTurno;
         $huboFichajeReal    = $tfMin !== null;
 
         $heMin = null;
@@ -215,8 +220,12 @@ class VmHorasService
             }
         }
 
-        if ($heMin !== null && $ajusteMin !== 0) {
-            $heMin += $ajusteMin;
+        // El ajuste manual es una decisión explícita de RRHH y cuenta SIEMPRE, también en un día
+        // sin horas fichadas o sin contrato vigente (antes se ignoraba cuando el día no había
+        // calculado nada, así que no había forma de añadir horas a mano a un día sin fichaje --
+        // y además el saldo histórico sí lo sumaba, con lo que el mes no cuadraba con sus días).
+        if ($ajusteMin !== 0) {
+            $heMin = ($heMin ?? 0) + $ajusteMin;
         }
 
         return $heMin;
@@ -411,8 +420,10 @@ class VmHorasService
             $hasFin = !empty($f->hora_fin);
             $isFestivo   = isset($festivosHist[$f->fecha_fichaje]);
             // Festivo trabajado = el día es festivo según vm_festivos, ya no depende del
-            // checkbox manual vm_fichaje.festivo (sustituido por completo).
-            $isFest = $isFestivo;
+            // checkbox manual vm_fichaje.festivo (sustituido por completo). Solo cuenta como
+            // jornada tasada para el personal de turnos; el resto cobra lo fichado (mismo
+            // criterio que calcularHeDia()).
+            $isFest = $isFestivo && $esTurno;
             $isDescansoEf = $esDescanso($f->fecha_fichaje);
 
             $contratoDia = null;
@@ -422,7 +433,12 @@ class VmHorasService
                     break;
                 }
             }
-            if (!$contratoDia || !$contratoDia->horas_semana) continue;
+            if (!$contratoDia || !$contratoDia->horas_semana) {
+                // Sin contrato no hay jornada de referencia contra la que medir nada, pero un
+                // ajuste manual cuenta igual (mismo criterio que calcularHeDia()).
+                $total += (int) ($f->ajuste_he ?? 0);
+                continue;
+            }
 
             $esperadoMin = self::esperadoMinDia($contratoDia);
             $diaMin = 0;
