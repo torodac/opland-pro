@@ -328,11 +328,25 @@ class VmHorasService
      * Saldo de horas extra acumulado hasta una fecha, para toda la vida laboral del usuario --
      * misma lógica que el "Σ horas extra" del informe mensual (antes duplicada allí).
      *
-     * Devuelve ['total' => saldo histórico real (horas), 'dias_fest' => nº de festivos
-     * trabajados/Desc.Fest. menos los ya compensados con "Comp. festivo", en días ENTEROS
-     * (independiente de las horas de contrato de cada día -- un festivo siempre cuenta como 1
-     * día) -- puede salir negativo si se ha compensado de más.
-     * 'horas_resto' => suma de horas extra de los días "Trabajo" + "Trab. desc." (no festivo)]
+     * El desglose ('horas_fest' + 'horas_resto') SUMA SIEMPRE 'total': son los mismos minutos,
+     * repartidos según de dónde salen. 'horas_resto' se deriva restando, para que el cuadre sea
+     * exacto por construcción y no se descuadre si mañana se añade otro concepto al total.
+     *
+     * Hay dos regímenes distintos, según el departamento (acordado con el cliente 2026-09-18):
+     *  - Personal de TURNOS (vm_departamentos.visible_horarios): trabajar un festivo o su día de
+     *    descanso acumula un DÍA compensable ('dias_fest'), que se salda disfrutando un día de
+     *    "Comp. festivo". Las horas de esos días van a 'horas_fest'.
+     *  - Resto del personal: no acumula días, solo horas extra -- 'dias_fest' y 'horas_fest' son
+     *    siempre 0 y todo cae en 'horas_resto'.
+     *
+     * Devuelve ['total' => saldo histórico real (horas),
+     *  'dias_fest'   => nº de festivos/descansos trabajados menos los ya compensados con "Comp.
+     *                   festivo", en días ENTEROS (un día es un día, tenga el contrato que tenga);
+     *                   puede salir negativo si se ha compensado de más. Solo personal de turnos.
+     *  'horas_fest'  => horas acumuladas por esos mismos días (solo personal de turnos),
+     *  'horas_resto' => el resto del saldo: desviación de jornada de los días normales, ajustes
+     *                   manuales, el saldo inicial migrado y las compensaciones que no son de
+     *                   festivo ("Comp. horas"/"Compensación")]
      */
     public static function saldoAcumuladoHoras(int $userId, string $hasta): array
     {
@@ -350,7 +364,12 @@ class VmHorasService
             $total = ((float) $usuario->saldo_horas_inicial) * 60;
             $desde = $usuario->saldo_inicial_a_fecha;
             if ($hasta <= $desde) {
-                return ['total' => (float) $usuario->saldo_horas_inicial, 'dias_fest' => 0.0, 'horas_resto' => 0.0];
+                return [
+                    'total'       => (float) $usuario->saldo_horas_inicial,
+                    'dias_fest'   => 0,
+                    'horas_fest'  => 0.0,
+                    'horas_resto' => (float) $usuario->saldo_horas_inicial,
+                ];
             }
         }
 
@@ -382,10 +401,12 @@ class VmHorasService
             ? isset($descansosDias[$fecha])
             : ((int) date('N', strtotime($fecha)) >= 6); // 6=sábado, 7=domingo
 
-        $trabajoMin    = 0; // horas extra (con ajuste) de los días "Trabajo"/"Trab. desc."
-        $diasFestCount = 0; // nº de festivos trabajados/Desc.Fest., en días ENTEROS (no minutos) --
-                             // es lo que alimenta dias_fest, independiente de las horas de contrato
-                             // de cada día (un festivo siempre es 1 día, tenga el contrato que tenga).
+        // Cubo de festivos/descansos: solo existe para el personal de turnos. 'horas_resto' NO se
+        // acumula aquí, se deriva al final restando este cubo del total, para que el desglose
+        // cuadre siempre exacto.
+        $horasFestMin  = 0; // horas de los festivos/descansos trabajados y de los Desc. Fest.
+        $diasFestCount = 0; // esos mismos días, contados en días ENTEROS (un día es un día, tenga
+                            // el contrato que tenga)
         foreach ($fichajes as $f) {
             $hasFin = !empty($f->hora_fin);
             $isFestivo   = isset($festivosHist[$f->fecha_fichaje]);
@@ -423,14 +444,13 @@ class VmHorasService
 
             $diaTotal = $diaMin + (int) ($f->ajuste_he ?? 0);
 
-            // Desglose (misma clasificación que la pill "Tipo" del informe mensual): festivo
-            // trabajado real o marcado manualmente -> "Trab. fest."; el resto de días fichados
-            // (normal o descanso trabajado) -> bloque "Trabajo"/"Trab. desc.".
-            $trabajaFestivo = $hasFin && ($isFest || $isFestivo);
-            if ($trabajaFestivo) {
+            // Solo el personal de turnos acumula días: para él, trabajar un festivo O su día de
+            // descanso genera un día compensable (se salda con un día de "Comp. festivo"). El
+            // resto del personal no acumula días, esas horas son horas extra normales y se quedan
+            // en 'horas_resto'.
+            if ($esTurno && $hasFin && ($isFest || $isDescansoEf)) {
                 $diasFestCount++;
-            } elseif ($hasFin) {
-                $trabajoMin += $diaTotal;
+                $horasFestMin += $diaTotal;
             }
 
             $total += $diaTotal;
@@ -450,8 +470,9 @@ class VmHorasService
                 if ($tieneF) continue;
                 foreach ($contratos as $c) {
                     if ($c->fecha_alta <= $fDate && (is_null($c->fecha_baja) || $c->fecha_baja >= $fDate)) {
-                        $bonoMin = self::esperadoMinDia($c);
-                        $total  += $bonoMin;
+                        $bonoMin       = self::esperadoMinDia($c);
+                        $total        += $bonoMin;
+                        $horasFestMin += $bonoMin;
                         $diasFestCount++;
                         break;
                     }
@@ -476,8 +497,15 @@ class VmHorasService
             while ($cur <= $lim) {
                 foreach ($contratos as $c) {
                     if ($c->fecha_alta <= $cur && (is_null($c->fecha_baja) || $c->fecha_baja >= $cur)) {
-                        $total -= self::esperadoMinDia($c);
-                        if ($a->tipo === 'Comp. festivo') $compFestDiasCount++;
+                        $dedMin = self::esperadoMinDia($c);
+                        $total -= $dedMin;
+                        // "Comp. festivo" salda días del cubo de festivos/descansos; el resto de
+                        // compensaciones ("Comp. horas", "Compensación") son horas normales y se
+                        // quedan en 'horas_resto'.
+                        if ($esTurno && $a->tipo === 'Comp. festivo') {
+                            $compFestDiasCount++;
+                            $horasFestMin -= $dedMin;
+                        }
                         break;
                     }
                 }
@@ -485,16 +513,14 @@ class VmHorasService
             }
         }
 
-        // Contador de días de festivo pendientes: festivos trabajados/Desc.Fest. menos los ya
-        // compensados con "Comp. festivo", en días ENTEROS -- no una división de minutos entre
-        // una jornada de referencia, que daba fracciones raras (p.ej. 0,75 días) cuando el
-        // contrato de la persona cambiaba de horas entre el festivo y la fecha de corte.
-        $diasFest = $diasFestCount - $compFestDiasCount;
-
+        // 'horas_resto' se deriva restando: así el desglose cuadra siempre con el total por
+        // construcción, incluidos el saldo inicial migrado y las compensaciones que no son de
+        // festivo, que no pertenecen a ningún día trabajado concreto.
         return [
             'total'       => $total / 60,
-            'dias_fest'   => $diasFest,
-            'horas_resto' => $trabajoMin / 60,
+            'dias_fest'   => $diasFestCount - $compFestDiasCount,
+            'horas_fest'  => $horasFestMin / 60,
+            'horas_resto' => ($total - $horasFestMin) / 60,
         ];
     }
 

@@ -955,6 +955,7 @@ class InformeImputacionesController extends Controller
             'year_stats'       => $yearStats,
             'hist_extras'      => $histExtras['total'],
             'hist_extras_dias_fest'   => $histExtras['dias_fest'],
+            'hist_extras_horas_fest'  => $histExtras['horas_fest'],
             'hist_extras_horas_resto' => $histExtras['horas_resto'],
             'saldo_prev_year'  => $saldoPrevYear['total'],
             'is_liquidado'     => false,

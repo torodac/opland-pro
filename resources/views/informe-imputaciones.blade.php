@@ -315,7 +315,16 @@ function firmarPaso(url, confirmMsg) {
             </table>
             <div class="saldo-box mt-2">
                 Saldo histórico: <strong>{{ IC::fmtHoras($hist_extras, true) ?: '0h 00m' }}</strong>
-                <br><span style="color:#999;font-size:11px;">({{ number_format($hist_extras_dias_fest, 1, ',', '') }}d fest / {{ number_format($hist_extras_horas_resto, 1, ',', '') }}h ext)</span>
+                {{-- El desglose suma siempre el saldo: reparte las mismas horas entre las que
+                     vienen de festivos/descansos trabajados (solo personal de turnos, que además
+                     acumula días compensables) y el resto. --}}
+                <br><span style="color:#999;font-size:11px;">
+                @if($es_turno)
+                    ({{ number_format($hist_extras_dias_fest, 0, ',', '') }}d fest/desc = {{ number_format($hist_extras_horas_fest, 1, ',', '') }}h + {{ number_format($hist_extras_horas_resto, 1, ',', '') }}h ext)
+                @else
+                    ({{ number_format($hist_extras_horas_resto, 1, ',', '') }}h ext)
+                @endif
+                </span>
             </div>
             @if(!empty($sin_contrato) && $sin_contrato)
             <p style="font-size:11px;color:#374151;margin:6px 0 0;">Horas extras compensadas en la liquidación.</p>

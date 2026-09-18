@@ -96,7 +96,9 @@ $tipos            = $ud['tipos'];
 $year_stats       = $ud['year_stats'];
 $hist_extras      = $ud['hist_extras'];
 $hist_extras_dias_fest   = $ud['hist_extras_dias_fest'];
+$hist_extras_horas_fest  = $ud['hist_extras_horas_fest'];
 $hist_extras_horas_resto = $ud['hist_extras_horas_resto'];
+$es_turno                = $ud['es_turno'];
 $is_liquidado     = $ud['is_liquidado'];
 $liquidado_fecha  = $ud['liquidado_fecha'];
 $sum_ep = array_sum(array_column($year_stats, 'ep'));
@@ -160,7 +162,7 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                         <td style="color:{{ $sum_et >= 0 ? '#1a7a34' : '#cc2200' }}">{{ number_format($sum_et,1,',','') }}</td>
                     </tr></tfoot>
                 </table>
-                <div class="saldo-box">Saldo historico: <strong>{{ IC::fmtHoras($hist_extras, true) ?: '0h 00m' }}</strong><br><span style="color:#999;font-size:8pt;">({{ number_format($hist_extras_dias_fest, 1, ',', '') }}d fest / {{ number_format($hist_extras_horas_resto, 1, ',', '') }}h ext)</span></div>
+                <div class="saldo-box">Saldo historico: <strong>{{ IC::fmtHoras($hist_extras, true) ?: '0h 00m' }}</strong><br><span style="color:#999;font-size:8pt;">@if($es_turno)({{ number_format($hist_extras_dias_fest, 0, ',', '') }}d fest/desc = {{ number_format($hist_extras_horas_fest, 1, ',', '') }}h + {{ number_format($hist_extras_horas_resto, 1, ',', '') }}h ext)@else({{ number_format($hist_extras_horas_resto, 1, ',', '') }}h ext)@endif</span></div>
             </div>
             @endif
 
