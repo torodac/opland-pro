@@ -78,7 +78,7 @@
           <td style="font-weight:500;">{{ $t->nombre }}</td>
           <td style="color:#888;">{{ $t->fecha_planificada ? \Carbon\Carbon::parse($t->fecha_planificada)->translatedFormat('d M') : '—' }}</td>
           <td style="white-space:nowrap;">
-            <a href="{{ route('ficha', [$project->slug, 'tareas_sscc', $t->id]) }}" target="_blank"
+            <a href="{{ route('ficha', [$project->slug, 'tareas_sscc', $t->id]) }}" target="_blank" rel="noopener"
                class="badge-sm" style="background:#E6F1FB;color:#0C447C;text-decoration:none;padding:3px 8px;border-radius:4px;display:inline-block;">
               Ver
             </a>
@@ -178,7 +178,7 @@
           <tr data-id-usuario="{{ $c->id_usuario }}" data-fecha="{{ $c->fecha }}" data-tipo="{{ $c->tipo }}">
             <td style="font-weight:500;">{{ $c->usuario }}</td>
             <td>
-              <a href="{{ route('horario', $project->slug) }}?semana={{ $lunes }}"
+              <a target="_blank" rel="noopener" href="{{ route('horario', $project->slug) }}?semana={{ $lunes }}"
                  style="color:#185FA5;text-decoration:none;font-size:12px;">
                 {{ \Carbon\Carbon::parse($c->fecha)->translatedFormat('d M Y') }}
               </a>
@@ -221,14 +221,14 @@
           @endphp
           <tr>
             <td>
-              <a href="{{ route('vm.usuario', [$project->slug, $c->id_usuario]) }}" style="color:#185FA5;text-decoration:none;font-weight:500;">{{ $c->usuario }}</a>
+              <a target="_blank" rel="noopener" href="{{ route('vm.usuario', [$project->slug, $c->id_usuario]) }}" style="color:#185FA5;text-decoration:none;font-weight:500;">{{ $c->usuario }}</a>
             </td>
             <td style="white-space:nowrap;font-size:12px;">{{ \Carbon\Carbon::parse($c->fecha)->translatedFormat('d M Y') }}</td>
             <td>
               <div style="display:flex;flex-direction:column;gap:3px;">
                 @foreach($c->ausencias as $aus)
                 @php [$bg, $col] = $colorAus($aus['tipo']); @endphp
-                <a href="{{ route('ficha', [$project->slug, 'ausencias', $aus['id']]) }}" style="text-decoration:none;">
+                <a target="_blank" rel="noopener" href="{{ route('ficha', [$project->slug, 'ausencias', $aus['id']]) }}" style="text-decoration:none;">
                   <span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:.72rem;font-weight:600;background:{{ $bg }};color:{{ $col }};">{{ $aus['tipo'] }}</span>
                 </a>
                 @endforeach
@@ -263,7 +263,7 @@
             <td style="font-weight:500;">{{ $t->usuario }}</td>
             <td style="color:#888;">{{ \Carbon\Carbon::parse($t->fecha)->translatedFormat('d M Y') }}</td>
             <td style="white-space:nowrap;text-align:right;">
-              <a href="{{ route('horario', $project->slug) }}?semana={{ $lunesTurno }}"
+              <a target="_blank" rel="noopener" href="{{ route('horario', $project->slug) }}?semana={{ $lunesTurno }}"
                  class="badge-sm" style="background:#EFF6FF;color:#1E40AF;text-decoration:none;padding:3px 8px;"
                  title="Ver el horario de esa semana">Horario</a>
               @if($puedeCrearFichaje)
@@ -272,7 +272,7 @@
                       onclick="abrirFichajeNuevo({ usuario: {{ $t->id_usuario }}, fecha: '{{ $t->fecha }}', onGuardado: () => this.closest('tr').remove() })">Fichaje</button>
               @endif
               @if($verAusenciasSin)
-              <a href="{{ route('vm.ausencias_form', $project->slug) }}?nueva=1&usuario={{ $t->id_usuario }}&fecha={{ $t->fecha }}"
+              <a target="_blank" rel="noopener" href="{{ route('vm.ausencias_form', $project->slug) }}?nueva=1&usuario={{ $t->id_usuario }}&fecha={{ $t->fecha }}"
                  class="badge-sm" style="background:#FEF3C7;color:#92400E;text-decoration:none;padding:3px 8px;"
                  title="Registrar una ausencia ese día">Ausencia</a>
               @endif
@@ -315,24 +315,24 @@
           @endphp
           <tr>
             <td>
-              <a href="{{ $fichaUsuarioUrl }}" style="color:#185FA5;text-decoration:none;font-weight:500;">{{ $c->usuario }}</a>
+              <a target="_blank" rel="noopener" href="{{ $fichaUsuarioUrl }}" style="color:#185FA5;text-decoration:none;font-weight:500;">{{ $c->usuario }}</a>
             </td>
             <td style="white-space:nowrap;font-size:12px;">{{ \Carbon\Carbon::parse($c->fecha)->translatedFormat('d M Y') }}</td>
             <td>
               <div style="display:flex;flex-direction:column;gap:3px;">
                 {{-- Badge Trabajo → fichaje --}}
-                <a href="{{ $fichajeUrl }}" style="text-decoration:none;">
+                <a target="_blank" rel="noopener" href="{{ $fichajeUrl }}" style="text-decoration:none;">
                   <span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:.72rem;font-weight:600;background:#74aaf8;color:#fff;">Trabajo</span>
                 </a>
                 {{-- Badge Descanso → horario --}}
                 @if($c->descanso)
-                <a href="{{ $horarioUrl }}" style="text-decoration:none;">
+                <a target="_blank" rel="noopener" href="{{ $horarioUrl }}" style="text-decoration:none;">
                   <span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:.72rem;font-weight:600;background:#F3F4F6;color:#6B7280;">Descanso</span>
                 </a>
                 @endif
                 {{-- Badges ausencias → ficha ausencia --}}
                 @foreach($c->ausencias as $aus)
-                <a href="{{ route('ficha', [$project->slug, 'ausencias', $aus['id']]) }}" style="text-decoration:none;">
+                <a target="_blank" rel="noopener" href="{{ route('ficha', [$project->slug, 'ausencias', $aus['id']]) }}" style="text-decoration:none;">
                   <span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:.72rem;font-weight:600;background:#FFF3CD;color:#856404;">{{ $aus['tipo'] }}</span>
                 </a>
                 @endforeach
@@ -374,7 +374,7 @@
           <tr data-fid="{{ $d->fichaje_id }}">
             <td style="font-weight:500;">{{ $d->usuario }}</td>
             <td>
-              <a href="{{ $fichajeUrl }}" style="color:#185FA5;text-decoration:none;font-size:12px;">
+              <a target="_blank" rel="noopener" href="{{ $fichajeUrl }}" style="color:#185FA5;text-decoration:none;font-size:12px;">
                 {{ \Carbon\Carbon::parse($d->fecha)->translatedFormat('d M Y') }}
               </a>
             </td>
@@ -406,7 +406,7 @@
         <tbody>
           @foreach($tareasLimpieza as $t)
           <tr>
-            <td><a href="{{ route('vm.tarea', [$project->slug, 'limpieza', $t->id]) }}" style="color:#111827;font-weight:600;text-decoration:none;">{{ $t->nombre }}</a></td>
+            <td><a target="_blank" rel="noopener" href="{{ route('vm.tarea', [$project->slug, 'limpieza', $t->id]) }}" style="color:#111827;font-weight:600;text-decoration:none;">{{ $t->nombre }}</a></td>
             <td>
               @forelse($t->responsables as $r)
                 <span style="display:inline-block;background:#f3f4f6;color:#374151;font-size:11px;font-weight:500;padding:2px 8px;border-radius:999px;margin:1px 2px 1px 0;white-space:nowrap;">{{ $r }}</span>
@@ -445,7 +445,7 @@
       <tbody>
         @foreach($tareasMantPisc as $t)
         <tr>
-          <td><a href="{{ route('vm.tarea', [$project->slug, 'mantenimiento', $t->id]) }}" style="color:#111827;font-weight:600;text-decoration:none;">{{ $t->nombre }}</a></td>
+          <td><a target="_blank" rel="noopener" href="{{ route('vm.tarea', [$project->slug, 'mantenimiento', $t->id]) }}" style="color:#111827;font-weight:600;text-decoration:none;">{{ $t->nombre }}</a></td>
           <td>
             @forelse($t->responsables as $r)
               <span style="display:inline-block;background:#f3f4f6;color:#374151;font-size:11px;font-weight:500;padding:2px 8px;border-radius:999px;margin:1px 2px 1px 0;white-space:nowrap;">{{ $r }}</span>
@@ -482,12 +482,12 @@
       <tbody>
         @foreach($informesPendientes as $i)
         <tr>
-          <td><a href="{{ route('vm.usuario', [$project->slug, $i->id_usuario]) }}" style="color:#185FA5;text-decoration:none;font-weight:500;">{{ $i->usuario }}</a></td>
+          <td><a target="_blank" rel="noopener" href="{{ route('vm.usuario', [$project->slug, $i->id_usuario]) }}" style="color:#185FA5;text-decoration:none;font-weight:500;">{{ $i->usuario }}</a></td>
           <td style="color:#888;">{{ \Carbon\Carbon::create($i->anio, $i->mes, 1)->translatedFormat('F Y') }}</td>
           <td><span class="badge-sm" style="background:#E6F1FB;color:#0C447C;">{{ $pasoLabels[$i->paso_actual] ?? $i->paso_actual }}</span></td>
           <td style="color:#888;">{{ \Carbon\Carbon::parse($i->marcado_at)->translatedFormat('d M') }}</td>
           <td>
-            <a href="{{ route('informe-imputaciones', $project->slug) }}?year={{ $i->anio }}&month={{ $i->mes }}&user_id={{ $i->id_usuario }}" target="_blank"
+            <a href="{{ route('informe-imputaciones', $project->slug) }}?year={{ $i->anio }}&month={{ $i->mes }}&user_id={{ $i->id_usuario }}" target="_blank" rel="noopener"
                class="badge-sm" style="background:#EAF3DE;color:#27500A;text-decoration:none;padding:3px 8px;border-radius:4px;display:inline-block;">
               Ver informe
             </a>
