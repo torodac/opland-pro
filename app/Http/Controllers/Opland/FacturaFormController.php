@@ -260,6 +260,33 @@ class FacturaFormController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    // Saca una imputación del pool de facturables marcándola como no facturable. Solo se permite
+    // sobre lo que de verdad está en el pool: si ya está enganchada a una línea o ya lleva número
+    // de factura, marcarla ahora dejaría la factura descuadrada.
+    public function marcarNoFacturable(Request $request, Project $project, int $imputacion)
+    {
+        $i = DB::table('opland_imputaciones')
+            ->where('id', $imputacion)
+            ->where('deleted', false)
+            ->first(['id', 'id_factura_lineas', 'factura_opland']);
+
+        abort_unless($i, 404);
+
+        if ($i->id_factura_lineas || !empty($i->factura_opland)) {
+            return response()->json([
+                'message' => 'Esta imputación ya está en una línea o facturada. Quítala de la línea antes de marcarla como no facturable.',
+            ], 422);
+        }
+
+        DB::table('opland_imputaciones')->where('id', $imputacion)->update([
+            'no_facturable' => true,
+            'updateuser'    => auth()->id(),
+            'updatedat'     => now(),
+        ]);
+
+        return response()->json(['ok' => true]);
+    }
+
     // Duplica cabecera + lineas (sin imputaciones asociadas), en borrador
     public function duplicar(Request $request, Project $project, int $factura)
     {

@@ -298,6 +298,7 @@ Route::middleware('auth')->group(function () {
 
             Route::get('facturas_form/nuevo', [\App\Http\Controllers\Opland\FacturaFormController::class, 'nueva'])->name('opland.factura_form.nueva');
             Route::delete('facturas_form/imputaciones/{imputacion}', [\App\Http\Controllers\Opland\FacturaFormController::class, 'detachImputacion'])->where('imputacion', '[0-9]+')->name('opland.factura_form.detach-imp');
+            Route::patch('facturas_form/imputaciones/{imputacion}/no-facturable', [\App\Http\Controllers\Opland\FacturaFormController::class, 'marcarNoFacturable'])->where('imputacion', '[0-9]+')->name('opland.factura_form.imp-no-facturable');
             Route::get('facturas_form/{factura}', [\App\Http\Controllers\Opland\FacturaFormController::class, 'show'])->where('factura', '[0-9]+')->name('opland.factura_form.show');
             Route::get('facturas_form/{factura}/estado', [\App\Http\Controllers\Opland\FacturaFormController::class, 'estado'])->where('factura', '[0-9]+')->name('opland.factura_form.estado');
             Route::get('facturas_form/{factura}/pdf', [\App\Http\Controllers\Opland\FacturaFormController::class, 'pdf'])->where('factura', '[0-9]+')->name('opland.factura_form.pdf');

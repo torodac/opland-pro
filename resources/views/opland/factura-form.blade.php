@@ -188,6 +188,9 @@
 .fact-col-sub{font-size:10.5px;color:#7e93a1;margin-top:1px}
 .fact-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:#eaf1f6;color:#52697a;border:1px solid #dce6ee;white-space:nowrap}
 .fact-list{padding:10px;max-height:calc(100vh - 420px);min-height:200px;overflow-y:auto}
+/* El pool de imputaciones va al doble de alto que el resto de listas: es el que más filas
+   acumula y obligaba a hacer scroll continuamente. */
+#col-imputaciones{max-height:calc((100vh - 420px) * 2);min-height:400px}
 .fact-list-auto{max-height:none;min-height:0;overflow-y:visible}
 
 .linea-card{border:1px solid #dce6ee;border-radius:6px;padding:10px 11px;margin-bottom:8px;background:#fff;transition:border-color .15s,background .15s,box-shadow .15s}
@@ -207,9 +210,17 @@
 .imp-chip:hover{border-color:#f97316;color:#1b5d73}
 .imp-chip button{background:none;border:none;color:inherit;cursor:pointer;font-weight:800;padding:0 2px;font-size:11px;line-height:1}
 
-.imp-card{border:1px solid #dce6ee;border-radius:6px;padding:10px 11px;margin-bottom:8px;cursor:grab;background:#fff;transition:box-shadow .15s,opacity .15s,border-color .15s}
+.imp-card{position:relative;border:1px solid #dce6ee;border-radius:6px;padding:10px 26px 10px 11px;margin-bottom:8px;cursor:grab;background:#fff;transition:box-shadow .15s,opacity .15s,border-color .15s}
 .imp-card:hover{box-shadow:0 2px 10px rgba(18,63,79,.09);border-color:#7e93a1}
 .imp-card.dragging{opacity:.35;cursor:grabbing}
+/* Aspa de "no facturable", abajo a la derecha de la tarjeta. Discreta hasta que el ratón entra
+   en la tarjeta, para que no compita con el arrastre, que es la acción principal. */
+.imp-nofact{position:absolute;right:5px;bottom:4px;width:18px;height:18px;display:flex;align-items:center;justify-content:center;
+  background:none;border:1px solid transparent;border-radius:4px;color:#c3ccd2;font-size:13px;font-weight:800;line-height:1;cursor:pointer;
+  padding:0;opacity:0;transition:opacity .15s,color .15s,border-color .15s,background .15s}
+.imp-card:hover .imp-nofact{opacity:1}
+.imp-nofact:hover{color:#b3261e;border-color:#f0c4c0;background:#fdecec}
+.imp-nofact:focus-visible{opacity:1;outline:2px solid #b3261e;outline-offset:1px}
 .imp-top{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
 .imp-date{font-size:10.5px;color:#7e93a1;font-family:ui-monospace,Consolas,monospace;flex-shrink:0}
 .imp-ext-link{color:#7e93a1;flex-shrink:0;display:inline-flex;line-height:0;margin-right:1px}
@@ -279,6 +290,7 @@ const ROUTE_EMITIR   = @json(route('opland.factura_form.emitir', [$project->slug
     $tplRemoveLinea = route('opland.factura_form.lineas.remove', [$project->slug, $f->id, '__ID__']);
     $tplAttachImp = route('opland.factura_form.lineas.attach-imp', [$project->slug, $f->id, '__ID__']);
     $tplDetachImp = route('opland.factura_form.detach-imp', [$project->slug, '__ID__']);
+    $tplImpNoFacturable = route('opland.factura_form.imp-no-facturable', [$project->slug, '__ID__']);
     $tplShow = route('opland.factura_form.show', [$project->slug, '__ID__']);
     $tplImputacionFicha = route('ficha', [$project->slug, 'imputaciones', '__ID__']);
 @endphp
@@ -290,6 +302,7 @@ function routeUpdateLinea(id){ return @json($tplUpdateLinea).replace('__ID__', i
 function routeRemoveLinea(id){ return @json($tplRemoveLinea).replace('__ID__', id); }
 function routeAttachImp(lineaId){ return @json($tplAttachImp).replace('__ID__', lineaId); }
 function routeDetachImp(impId){ return @json($tplDetachImp).replace('__ID__', impId); }
+function routeImpNoFacturable(impId){ return @json($tplImpNoFacturable).replace('__ID__', impId); }
 
 const fmtEUR = v => (v<0?'−':'') + Math.abs(v).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' €';
 const fmtDate = iso => { if(!iso) return '—'; const [y,m,d]=iso.split('-'); return d+'/'+m+'/'+y.slice(2); };
@@ -415,6 +428,9 @@ function impCard(imp){
       <span class="imp-horas">${imp.horas} h</span>
     </div>
     ${imp.tarea_nombre ? `<div class="imp-tarea">${imp.tarea_nombre}</div>` : ''}
+    <button class="imp-nofact" title="Marcar como no facturable y quitarla de la lista"
+            onmousedown="event.stopPropagation()"
+            onclick="event.stopPropagation();event.preventDefault();marcarNoFacturable(${imp.id})">&times;</button>
   </div>`;
 }
 
@@ -452,6 +468,16 @@ async function onLineaChange(id, field, value){
 }
 async function detachImp(impId){
   await apiCall(routeDetachImp(impId), 'DELETE');
+  await cargarEstado();
+}
+
+// Saca la imputación del pool marcándola como no facturable. Se confirma porque desde aquí no hay
+// forma de deshacerlo: para revertirlo hay que abrir su ficha y desmarcar la casilla.
+async function marcarNoFacturable(impId){
+  const imp = (STATE?.imputaciones_pool || []).find(i => i.id === impId);
+  const que = imp ? `"${imp.nombre}" (${imp.horas} h)` : 'esta imputación';
+  if (!confirm(`¿Marcar ${que} como no facturable?\n\nDesaparecerá de esta lista. Para revertirlo hay que desmarcarlo en su ficha.`)) return;
+  await apiCall(routeImpNoFacturable(impId), 'PATCH');
   await cargarEstado();
 }
 
