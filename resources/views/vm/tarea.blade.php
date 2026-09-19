@@ -1,8 +1,5 @@
 @php
-function minToHm(int $min): string {
-    if ($min <= 0) return '0h 00m';
-    return intdiv($min, 60) . 'h ' . str_pad($min % 60, 2, '0', STR_PAD_LEFT) . 'm';
-}
+// minToHm() vive en app/Support/vista-helpers.php
 $colores = [
     'limpieza'      => ['bg'=>'#E6F1FB','bd'=>'#378ADD','tx'=>'#0C447C','bar'=>'#85B7EB'],
     'mantenimiento' => ['bg'=>'#FAEEDA','bd'=>'#EF9F27','tx'=>'#633806','bar'=>'#FAC775'],

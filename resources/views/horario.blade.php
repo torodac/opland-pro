@@ -13,41 +13,7 @@ $tipoLabels = [
     'absentismo'   => 'Absentismo',
 ];
 
-function horarioCellHtml($h, bool $isFest = false): string {
-    if (!$h) {
-        if ($isFest) return '<span class="hc hc-festivo">Día festivo</span>';
-        return '<div class="hce"></div>';
-    }
-    if ($h->tipo === 'turno') {
-        $de = $h->hora_inicio ? substr($h->hora_inicio, 0, 5) : '?';
-        $a  = $h->hora_fin   ? substr($h->hora_fin,    0, 5) : '?';
-        return "<span class=\"hc hc-turno\">{$de}–{$a}</span>";
-    }
-    $labels = [
-        'descanso'     => 'Descanso',
-        'vacaciones'   => 'Vacaciones',
-        'baja'         => 'Baja',
-        'comp_festivo' => 'Comp. festivo',
-        'comp_horas'   => 'Comp. horas',
-        'asuntos'      => 'Asuntos propios',
-        'absentismo'   => 'Absentismo',
-    ];
-    $lbl = $labels[$h->tipo] ?? $h->tipo;
-    return "<span class=\"hc hc-{$h->tipo}\">{$lbl}</span>";
-}
-
-// Solo se usa cuando NO hay ningún horario (turno/descanso/...) puesto ese día -- si lo hay,
-// tiene prioridad y esta función ni se llama (ver el bucle de celdas más abajo).
-function ausenciaCellHtml(string $tipo): string {
-    $t = mb_strtolower($tipo);
-    $cls = 'hc-aus';
-    if (str_starts_with($t, 'comp')) $cls = 'hc-compensacion';
-    elseif (str_contains($t, 'vacac'))  $cls = 'hc-vacaciones';
-    elseif (str_contains($t, 'baja'))   $cls = 'hc-baja';
-    elseif (str_contains($t, 'asunto')) $cls = 'hc-asuntos';
-    elseif (str_contains($t, 'absent')) $cls = 'hc-absentismo';
-    return "<span class=\"hc aus-readonly {$cls}\" title=\"Ausencia registrada\">{$tipo}</span>";
-}
+// horarioCellHtml() y ausenciaCellHtml() viven en app/Support/vista-helpers.php
 @endphp
 
 <x-app-layout :breadcrumb="$breadcrumb" :project="$project">

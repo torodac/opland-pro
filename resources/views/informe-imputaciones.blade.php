@@ -15,15 +15,7 @@ $tipo_color = [
 ];
 $color_trabajo = '#74aaf8';
 
-function tipoColor($nombre, $map) {
-    if (isset($map[$nombre])) return $map[$nombre];
-    $n = mb_strtolower($nombre);
-    if (str_starts_with($n, 'comp')) return '#e83e8c';
-    if (str_contains($n, 'vacac'))  return '#e8b800';
-    if (str_contains($n, 'baja'))   return '#7b3f8c';
-    if (str_contains($n, 'asunto')) return '#34c163';
-    return '#888';
-}
+// tipoColor() vive en app/Support/vista-helpers.php
 
 $meses_es = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
              'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];

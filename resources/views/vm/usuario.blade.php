@@ -2,28 +2,7 @@
 // $tiposAusencia viene del controller
 $mesesNombres  = ['Ene'=>1,'Feb'=>2,'Mar'=>3,'Abr'=>4,'May'=>5,'Jun'=>6,'Jul'=>7,'Ago'=>8,'Sep'=>9,'Oct'=>10,'Nov'=>11,'Dic'=>12];
 
-function estadoContrato($c, $contratos): string {
-    $hoy = date('Y-m-d');
-    if ($c->fecha_alta > $hoy) return 'Próximo';
-    if (!$c->fecha_baja || $c->fecha_baja > $hoy) return 'Activo';
-    return 'Finalizado';
-}
-
-function varPct($actual, $prev): ?float {
-    if (!$prev || $prev->salario_base == 0) return null;
-    return round(($actual->salario_base - $prev->salario_base) / $prev->salario_base * 100, 1);
-}
-function varAbs($actual, $prev): ?float {
-    if (!$prev) return null;
-    return round($actual->salario_base - $prev->salario_base, 2);
-}
-// contratos vienen DESC; para var necesitamos el anterior cronológico (mayor fecha_alta menor que la actual)
-function prevContrato($c, $contratos) {
-    return $contratos
-        ->filter(fn($x) => $x->fecha_alta < $c->fecha_alta)
-        ->sortByDesc('fecha_alta')
-        ->first();
-}
+// estadoContrato(), varPct(), varAbs() y prevContrato() viven en app/Support/vista-helpers.php
 
 $alcanceLabels = ['usuario'=>'Personal','cargo'=>'Cargo','departamento'=>'Departamento'];
 $alcanceBg     = ['usuario'=>'#EAF3DE','cargo'=>'#E6F1FB','departamento'=>'#F1EFE8'];

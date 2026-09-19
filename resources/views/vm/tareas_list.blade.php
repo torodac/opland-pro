@@ -1,8 +1,5 @@
 @php
-    function minToHmTl(int $min): string {
-        if ($min <= 0) return '—';
-        return intdiv($min, 60) . 'h ' . str_pad($min % 60, 2, '0', STR_PAD_LEFT) . 'm';
-    }
+    // minToHmTl() vive en app/Support/vista-helpers.php
     $filtroKeys = ['f_propiedad','f_fecha_desde','f_fecha_hasta','f_fecha_fin_desde','f_fecha_fin_hasta','f_responsable','f_estado'];
     $hasFilters = request()->hasAny($filtroKeys);
     $filterKeys = array_merge(['q'], $filtroKeys, ['stat','borrados','ocultos','sort','dir']);

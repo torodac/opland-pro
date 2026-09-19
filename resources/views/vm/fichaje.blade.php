@@ -1,16 +1,7 @@
 @php
 $initials = collect(explode(' ', $usuario->nombre ?? ''))->take(2)->map(fn($w) => strtoupper($w[0] ?? ''))->implode('');
 
-function fmtTime(?string $t): string {
-    if (!$t) return '—';
-    return substr($t, 0, 5);
-}
-function fmtMin2(?int $min): string {
-    if ($min === null) return '—';
-    $neg = $min < 0;
-    $abs = abs($min);
-    return ($neg ? '−' : '') . intdiv($abs, 60) . 'h ' . str_pad($abs % 60, 2, '0', STR_PAD_LEFT) . 'm';
-}
+// fmtTime() y fmtMin2() viven en app/Support/vista-helpers.php
 
 $tipoColores = [
     'limpieza'      => ['bg'=>'#E6F1FB','tx'=>'#0C447C','bd'=>'#B5D4F4'],

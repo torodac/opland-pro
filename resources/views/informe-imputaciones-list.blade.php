@@ -24,24 +24,7 @@ foreach (['rrhh','coordinador','trabajador','direccion','completado'] as $p) {
     $conteos[$p] = $filas->where('paso', $p)->count();
 }
 
-function sprintfHoras($decimal) {
-    $signo = $decimal < 0 ? '-' : '+';
-    $abs   = abs($decimal);
-    $h     = (int) floor($abs);
-    $m     = (int) round(($abs - $h) * 60);
-    return sprintf('%s%d:%02d', $signo, $h, $m);
-}
-
-function sprintfDiasHorasMin($totalMin) {
-    $d = intdiv($totalMin, 1440);
-    $h = intdiv($totalMin % 1440, 60);
-    $m = $totalMin % 60;
-    $partes = [];
-    if ($d > 0) $partes[] = "{$d}d";
-    if ($h > 0 || $d > 0) $partes[] = sprintf('%02dh', $h);
-    $partes[] = sprintf('%02dm', $m);
-    return implode(' ', $partes);
-}
+// sprintfHoras() y sprintfDiasHorasMin() viven en app/Support/vista-helpers.php
 @endphp
 
 <x-app-layout :project="$project" :breadcrumb="$breadcrumb">
