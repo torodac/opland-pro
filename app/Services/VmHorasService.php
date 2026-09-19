@@ -460,11 +460,12 @@ class VmHorasService
 
             $diaTotal = $diaMin + (int) ($f->ajuste_he ?? 0);
 
-            // Solo el personal de turnos acumula días: para él, trabajar un festivo O su día de
-            // descanso genera un día compensable (se salda con un día de "Comp. festivo"). El
-            // resto del personal no acumula días, esas horas son horas extra normales y se quedan
-            // en 'horas_resto'.
-            if ($esTurno && $hasFin && ($isFest || $isDescansoEf)) {
+            // Solo los FESTIVOS trabajados acumulan día compensable, y solo para el personal de
+            // turnos ($isFest ya lleva dentro esa condición). Trabajar un descanso normal genera
+            // horas extra y nada más: se llegó a contar también como día y se revirtió, porque un
+            // turno corto en tu día libre acababa "comprando" un día entero de descanso (caso
+            // real: 36 minutos, y hasta un fichaje de 0 minutos, generando cada uno su día).
+            if ($isFest && $hasFin) {
                 $diasFestCount++;
                 $horasFestMin += $diaTotal;
             }
