@@ -124,7 +124,7 @@
     <div class="db-card">
       <p class="db-title"><i class="ti ti-calendar-user"></i> Mis próximas ausencias <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Ausencias registradas para tu usuario con fecha de fin igual o posterior a hoy.</span></span></p>
       @if($proximasAusencias->isEmpty())
-        <p class="db-empty">No hay ausencias próximas registradas.</p>
+        <p class="empty">No hay ausencias próximas registradas.</p>
       @else
       <table class="db-table">
         <thead><tr><th>Tipo</th><th>Desde</th><th>Hasta</th><th>Días</th><th>Comentario</th></tr></thead>
