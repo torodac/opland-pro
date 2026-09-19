@@ -164,8 +164,20 @@
 
     @php
         $camposFiltrables = $campos->filter(fn($c) => in_array($c->type, ['select','tinyint','smallint','fecha','id','desplegable']));
-        $filtrosActivos   = collect(request()->except(['q','ocultos','borrados','page','modo','stat']))->filter()->isNotEmpty();
+        $filtrosActivos   = collect(request()->except(['q','ocultos','borrados','todos','page','modo','stat']))->filter()->isNotEmpty();
+        // Vista total: activos, ocultos y borrados juntos, con columna de estado. Solo tiene
+        // sentido si la tabla tiene alguna de las dos columnas de estado.
+        $vistaTotal = request()->boolean('todos') && ($tieneDeleted || $tieneHidden);
     @endphp
+
+    @if($vistaTotal)
+    <style>
+        /* Cada <td> trae su propio text-gray-700, así que el color de la fila se aplica a las
+           celdas desde el <tr> para que gane. Los activos se quedan como están. */
+        tr.fila-borrado td { color:#b9c0c7; }
+        tr.fila-oculto  td { color:#8a6300; }
+    </style>
+    @endif
 
     @if(session('success'))
         <div class="mb-4 px-4 py-3 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg">
@@ -336,7 +348,7 @@
             </button>
         @endif
 
-        @if(request('q') || $filtrosActivos || request('ocultos') || request('borrados'))
+        @if(request('q') || $filtrosActivos || request('ocultos') || request('borrados') || request('todos'))
             <a href="{{ route('listado', [$project->slug, $projectTable->name]) }}"
                title="Limpiar filtros"
                class="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
@@ -357,10 +369,20 @@
 
         {{-- Toggle borrados (solo si la tabla tiene campo deleted) --}}
         @if($tieneDeleted)
-        <a href="{{ route('listado', [$project->slug, $projectTable->name]) }}?{{ http_build_query(array_merge(request()->except('borrados','ocultos'), request('borrados') ? [] : ['borrados' => 1])) }}"
+        <a href="{{ route('listado', [$project->slug, $projectTable->name]) }}?{{ http_build_query(array_merge(request()->except('borrados','ocultos','todos'), request('borrados') ? [] : ['borrados' => 1])) }}"
            title="Borrados"
            class="{{ $tieneHidden ? '' : 'ml-auto ' }}p-1.5 rounded-lg border transition-colors {{ request('borrados') ? 'border-red-400 text-red-500 bg-red-50' : 'border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300' }}">
             <i class="fas fa-trash text-base leading-none"></i>
+        </a>
+        @endif
+
+        {{-- Vista total: activos + ocultos + borrados a la vez, con badge de estado por fila.
+             Los otros dos toggles muestran un estado cada uno; este los une. --}}
+        @if($tieneDeleted || $tieneHidden)
+        <a href="{{ route('listado', [$project->slug, $projectTable->name]) }}?{{ http_build_query(array_merge(request()->except('borrados','ocultos','todos'), request('todos') ? [] : ['todos' => 1])) }}"
+           title="Vista total: activos, ocultos y borrados"
+           class="p-1.5 rounded-lg border transition-colors {{ request('todos') ? 'border-indigo-400 text-indigo-500 bg-indigo-50' : 'border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300' }}">
+            <i class="fas fa-layer-group text-base leading-none"></i>
         </a>
         @endif
 
@@ -571,6 +593,9 @@
                         @if($esCuotasProvisional)
                             <th class="w-8"></th>
                         @endif
+                        @if($vistaTotal)
+                            <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap text-gray-400">Estado</th>
+                        @endif
                         @foreach($campos as $campo)
                             @php
                                 $isActive = $sortField === $campo->name;
@@ -768,7 +793,17 @@
 
                         @else
                             {{-- ── FILA NORMAL (solo lectura) ── --}}
-                            <tr class="hover:bg-gray-50 cursor-pointer"
+                            @php
+                                // Estado de la fila, solo en vista total. El color va por clase en
+                                // el <tr> porque cada <td> trae su propio text-gray-700, que ganaría
+                                // a un color puesto en la fila.
+                                $estadoFila = null;
+                                if ($vistaTotal) {
+                                    $estadoFila = ($tieneDeleted && (int) ($registro->deleted ?? 0) === 1) ? 'borrado'
+                                        : (($tieneHidden && (int) ($registro->hidden ?? 0) === 1) ? 'oculto' : 'activo');
+                                }
+                            @endphp
+                            <tr class="hover:bg-gray-50 cursor-pointer {{ $estadoFila ? 'fila-' . $estadoFila : '' }}"
                                 onclick="window.location='{{ $projectTable->name === 'fichaje' ? route('vm.fichaje_form', [$project->slug, $registro->id]) : ($projectTable->name === 'usuarios' && $project->slug === 'vm' ? route('vm.usuario_form', [$project->slug, $registro->id]) : (($projectTable->name === 'facturas' && $project->slug === 'opland') ? route('opland.factura_form.show', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : (($projectTable->name === 'clientes' && $project->slug === 'nf') ? route('nf.clientes_form', [$project->slug, $registro->id]) : route('ficha', [$project->slug, $projectTable->name, $registro->id]))))) }}'">
                                 @if($esCuotasProvisional)
                                     <td class="pl-3 pr-0 py-3 w-8" onclick="event.stopPropagation()">
@@ -778,6 +813,18 @@
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
                                             </svg>
                                         </button>
+                                    </td>
+                                @endif
+                                @if($vistaTotal)
+                                    @php
+                                        $badgeEstado = [
+                                            'activo'  => ['Activo',  '#e8f2e2', '#2f6d1c'],
+                                            'oculto'  => ['Oculto',  '#fdf3d3', '#8a6300'],
+                                            'borrado' => ['Borrado', '#f1f3f5', '#8b949c'],
+                                        ][$estadoFila];
+                                    @endphp
+                                    <td class="px-4 py-3 whitespace-nowrap">
+                                        <span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:.7rem;font-weight:600;background:{{ $badgeEstado[1] }};color:{{ $badgeEstado[2] }};">{{ $badgeEstado[0] }}</span>
                                     </td>
                                 @endif
                                 @foreach($campos as $campo)

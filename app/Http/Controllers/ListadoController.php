@@ -419,19 +419,23 @@ class ListadoController extends Controller
                 $query->where('id_gastos_cuentas', (int) substr($stat, 4));
             }
         } else {
-            // Borrados / archivados (solo si las columnas existen)
-            if ($tieneDeleted) {
-                if ($request->boolean('borrados')) {
-                    $query->where('deleted', 1);
-                } else {
-                    $query->where('deleted', 0);
+            // Vista total: activos, ocultos y borrados a la vez. Es la única que no filtra por
+            // estado; el listado los distingue con un badge y el color de la fila.
+            if (!$request->boolean('todos')) {
+                // Borrados / archivados (solo si las columnas existen)
+                if ($tieneDeleted) {
+                    if ($request->boolean('borrados')) {
+                        $query->where('deleted', 1);
+                    } else {
+                        $query->where('deleted', 0);
+                    }
                 }
-            }
-            if ($tieneHidden && !$request->boolean('borrados')) {
-                if ($request->boolean('ocultos')) {
-                    $query->where('hidden', 1);
-                } else {
-                    $query->where('hidden', 0);
+                if ($tieneHidden && !$request->boolean('borrados')) {
+                    if ($request->boolean('ocultos')) {
+                        $query->where('hidden', 1);
+                    } else {
+                        $query->where('hidden', 0);
+                    }
                 }
             }
         }
