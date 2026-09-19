@@ -564,6 +564,13 @@ class FichaController extends Controller
                 }
             }
 
+            // Filtro por rol: extras como "ref:usuarios|rol:2,3,5" -- el desplegable solo ofrece
+            // los registros con uno de esos id_rol.
+            $rolIds = $field->getRolFilterIds();
+            if ($rolIds && \Illuminate\Support\Facades\Schema::hasColumn($fullRef, 'id_rol')) {
+                $query->whereIn('id_rol', $rolIds);
+            }
+
             // Si es control_user como desplegable y el rol tiene visibilidad restringida
             if ($visibleIds !== null && $field->name === 'control_user' && $field->type === 'desplegable' && $fullRef === $usuariosTable) {
                 $query->whereIn('id', $visibleIds);

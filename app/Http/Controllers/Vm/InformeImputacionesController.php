@@ -475,16 +475,21 @@ class InformeImputacionesController extends Controller
     // firma de arriba y por VacationmarbellaPwaController::firmarInformeTrabajador().
     public function firmarPaso(int $userId, int $year, int $month, string $step, int $aprobadoPor, Request $request): array
     {
-        // El paso "coordinador" (rol 10, Dirección de Operaciones) solo tiene sentido si el rol
-        // del usuario está realmente supervisado por él (vm_roles.roles_supervisados, ver
-        // RoleHierarchy). Si no tiene coordinador, el flujo salta directo de RRHH a trabajador.
-        $rolUsuario = (int) DB::table('vm_usuarios')->where('id', $userId)->value('id_rol');
-        $rolesSupervisados = array_map('intval', RoleHierarchy::subordinateRoleIds('vm_roles', 10));
-        $tieneCoordinador = in_array($rolUsuario, $rolesSupervisados, true);
-
+        // Flujo de firmas (2026-09-19). El primer paso, "aprueba" -- la persona designada en
+        // vm_usuarios.id_aprueba_informe -- está acordado pero DESACTIVADO de momento: hoy el
+        // flujo arranca en RRHH. Para activarlo basta con descomentar las dos líneas marcadas y
+        // que el paso inicial de vm_informes_estado pase a ser 'aprueba' en vez de 'rrhh'.
+        //
+        //   aprueba (desactivado) → rrhh → trabajador → direccion → completado
+        //
+        // Sustituye al antiguo paso "coordinador", que se deducía de la jerarquía de roles
+        // (vm_roles.roles_supervisados, Dirección de Operaciones) y no admitía excepciones por
+        // persona. Su endpoint y su botón siguen existiendo pero ya no entran en la cadena: firmar
+        // ese paso devuelve 409 porque ningún informe llega nunca a estar en 'coordinador'.
         $siguientePaso = [
-            'rrhh'        => $tieneCoordinador ? 'coordinador' : 'trabajador',
-            'coordinador' => 'trabajador',
+            // 'aprueba'  => 'rrhh',        // ← descomentar para activar el primer paso
+            'rrhh'        => 'trabajador',  // ← al activarlo, este sigue igual
+            'coordinador' => 'trabajador',  // retirado del flujo; se conserva por compatibilidad
             'trabajador'  => 'direccion',
             'direccion'   => 'completado',
         ];

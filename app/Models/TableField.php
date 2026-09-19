@@ -177,6 +177,20 @@ class TableField extends Model
         return explode('|', $part, 2)[0];
     }
 
+    // Si extras contiene "|rol:2,3,5", devuelve esos ids para limitar la FK a los registros de la
+    // tabla referenciada cuyo id_rol esté en la lista. Pensado para desplegables de personas que
+    // solo deben ofrecer ciertos perfiles (p.ej. "Aprueba informe" → coordinadores y direcciones).
+    /** @return int[] */
+    public function getRolFilterIds(): array
+    {
+        $extras = $this->extras ?? '';
+        if (!str_contains($extras, '|rol:')) return [];
+        $part = explode('|rol:', $extras, 2)[1];
+        $ids  = explode('|', $part, 2)[0];
+
+        return array_values(array_filter(array_map('intval', explode(',', $ids))));
+    }
+
     // ¿Es readonly (calculado automáticamente)?
     public function isAutocalc(): bool
     {
