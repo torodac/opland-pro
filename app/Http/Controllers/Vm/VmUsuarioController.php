@@ -117,7 +117,7 @@ class VmUsuarioController extends Controller
             ->where('control_user', $id)
             ->where('deleted', 0)
             ->whereNotNull('hora_fin')
-            ->get(['fecha_fichaje', 'hora_inicio', 'hora_fin', 'pausa_inicio', 'pausa_fin', 'fuera_de_turno', 'festivo']);
+            ->get(['fecha_fichaje', 'hora_inicio', 'hora_fin', 'pausa_inicio', 'pausa_fin']);
 
         $departamentos = DB::table('vm_departamentos')->where('deleted', 0)->orderBy('nombre')->get(['id', 'nombre']);
         $cargos = ['Responsable propietarios','Jefe de mantenimiento','Ayte. Diseño','Sub Gobernanta','Mozo/Mantenimiento','Captador Clientes','Jf. Diseño Arquitecto','Gobernanta','Limpiadora','Ayte. Mantenimiento','Oficial Mantenimiento','Contable','Jf. Recepción','RRHH','Jefe Operaciones','Reviu Manager','Jefe Finanzas','Recepcionista'];
