@@ -1148,10 +1148,15 @@ class InformeImputacionesController extends Controller
                 $nombreTipo = $a->tipo ?? '';
                 $cat        = VmHorasService::categoriaAusencia($nombreTipo);
                 if (!array_key_exists($cat, $diasCol)) continue;
+                // La columna C cuenta solo "Comp. horas". La compensación de festivos tiene su
+                // propio cuadro ("Festivos trabajados") y su contador de días en el saldo, así
+                // que contarla aquí además sería mostrarla dos veces. Las horas sí se siguen
+                // descontando para cualquier compensación, que es un día no trabajado.
+                $cuentaEnColumna = $cat !== 'C' || mb_stripos($nombreTipo, 'hora') !== false;
                 $cur = max($a->fecha_inicio, $ms);
                 $lim = min($a->fecha_fin,   $me);
                 while ($cur <= $lim) {
-                    $diasCol[$cat]++;
+                    if ($cuentaEnColumna) $diasCol[$cat]++;
                     if ($cat === 'C') {
                         foreach ($contratos as $c) {
                             if ($c->fecha_alta <= $cur && (is_null($c->fecha_baja) || $c->fecha_baja >= $cur)) {

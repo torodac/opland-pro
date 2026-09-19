@@ -29,8 +29,14 @@ class AusenciaController extends Controller
 
         if (!$field) return [];
 
-        $opts = str_replace('opt:', '', $field);
-        return array_map('trim', explode(',', $opts));
+        $opts  = str_replace('opt:', '', $field);
+        $tipos = array_map('trim', explode(',', $opts));
+
+        // "Compensación" (genérico) queda retirado: se sustituyó por "Comp. horas" y
+        // "Comp. festivo", que sí distinguen qué se está compensando. No queda ninguna ausencia
+        // activa con ese tipo, así que se oculta del alta y del filtro; los registros históricos
+        // que lo tengan se siguen viendo con su texto.
+        return array_values(array_filter($tipos, fn($t) => $t !== 'Compensación'));
     }
 
     public function index(Request $request, Project $project)
