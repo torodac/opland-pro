@@ -203,7 +203,7 @@ class DashboardController extends Controller
             ->where(fn($q) => $q->whereNull('t.validado')->orWhere('t.validado', false))
             ->whereNull('t.usuario_breezeway_ausente')
             ->whereNotExists($sinImputacion('limpieza'))
-            ->orderBy('t.fecha_planificada')
+            ->orderByDesc('t.fecha_planificada')
             ->limit(50)
             ->get(['t.id', 't.nombre', 't.control_user', 't.fecha_planificada', 'p.nombre as propiedad'])
             ->map($resolverResponsables);
@@ -216,7 +216,7 @@ class DashboardController extends Controller
             ->where(fn($q) => $q->whereNull('t.validado')->orWhere('t.validado', false))
             ->whereNull('t.usuario_breezeway_ausente')
             ->whereNotExists($sinImputacion('mantenimiento'))
-            ->orderBy('t.fecha_planificada')
+            ->orderByDesc('t.fecha_planificada')
             ->limit(50)
             ->get(['t.id', 't.nombre', 't.control_user', 't.fecha_planificada', 'p.nombre as propiedad'])
             ->map($resolverResponsables);
@@ -293,7 +293,9 @@ class DashboardController extends Controller
                 ]);
             }
         }
-        $desviaciones = $desviaciones->sortByDesc('diferencia_min')->values()->take(50);
+        // Por fecha (más reciente primero), igual que el resto de bloques del dashboard: lo
+        // accionable es lo de estos días, no la desviación más grande de hace meses.
+        $desviaciones = $desviaciones->sortByDesc('fecha')->values()->take(50);
 
         // ── Conflictos fichaje: descanso o ausencia el mismo día ─────────────
         // Caso 1: fichaje + horario descanso
@@ -343,6 +345,40 @@ class DashboardController extends Controller
         }
 
         $conflictosFichaje = collect(array_values($conflictosMap))
+            ->sortByDesc('fecha')->values()->take(50);
+
+        // ── Conflictos de ausencias: dos o más ausencias el mismo día ─────────
+        // El alta de ausencias ya valida solapes (AusenciaController::validarFechas), así que
+        // estos entran por la ficha genérica, por importación o son anteriores a esa validación.
+        // Se expanden a días solo las ausencias que solapan con otra, para no recorrer día a día
+        // todo el histórico de ausencias.
+        $rawAusConflicto = DB::select("
+            select u.id as id_usuario, u.nombre as usuario, d.dia::date as fecha,
+                   a.id as ausencia_id, a.tipo as ausencia_tipo
+            from vm_ausencias a
+            join vm_usuarios u on u.id = a.id_usuarios and u.deleted = 0
+            cross join lateral generate_series(a.fecha_inicio, a.fecha_fin, interval '1 day') d(dia)
+            where a.deleted = 0
+              and exists (
+                  select 1 from vm_ausencias b
+                  where b.id_usuarios = a.id_usuarios and b.id <> a.id and b.deleted = 0
+                    and b.fecha_inicio <= a.fecha_fin and b.fecha_fin >= a.fecha_inicio
+              )
+        ");
+
+        $ausConflictoMap = [];
+        foreach ($rawAusConflicto as $r) {
+            $key = $r->id_usuario . '_' . $r->fecha;
+            if (!isset($ausConflictoMap[$key])) {
+                $ausConflictoMap[$key] = ['id_usuario' => $r->id_usuario, 'usuario' => $r->usuario, 'fecha' => $r->fecha, 'ausencias' => []];
+            }
+            $ausConflictoMap[$key]['ausencias'][] = ['id' => $r->ausencia_id, 'tipo' => $r->ausencia_tipo];
+        }
+
+        // Dos ausencias que solapan solo coinciden en los días de la intersección: fuera de ella
+        // cada día tiene una sola, y ese día no es un conflicto.
+        $conflictosAusencias = collect(array_values($ausConflictoMap))
+            ->filter(fn($c) => count($c['ausencias']) > 1)
             ->sortByDesc('fecha')->values()->take(50);
 
         // vm_usuarios del usuario web autenticado (para widget de fichaje)
@@ -421,7 +457,7 @@ class DashboardController extends Controller
             'conciliaciones',
             'tareasLimpieza', 'tareasMantPisc', 'breezewayPendientes',
             'turnoSinFichaje', 'desviaciones', 'recordatoriosSscc',
-            'conflictosFichaje', 'informesPendientes',
+            'conflictosFichaje', 'conflictosAusencias', 'informesPendientes',
             'vmUsuario', 'proximasAusencias',
             'verReservas', 'verRRHH', 'verAusenciasSin', 'verLimpSinImp', 'verMantSinImp',
             'verInformesPendientes'

@@ -190,6 +190,51 @@
       @endif
     </div>
 
+    {{-- Conflictos de ausencias --}}
+    <div class="db-card">
+      <p class="db-title"><i class="ti ti-calendar-x"></i> Conflictos de ausencias <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Días en los que un mismo empleado tiene dos o más ausencias registradas a la vez (por ejemplo, una baja dentro de una semana de vacaciones). Pulsa cada badge para abrir la ausencia correspondiente.</span></span></p>
+      @if($conflictosAusencias->isEmpty())
+        <p class="empty">Sin conflictos</p>
+      @else
+      <table class="db-table">
+        <thead><tr><th>Empleado</th><th>Fecha</th><th>Ausencias</th></tr></thead>
+        <tbody>
+          @foreach($conflictosAusencias as $c)
+          @php
+            $c = (object) $c;
+            // Mismos colores que el resto de la app para cada tipo de ausencia (ver horario.blade.php)
+            $colorAus = function (string $tipo): array {
+                $t = mb_strtolower($tipo);
+                if (str_starts_with($t, 'comp'))     return ['#FCE7F3', '#9D174D'];
+                if (str_contains($t, 'vacac'))       return ['#FEF3C7', '#92400E'];
+                if (str_contains($t, 'baja'))        return ['#EDE9FE', '#5B21B6'];
+                if (str_contains($t, 'asunto'))      return ['#D1FAE5', '#065F46'];
+                if (str_contains($t, 'absent'))      return ['#FEE2E2', '#991B1B'];
+                return ['#FFF3CD', '#856404'];
+            };
+          @endphp
+          <tr>
+            <td>
+              <a href="{{ route('vm.usuario', [$project->slug, $c->id_usuario]) }}" style="color:#185FA5;text-decoration:none;font-weight:500;">{{ $c->usuario }}</a>
+            </td>
+            <td style="white-space:nowrap;font-size:12px;">{{ \Carbon\Carbon::parse($c->fecha)->translatedFormat('d M Y') }}</td>
+            <td>
+              <div style="display:flex;flex-direction:column;gap:3px;">
+                @foreach($c->ausencias as $aus)
+                @php [$bg, $col] = $colorAus($aus['tipo']); @endphp
+                <a href="{{ route('ficha', [$project->slug, 'ausencias', $aus['id']]) }}" style="text-decoration:none;">
+                  <span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:.72rem;font-weight:600;background:{{ $bg }};color:{{ $col }};">{{ $aus['tipo'] }}</span>
+                </a>
+                @endforeach
+              </div>
+            </td>
+          </tr>
+          @endforeach
+        </tbody>
+      </table>
+      @endif
+    </div>
+
     @endif
     {{-- Turno sin fichaje --}}
     @if($verRRHH)
