@@ -1060,8 +1060,12 @@ class InformeImputacionesController extends Controller
             foreach (($fichajesYear[$m] ?? []) as $f) {
                 $hasFin = !empty($f->hora_fin);
                 $isFestivo    = isset($festivosYear[$f->fecha_fichaje]);
-                // Festivo trabajado = vm_festivos, ya no depende de vm_fichaje.festivo.
-                $isFest = $isFestivo;
+                // Festivo trabajado = vm_festivos, ya no depende de vm_fichaje.festivo. Solo cuenta
+                // como jornada tasada para el personal de turnos; el resto cobra todo lo fichado
+                // (mismo criterio que calcularHeDia() y saldoAcumuladoHoras() -- este sitio se
+                // quedó sin el && $esTurno al introducir los dos regímenes y pagaba la jornada de
+                // contrato donde las otras dos cifras del informe pagaban lo trabajado).
+                $isFest = $isFestivo && $esTurno;
                 $isDescansoEf = $esDescanso($f->fecha_fichaje);
                 $fichajesFechas[$f->fecha_fichaje] = true;
 
