@@ -1,6 +1,14 @@
 <x-app-layout :breadcrumb="$breadcrumb" :project="$project">
 
 <x-slot name="actions">
+    <button type="button" onclick="abrirFichajeNuevo({ onGuardado: () => location.reload() })"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        Nuevo
+    </button>
+
     <a href="{{ route('listado', [$project->slug, 'fichaje']) }}"
        class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
        title="Ver como listado estándar">
@@ -104,5 +112,7 @@
     </div>
 
 </div>
+
+@include('partials.vm-fichaje-modal', ['project' => $project, 'usuarios' => $usuarios])
 
 </x-app-layout>

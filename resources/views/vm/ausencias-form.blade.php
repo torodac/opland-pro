@@ -293,6 +293,23 @@ function nuevaAusencia() {
     openModal('modal-ausencia');
 }
 
+// Alta prerrellenada desde otra pantalla (el bloque "Turno sin fichaje" del dashboard enlaza
+// aquí con ?nueva=1&usuario=X&fecha=Y): abre la modal con el empleado y el día ya puestos.
+(function () {
+    const q = new URLSearchParams(location.search);
+    if (q.get('nueva') !== '1') return;
+    document.addEventListener('DOMContentLoaded', () => {
+        nuevaAusencia();
+        const usuario = q.get('usuario');
+        const fecha   = q.get('fecha');
+        if (usuario) document.getElementById('a-empleado').value = usuario;
+        if (fecha) {
+            document.getElementById('a-inicio').value = fecha;
+            document.getElementById('a-fin').value    = fecha;
+        }
+    });
+})();
+
 function editarAusencia(id) {
     const aus = AUSENCIAS.find(a => a.id == id);
     if (!aus) return;

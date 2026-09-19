@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Vm;
 use App\Http\Controllers\Controller;
 use App\Models\Project;
 use App\Services\InformeAprobacionGuard;
+use App\Services\VmFichajePermisos;
 use App\Services\VmHorasService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -12,35 +13,13 @@ use Illuminate\Support\Facades\DB;
 
 class FichajeController extends Controller
 {
-    // Roles con privilegios ampliados sobre fichajes: Dirección general (3) y Director RRHH (11).
-    // Mismo criterio que ya usaba update() para saltarse el límite de 2 días al editar.
-    private const ROLES_SIN_LIMITE = [3, 11];
-
     private const DIAS_SEMANA = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 
     // Mismo criterio que FichaController::resolveVisibleUserIds() (visibilidad estándar de
     // control_user en toda la plataforma, según todos_registros/roles_supervisados del rol).
     private function resolveVisibleUserIds(Project $project): ?array
     {
-        $user = auth()->user();
-        if (!$user || $user->isProjectAdmin($project)) return null;
-
-        $projectUserId = $user->projectUserId($project);
-        if (!$projectUserId) return null;
-
-        $role = $user->getProjectRolePublic($project);
-        if (!$role || ($role->todos_registros ?? null) === 'todos') return null;
-
-        if (($role->todos_registros ?? null) === 'supervisados') {
-            return \App\Services\RoleHierarchy::visibleUserIds(
-                $project->slug . '_roles',
-                $project->slug . '_usuarios',
-                (int) $projectUserId,
-                (int) $role->id
-            );
-        }
-
-        return [(string) $projectUserId];
+        return VmFichajePermisos::usuariosVisibles($project);
     }
 
     // Listado admin con la misma información que el histórico de fichajes de la PWA
@@ -371,13 +350,7 @@ class FichajeController extends Controller
         abort_unless(auth()->user()->canViewTable($project, 'fichaje'), 403);
 
         $user       = auth()->user();
-        $authUserId = $user->projectUserId($project);
-        $authRol    = $authUserId
-            ? DB::table($project->slug . '_usuarios')->where('id', $authUserId)->value('id_rol')
-            : null;
-        $puedeSinLimiteFecha = $user->isAdmin()
-            || $user->isProjectAdmin($project)
-            || in_array((int) $authRol, self::ROLES_SIN_LIMITE);
+        $puedeSinLimiteFecha = VmFichajePermisos::puedeSinLimiteFecha($project);
 
         $data = $request->validate([
             'control_user'   => 'required|integer',
@@ -401,7 +374,7 @@ class FichajeController extends Controller
             return response()->json(['error' => 'No se puede crear un fichaje de una fecha futura.'], 422);
         }
 
-        if (!$puedeSinLimiteFecha && $data['fecha_fichaje'] < now()->subDays(2)->toDateString()) {
+        if (!$puedeSinLimiteFecha && $data['fecha_fichaje'] < VmFichajePermisos::fechaMinima()) {
             return response()->json(['error' => 'Solo se pueden crear fichajes de los últimos 2 días.'], 422);
         }
 
@@ -556,14 +529,9 @@ class FichajeController extends Controller
             $esTurno
         );
 
-        // Roles permitidos para ver/editar el ajuste HE
-        $authUserId = auth()->user()->projectUserId($project);
-        $authRol    = $authUserId
-            ? DB::table($project->slug . '_usuarios')->where('id', $authUserId)->value('id_rol')
-            : null;
-        $puedeAjustar = auth()->user()->isAdmin()
-            || auth()->user()->isProjectAdmin($project)
-            || in_array((int) $authRol, [3, 11]);
+        // Ver/editar el ajuste HE y saltarse el límite de fecha son el mismo permiso:
+        // Dirección general, Director de RRHH y administradores.
+        $puedeAjustar        = VmFichajePermisos::puedeSinLimiteFecha($project);
         $puedeSinLimiteFecha = $puedeAjustar;
 
         // "Pendiente" solo tiene sentido para el mismo caso que el bloque del dashboard
@@ -590,13 +558,7 @@ class FichajeController extends Controller
         abort_unless(auth()->user()->canViewTable($project, 'fichaje'), 403);
 
         $user       = auth()->user();
-        $authUserId = $user->projectUserId($project);
-        $authRol    = $authUserId
-            ? DB::table($project->slug . '_usuarios')->where('id', $authUserId)->value('id_rol')
-            : null;
-        $puedeSinLimiteFecha = $user->isAdmin()
-            || $user->isProjectAdmin($project)
-            || in_array((int) $authRol, [3, 11]);
+        $puedeSinLimiteFecha = VmFichajePermisos::puedeSinLimiteFecha($project);
 
         $data = $request->validate([
             'control_user'   => 'required|integer',
@@ -620,7 +582,7 @@ class FichajeController extends Controller
             'deleted'        => 'nullable|integer',
         ]);
 
-        if (!$puedeSinLimiteFecha && $data['fecha_fichaje'] < now()->subDays(2)->toDateString()) {
+        if (!$puedeSinLimiteFecha && $data['fecha_fichaje'] < VmFichajePermisos::fechaMinima()) {
             return response()->json(['error' => 'Solo se pueden editar fichajes de los últimos 2 días'], 422);
         }
 

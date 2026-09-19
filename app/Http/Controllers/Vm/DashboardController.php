@@ -9,6 +9,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use App\Services\InformeAprobacionGuard;
 use App\Services\RoleHierarchy;
+use App\Services\VmFichajePermisos;
 use App\Services\VmHorasService;
 use Illuminate\Support\Facades\DB;
 
@@ -386,6 +387,17 @@ class DashboardController extends Controller
             ->where('admin_user_id', auth()->id())
             ->first(['id', 'nombre', 'id_rol', 'id_departamento']);
 
+        // Alta de fichaje desde "Turno sin fichaje": la modal necesita los empleados visibles, y
+        // el botón solo se ofrece si ese día aún se puede fichar (Dirección/RRHH no tienen ese
+        // límite). Misma fuente de verdad que FichajeController, ver VmFichajePermisos.
+        $visiblesFichaje   = VmFichajePermisos::usuariosVisibles($project);
+        $usuariosFichaje   = DB::table('vm_usuarios')->where('deleted', 0)
+            ->when($visiblesFichaje !== null, fn($q) => $q->whereIn('id', $visiblesFichaje))
+            ->orderBy('nombre')
+            ->get(['id', 'nombre']);
+        $puedeFicharSinLimite = VmFichajePermisos::puedeSinLimiteFecha($project);
+        $fechaMinimaFichaje   = VmFichajePermisos::fechaMinima();
+
         // Visibilidad por rol
         $rolId = (int) ($vmUsuario->id_rol ?? 0);
         $isAdmin = auth()->user()->isProjectAdmin($project);
@@ -458,6 +470,7 @@ class DashboardController extends Controller
             'tareasLimpieza', 'tareasMantPisc', 'breezewayPendientes',
             'turnoSinFichaje', 'desviaciones', 'recordatoriosSscc',
             'conflictosFichaje', 'conflictosAusencias', 'informesPendientes',
+            'usuariosFichaje', 'puedeFicharSinLimite', 'fechaMinimaFichaje',
             'vmUsuario', 'proximasAusencias',
             'verReservas', 'verRRHH', 'verAusenciasSin', 'verLimpSinImp', 'verMantSinImp',
             'verInformesPendientes'

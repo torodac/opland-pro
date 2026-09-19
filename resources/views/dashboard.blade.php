@@ -250,12 +250,33 @@
         <p class="empty">Sin incidencias</p>
       @else
       <table class="db-table">
-        <thead><tr><th>Empleado</th><th>Fecha</th></tr></thead>
+        <thead><tr><th>Empleado</th><th>Fecha</th><th></th></tr></thead>
         <tbody>
           @foreach($turnoSinFichaje as $t)
+          @php
+            $lunesTurno = \Carbon\Carbon::parse($t->fecha)->startOfWeek(\Carbon\Carbon::MONDAY)->toDateString();
+            // El alta de fichaje solo se ofrece si de verdad se va a poder guardar: fuera del
+            // límite de fecha, store() lo rechazaría (ver VmFichajePermisos).
+            $puedeCrearFichaje = $puedeFicharSinLimite || $t->fecha >= $fechaMinimaFichaje;
+          @endphp
           <tr>
             <td style="font-weight:500;">{{ $t->usuario }}</td>
             <td style="color:#888;">{{ \Carbon\Carbon::parse($t->fecha)->translatedFormat('d M Y') }}</td>
+            <td style="white-space:nowrap;text-align:right;">
+              <a href="{{ route('horario', $project->slug) }}?semana={{ $lunesTurno }}"
+                 class="badge-sm" style="background:#EFF6FF;color:#1E40AF;text-decoration:none;padding:3px 8px;"
+                 title="Ver el horario de esa semana">Horario</a>
+              @if($puedeCrearFichaje)
+              <button class="badge-sm" style="background:#EAF3DE;color:#27500A;border:none;cursor:pointer;padding:3px 8px;"
+                      title="Crear el fichaje de ese día"
+                      onclick="abrirFichajeNuevo({ usuario: {{ $t->id_usuario }}, fecha: '{{ $t->fecha }}', onGuardado: () => this.closest('tr').remove() })">Fichaje</button>
+              @endif
+              @if($verAusenciasSin)
+              <a href="{{ route('vm.ausencias_form', $project->slug) }}?nueva=1&usuario={{ $t->id_usuario }}&fecha={{ $t->fecha }}"
+                 class="badge-sm" style="background:#FEF3C7;color:#92400E;text-decoration:none;padding:3px 8px;"
+                 title="Registrar una ausencia ese día">Ausencia</a>
+              @endif
+            </td>
           </tr>
           @endforeach
         </tbody>
@@ -785,6 +806,10 @@ async function marcarSsccHecho(btn, id) {
 </script>
 
   @endif
+
+@if($verRRHH)
+@include('partials.vm-fichaje-modal', ['project' => $project, 'usuarios' => $usuariosFichaje])
+@endif
 
 {{-- Listados largos: 10 filas visibles y scroll para el resto. Se hace en un solo punto, y no
      tabla a tabla, para que valga igual para los bloques que se añadan más adelante. --}}
