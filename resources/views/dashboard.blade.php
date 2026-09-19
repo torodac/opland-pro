@@ -16,6 +16,12 @@
 .dark .db-table td { border-color:rgba(255,255,255,.04); }
 .db-table tr:last-child td { border-bottom:none; }
 .badge-sm   { font-size:10px; padding:1px 6px; border-radius:4px; white-space:nowrap; }
+/* Listados largos: 10 filas visibles y scroll para el resto (la altura exacta la fija el JS
+   del final, porque hay filas de doble altura -- las de badges apilados). El max-height de
+   aquí es el respaldo por si ese JS no llega a ejecutarse. */
+.db-scroll  { max-height:268px; overflow-y:auto; }
+.db-scroll .db-table thead th { position:sticky; top:0; background:#fff; z-index:1; }
+.dark .db-scroll .db-table thead th { background:#1a1a1a; }
 .empty      { font-size:12px; color:#bbb; text-align:center; padding:1rem 0; }
 .diff-pos   { color:#28a745; font-weight:500; }
 .diff-neg   { color:#dc3545; font-weight:500; }
@@ -779,4 +785,23 @@ async function marcarSsccHecho(btn, id) {
 </script>
 
   @endif
+
+{{-- Listados largos: 10 filas visibles y scroll para el resto. Se hace en un solo punto, y no
+     tabla a tabla, para que valga igual para los bloques que se añadan más adelante. --}}
+<script>
+document.querySelectorAll('.db-card table.db-table').forEach(tabla => {
+    const filas = tabla.querySelectorAll('tbody tr');
+    if (filas.length <= 10) return;
+
+    // Se mide antes de mover la tabla: la distancia de su borde superior al de la fila 11 es
+    // la cabecera más 10 filas, contando bien las de doble altura (las de badges apilados).
+    const alto = Math.round(filas[10].getBoundingClientRect().top - tabla.getBoundingClientRect().top);
+
+    const caja = document.createElement('div');
+    caja.className = 'db-scroll';
+    tabla.parentNode.insertBefore(caja, tabla);
+    caja.appendChild(tabla);
+    if (alto > 0) caja.style.maxHeight = alto + 'px';
+});
+</script>
 </x-app-layout>
