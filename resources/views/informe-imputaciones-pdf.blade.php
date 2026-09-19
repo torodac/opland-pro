@@ -173,6 +173,7 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                         <th>Mes</th>
                         <th style="color:#4e8ef7">T</th>
                         <th style="color:#f0960a">C</th>
+                        <th style="color:#e83e8c">CF</th>
                         <th style="color:#e8b800">V</th>
                         <th style="color:#7b3f8c">B</th>
                         <th style="color:#34c163">AA</th>
@@ -187,6 +188,7 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                         <td>{{ $s['label'] }}</td>
                         <td>{{ $s['dias_col']['T'] ?: '' }}</td>
                         <td>{{ $s['dias_col']['C'] ?: '' }}</td>
+                        <td>{{ $s['dias_col']['CF'] ?: '' }}</td>
                         <td>{{ $s['dias_col']['V'] ?: '' }}</td>
                         <td>{{ $s['dias_col']['B'] ?: '' }}</td>
                         <td>{{ $s['dias_col']['AA'] ?: '' }}</td>
@@ -201,6 +203,7 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                         <td>S</td>
                         <td>{{ array_sum(array_map(fn($s) => $s['dias_col']['T'] ?? 0, $year_stats)) }}</td>
                         <td>{{ array_sum(array_map(fn($s) => $s['dias_col']['C'] ?? 0, $year_stats)) }}</td>
+                        <td>{{ array_sum(array_map(fn($s) => $s['dias_col']['CF'] ?? 0, $year_stats)) }}</td>
                         <td>{{ array_sum(array_map(fn($s) => $s['dias_col']['V'] ?? 0, $year_stats)) }}</td>
                         <td>{{ array_sum(array_map(fn($s) => $s['dias_col']['B'] ?? 0, $year_stats)) }}</td>
                         <td>{{ array_sum(array_map(fn($s) => $s['dias_col']['AA'] ?? 0, $year_stats)) }}</td>

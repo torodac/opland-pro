@@ -1116,12 +1116,12 @@ class InformeImputacionesController extends Controller
                 }
             }
 
-            $diasCol = ['T' => $tCount, 'C' => 0, 'V' => 0, 'B' => 0, 'AA' => 0];
-            // El Total cuenta TODOS los días del mes que tienen algo, se muestren o no en su
-            // columna: los de "Comp. festivo" salieron de la columna C a propósito, pero siguen
-            // siendo días del mes y quitarlos del Total descuadraba el Total frente a Laborables
-            // (y podía dejar el Total a 0, con lo que la fila del mes ni se pintaba).
-            $totalDias = $tCount;
+            // Las compensaciones se reparten en dos columnas: C son las de horas y CF las de
+            // festivo. Antes las de festivo se contaban en C, luego se dejaron de contar del todo
+            // (y el Total descuadraba frente a Laborables, porque esos días desaparecían del
+            // informe sin dejar rastro). Con columna propia, la suma de columnas vuelve a dar el
+            // Total y el día compensado se ve.
+            $diasCol = ['T' => $tCount, 'C' => 0, 'CF' => 0, 'V' => 0, 'B' => 0, 'AA' => 0];
 
             $ausRaw = DB::table('vm_ausencias')
                 ->where('id_usuarios', $userId)
@@ -1134,16 +1134,18 @@ class InformeImputacionesController extends Controller
                 $nombreTipo = $a->tipo ?? '';
                 $cat        = VmHorasService::categoriaAusencia($nombreTipo);
                 if (!array_key_exists($cat, $diasCol)) continue;
-                // La columna C cuenta solo "Comp. horas". La compensación de festivos tiene su
-                // propio cuadro ("Festivos trabajados") y su contador de días en el saldo, así
-                // que contarla aquí además sería mostrarla dos veces. Las horas sí se siguen
-                // descontando para cualquier compensación, que es un día no trabajado.
-                $cuentaEnColumna = $cat !== 'C' || mb_stripos($nombreTipo, 'hora') !== false;
+                // Dentro de la categoría "C" (compensaciones) se separan las de festivo, que van a
+                // su propia columna CF. El genérico "Compensación", retirado del alta pero vivo en
+                // registros antiguos, se queda en C. Las horas se descuentan igual en los tres
+                // casos: una compensación es un día no trabajado, se muestre donde se muestre.
+                $col = $cat;
+                if ($cat === 'C' && mb_stripos($nombreTipo, 'festiv') !== false) {
+                    $col = 'CF';
+                }
                 $cur = max($a->fecha_inicio, $ms);
                 $lim = min($a->fecha_fin,   $me);
                 while ($cur <= $lim) {
-                    if ($cuentaEnColumna) $diasCol[$cat]++;
-                    $totalDias++;
+                    $diasCol[$col]++;
                     if ($cat === 'C') {
                         foreach ($contratos as $c) {
                             if ($c->fecha_alta <= $cur && (is_null($c->fecha_baja) || $c->fecha_baja >= $cur)) {
@@ -1173,7 +1175,7 @@ class InformeImputacionesController extends Controller
                 'total'      => ($ep + $en) / 60,
                 'has_ajuste' => $hasAjuste,
                 'dias_col'   => $diasCol,
-                'total_dias' => $totalDias,
+                'total_dias' => array_sum($diasCol),
                 'lab'        => $lab,
             ];
         }

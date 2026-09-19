@@ -30,7 +30,10 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
 
 <style>
 .informe-wrap  { display:flex; gap:16px; align-items:flex-start; }
-.informe-left  { flex:0 0 210px; min-width:0; }
+/* 250px y no 210: "Registro días" pasó de 8 a 9 columnas al separar CF (compensación de festivo)
+   de C (compensación de horas), y con el ancho anterior la tabla se salía del panel. Afecta a
+   todos los paneles de esta columna, que comparten el ancho. */
+.informe-left  { flex:0 0 250px; min-width:0; }
 .informe-right { flex:1; min-width:0; }
 
 .informe-panel {
@@ -42,8 +45,12 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
 .leyenda-item  { display:flex; align-items:center; gap:6px; margin-bottom:5px; }
 .leyenda-dot   { width:12px; height:12px; border-radius:3px; flex-shrink:0; }
 .informe-panel table { width:100%; border-collapse:collapse; font-size:.75rem; }
-.informe-panel table th { text-align:center; padding:2px 4px; font-weight:600; color:#555; border-bottom:1px solid #eee; }
+.informe-panel table th { text-align:center; padding:2px 4px; font-weight:600; color:#555; border-bottom:1px solid #eee; white-space:nowrap; }
 .informe-panel table td { text-align:center; padding:2px 4px; color:#333; border-bottom:1px solid #f5f5f5; }
+/* La tabla de días es la que más columnas tiene (Mes + T/C/CF/V/B/AP/Σ/Lab): relleno más
+   estrecho para que no fuerce el ancho del panel. */
+.informe-panel table.tbl-dias th,
+.informe-panel table.tbl-dias td { padding:2px 2px; }
 .informe-panel table td:first-child { text-align:left; font-weight:600; }
 .informe-panel table tr.total-row td { font-weight:700; border-top:1px solid #ddd; }
 .saldo-box { background:#f0f4ff; border-radius:6px; padding:6px 8px; font-size:.75rem; color:#333; margin-top:4px; }
@@ -338,12 +345,13 @@ function firmarPaso(url, confirmMsg) {
         @if(!$is_liquidado)
         <div class="informe-panel">
             <h6>Registro días {{ $year }}</h6>
-            <table>
+            <table class="tbl-dias">
                 <thead>
                     <tr>
                         <th>Mes</th>
                         <th style="color:#4e8ef7"><span class="app-tooltip">T<span class="app-tooltip-box">Trabajado</span></span></th>
-                        <th style="color:#f0960a"><span class="app-tooltip">C<span class="app-tooltip-box">Compensado</span></span></th>
+                        <th style="color:#f0960a"><span class="app-tooltip">C<span class="app-tooltip-box">Compensación de horas</span></span></th>
+                        <th style="color:#e83e8c"><span class="app-tooltip">CF<span class="app-tooltip-box">Compensación de festivo trabajado</span></span></th>
                         <th style="color:#e8b800"><span class="app-tooltip">V<span class="app-tooltip-box">Vacaciones</span></span></th>
                         <th style="color:#7b3f8c"><span class="app-tooltip">B<span class="app-tooltip-box">Baja</span></span></th>
                         <th style="color:#34c163"><span class="app-tooltip">AP<span class="app-tooltip-box">Asuntos propios</span></span></th>
@@ -358,6 +366,7 @@ function firmarPaso(url, confirmMsg) {
                         <td>{{ $s['label'] }}</td>
                         <td>{{ $s['dias_col']['T'] ?: '' }}</td>
                         <td>{{ $s['dias_col']['C'] ?: '' }}</td>
+                        <td>{{ $s['dias_col']['CF'] ?: '' }}</td>
                         <td>{{ $s['dias_col']['V'] ?: '' }}</td>
                         <td>{{ $s['dias_col']['B'] ?: '' }}</td>
                         <td>{{ $s['dias_col']['AA'] ?: '' }}</td>
@@ -372,6 +381,7 @@ function firmarPaso(url, confirmMsg) {
                         <td>&#931;</td>
                         <td>{{ array_sum(array_map(fn($s) => $s['dias_col']['T'] ?? 0, $year_stats)) }}</td>
                         <td>{{ array_sum(array_map(fn($s) => $s['dias_col']['C'] ?? 0, $year_stats)) }}</td>
+                        <td>{{ array_sum(array_map(fn($s) => $s['dias_col']['CF'] ?? 0, $year_stats)) }}</td>
                         <td>{{ array_sum(array_map(fn($s) => $s['dias_col']['V'] ?? 0, $year_stats)) }}</td>
                         <td>{{ array_sum(array_map(fn($s) => $s['dias_col']['B'] ?? 0, $year_stats)) }}</td>
                         <td>{{ array_sum(array_map(fn($s) => $s['dias_col']['AA'] ?? 0, $year_stats)) }}</td>
