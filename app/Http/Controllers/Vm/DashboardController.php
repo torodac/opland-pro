@@ -244,59 +244,13 @@ class DashboardController extends Controller
             ->get(['u.nombre as usuario', 'u.id as id_usuario', 'h.fecha']);
 
         // ── Fichaje vs imputaciones (diff > 30 min) ──────────────────────────
-        // Solo Limpieza (rol 1) y Mantenimiento (rol 4): son los únicos que imputan tiempo por
-        // tarea, así que comparar fichaje contra imputaciones no tiene sentido para otros roles.
-        $usuarios     = DB::table('vm_usuarios')->where('deleted', 0)->whereIn('id_rol', [1, 4])->pluck('id', 'nombre');
-        $imputaciones = DB::table('vm_imputaciones')
-            ->where('fecha_imputacion', '<', $hoy)
-            ->whereNotNull('duracion')
-            ->selectRaw('id_usuario, fecha_imputacion, SUM(duracion) as total_min')
-            ->groupBy('id_usuario', 'fecha_imputacion')
-            ->get()
-            ->keyBy(fn($r) => $r->id_usuario . '_' . $r->fecha_imputacion);
-
-        $fichajes = DB::table('vm_fichaje')
-            ->where('deleted', 0)
-            ->where(fn($q) => $q->whereNull('validado')->orWhere('validado', false))
-            ->where('fecha_fichaje', '<', $hoy)
-            ->whereNotNull('hora_fin')
-            ->get(['id', 'nombre', 'fecha_fichaje', 'hora_inicio', 'hora_fin', 'pausa_inicio', 'pausa_fin']);
-
-        $desviaciones = collect();
-        foreach ($fichajes as $f) {
-            $nombreUsuario = preg_replace('/^\d{4}\.\d{2}\.\d{2}_/', '', $f->nombre);
-            $idUsuario     = $usuarios[$nombreUsuario] ?? null;
-            if (!$idUsuario) continue;
-
-            // fin - inicio (siempre positivo para jornada normal)
-            $ini  = Carbon::parse($f->hora_inicio);
-            $fin  = Carbon::parse($f->hora_fin);
-            $mins = ($fin->timestamp - $ini->timestamp) / 60;
-            if ($f->pausa_inicio && $f->pausa_fin) {
-                $pIni  = Carbon::parse($f->pausa_inicio);
-                $pFin  = Carbon::parse($f->pausa_fin);
-                $mins -= ($pFin->timestamp - $pIni->timestamp) / 60;
-            }
-            $mins = (int) round($mins);
-
-            $key    = $idUsuario . '_' . $f->fecha_fichaje;
-            $impMin = (int) ($imputaciones[$key]->total_min ?? 0);
-            $diff   = abs($mins - $impMin);
-
-            if ($diff > 30) {
-                $desviaciones->push((object)[
-                    'fichaje_id'     => $f->id,
-                    'usuario'        => $nombreUsuario,
-                    'fecha'          => $f->fecha_fichaje,
-                    'fichaje_min'    => $mins,
-                    'imputado_min'   => $impMin,
-                    'diferencia_min' => $diff,
-                ]);
-            }
-        }
+        // Mismo cálculo que el contador de pendientes del panel de aprobaciones
+        // (InformeImputacionesController::pendientesValidacionDashboard): los dos salen del
+        // helper para que no puedan divergir.
         // Por fecha (más reciente primero), igual que el resto de bloques del dashboard: lo
         // accionable es lo de estos días, no la desviación más grande de hace meses.
-        $desviaciones = $desviaciones->sortByDesc('fecha')->values()->take(50);
+        $desviaciones = VmHorasService::desviacionesFichajeImputacion()
+            ->sortByDesc('fecha')->values()->take(50);
 
         // ── Conflictos fichaje: descanso o ausencia el mismo día ─────────────
         // Caso 1: fichaje + horario descanso

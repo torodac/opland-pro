@@ -545,4 +545,80 @@ class VmHorasService
         ];
     }
 
+    // ── Fichaje vs imputaciones ──────────────────────────────────────────────
+
+    // Solo Limpieza (1) y Mantenimiento (4) imputan tiempo por tarea, así que comparar el fichaje
+    // contra las imputaciones no tiene sentido para el resto de roles.
+    public const ROLES_QUE_IMPUTAN = [1, 4];
+
+    // Umbral a partir del cual la diferencia entre lo fichado y lo imputado se considera una
+    // desviación que hay que revisar.
+    public const DESVIACION_MIN = 30;
+
+    /**
+     * Días en los que lo fichado y lo imputado difieren más de DESVIACION_MIN minutos, para los
+     * fichajes cerrados, sin validar y anteriores a hoy.
+     *
+     * Existe para que el bloque del dashboard y el contador de pendientes del panel de
+     * aprobaciones calculen exactamente lo mismo: estaban duplicados y resolvían el usuario
+     * parseando el texto libre de vm_fichaje.nombre, que guarda el apodo ("Alexa",
+     * "Miriam Ruiz", "Saida Moussi") y casi nunca coincide con vm_usuarios.nombre, así que la
+     * mayoría de los fichajes se descartaba en silencio. Se resuelve por control_user, que es la
+     * relación real y está rellena en todas las filas.
+     *
+     * @param  int[]|null  $userIds  Limita el cálculo a estos usuarios; null = todos.
+     * @return \Illuminate\Support\Collection<int, object>  {fichaje_id, id_usuario, usuario,
+     *         fecha, fichaje_min, imputado_min, diferencia_min}, sin ordenar.
+     */
+    public static function desviacionesFichajeImputacion(?array $userIds = null)
+    {
+        $hoy = date('Y-m-d');
+
+        $usuarios = DB::table('vm_usuarios')
+            ->where('deleted', 0)
+            ->whereIn('id_rol', self::ROLES_QUE_IMPUTAN)
+            ->when($userIds !== null, fn($q) => $q->whereIn('id', $userIds))
+            ->pluck('nombre', 'id');
+
+        if ($usuarios->isEmpty()) return collect();
+
+        $imputaciones = DB::table('vm_imputaciones')
+            ->where('fecha_imputacion', '<', $hoy)
+            ->whereNotNull('duracion')
+            ->whereIn('id_usuario', $usuarios->keys())
+            ->selectRaw('id_usuario, fecha_imputacion, SUM(duracion) as total_min')
+            ->groupBy('id_usuario', 'fecha_imputacion')
+            ->get()
+            ->keyBy(fn($r) => $r->id_usuario . '_' . $r->fecha_imputacion);
+
+        return DB::table('vm_fichaje')
+            ->where('deleted', 0)
+            ->where(fn($q) => $q->whereNull('validado')->orWhere('validado', false))
+            ->where('fecha_fichaje', '<', $hoy)
+            ->whereNotNull('hora_inicio')
+            ->whereNotNull('hora_fin')
+            ->whereIn('control_user', $usuarios->keys())
+            ->get(['id', 'control_user', 'fecha_fichaje', 'hora_inicio', 'hora_fin', 'pausa_inicio', 'pausa_fin'])
+            ->map(function ($f) use ($usuarios, $imputaciones) {
+                $mins = self::hmsToMinutes($f->hora_fin) - self::hmsToMinutes($f->hora_inicio);
+                if ($f->pausa_inicio && $f->pausa_fin) {
+                    $mins -= self::hmsToMinutes($f->pausa_fin) - self::hmsToMinutes($f->pausa_inicio);
+                }
+                $uid    = (int) $f->control_user;
+                $impMin = (int) ($imputaciones[$uid . '_' . $f->fecha_fichaje]->total_min ?? 0);
+                $diff   = abs($mins - $impMin);
+
+                return $diff > self::DESVIACION_MIN ? (object) [
+                    'fichaje_id'     => $f->id,
+                    'id_usuario'     => $uid,
+                    'usuario'        => $usuarios[$uid],
+                    'fecha'          => $f->fecha_fichaje,
+                    'fichaje_min'    => $mins,
+                    'imputado_min'   => $impMin,
+                    'diferencia_min' => $diff,
+                ] : null;
+            })
+            ->filter()
+            ->values();
+    }
 }

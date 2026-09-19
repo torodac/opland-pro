@@ -257,31 +257,11 @@ class InformeImputacionesController extends Controller
                 });
         }
 
-        // Fichaje vs imputaciones (diff > 30 min, sin validar) -- mismo cálculo que el dashboard.
-        $usuariosRol = DB::table('vm_usuarios')->where('deleted', 0)->whereIn('id_rol', [1, 4])->pluck('id', 'nombre');
-        $imputacionesDia = DB::table('vm_imputaciones')
-            ->where('fecha_imputacion', '<', $hoy)->whereNotNull('duracion')
-            ->selectRaw('id_usuario, fecha_imputacion, SUM(duracion) as total_min')
-            ->groupBy('id_usuario', 'fecha_imputacion')
-            ->get()->keyBy(fn($r) => $r->id_usuario . '_' . $r->fecha_imputacion);
-
-        DB::table('vm_fichaje')
-            ->where('deleted', 0)
-            ->where(fn($q) => $q->whereNull('validado')->orWhere('validado', false))
-            ->where('fecha_fichaje', '<', $hoy)
-            ->whereNotNull('hora_fin')
-            ->get(['nombre', 'fecha_fichaje', 'hora_inicio', 'hora_fin', 'pausa_inicio', 'pausa_fin'])
-            ->each(function ($f) use (&$pendientes, $usuariosRol, $imputacionesDia) {
-                $nombreUsuario = preg_replace('/^\d{4}\.\d{2}\.\d{2}_/', '', (string) $f->nombre);
-                $idUsuario = $usuariosRol[$nombreUsuario] ?? null;
-                if (!$idUsuario || !isset($pendientes[$idUsuario])) return;
-
-                $mins = VmHorasService::hmsToMinutes($f->hora_fin) - VmHorasService::hmsToMinutes($f->hora_inicio);
-                if ($f->pausa_inicio && $f->pausa_fin) {
-                    $mins -= VmHorasService::hmsToMinutes($f->pausa_fin) - VmHorasService::hmsToMinutes($f->pausa_inicio);
-                }
-                $impMin = (int) ($imputacionesDia[$idUsuario . '_' . $f->fecha_fichaje]->total_min ?? 0);
-                if (abs($mins - $impMin) > 30) $pendientes[$idUsuario]++;
+        // Fichaje vs imputaciones (diff > 30 min, sin validar) -- mismo helper que el bloque del
+        // dashboard, para que el contador y el bloque no puedan contar cosas distintas.
+        VmHorasService::desviacionesFichajeImputacion($userIds)
+            ->each(function ($d) use (&$pendientes) {
+                if (isset($pendientes[$d->id_usuario])) $pendientes[$d->id_usuario]++;
             });
 
         return $pendientes;
