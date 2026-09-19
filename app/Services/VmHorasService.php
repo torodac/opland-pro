@@ -367,12 +367,16 @@ class VmHorasService
         // 2026): si está fijado, el histórico NO se reconstruye desde vm_fichaje antes de esa
         // fecha (puede no tener datos completos de años anteriores) -- se parte del saldo ya
         // conciliado contra el informe mensual firmado, y solo se suma lo que pase después.
+        // saldo_inicial_a_fecha es el primer día YA incluido en el cálculo: el saldo conciliado
+        // llega hasta el día ANTERIOR, así que todos los filtros de abajo son '>=' y no '>'. Con
+        // '>' se perdía el propio 01/01/2026 (festivo trabajado por dos personas de turnos), que
+        // sí contaba en la tabla "Sigma horas extra" -- las dos cifras del informe no cuadraban.
         $total = 0.0; // en MINUTOS -- igual que el resto de la función, se pasa a horas al final
         $desde = null;
         if ($usuario->saldo_horas_inicial !== null && $usuario->saldo_inicial_a_fecha !== null) {
             $total = ((float) $usuario->saldo_horas_inicial) * 60;
             $desde = $usuario->saldo_inicial_a_fecha;
-            if ($hasta <= $desde) {
+            if ($hasta < $desde) {
                 return [
                     'total'       => (float) $usuario->saldo_horas_inicial,
                     'dias_fest'   => 0,
@@ -393,17 +397,17 @@ class VmHorasService
             ->where('deleted', 0)
             ->whereNotNull('hora_inicio')
             ->where('fecha_fichaje', '<=', $hasta);
-        if ($desde) $fichajesQuery->where('fecha_fichaje', '>', $desde);
+        if ($desde) $fichajesQuery->where('fecha_fichaje', '>=', $desde);
         $fichajes = $fichajesQuery->get(['fecha_fichaje', 'hora_inicio', 'hora_fin',
                    'pausa_inicio', 'pausa_fin', 'ajuste_he']);
 
-        $festivosHist = self::festivosSet($sede, $desde ? date('Y-m-d', strtotime("{$desde} +1 day")) : '2000-01-01', $hasta);
+        $festivosHist = self::festivosSet($sede, $desde ?: '2000-01-01', $hasta);
 
         $descansosDiasQuery = DB::table('vm_horarios')
             ->where('id_usuario', $userId)
             ->where('tipo', 'descanso')
             ->where('fecha', '<=', $hasta);
-        if ($desde) $descansosDiasQuery->where('fecha', '>', $desde);
+        if ($desde) $descansosDiasQuery->where('fecha', '>=', $desde);
         $descansosDias = $descansosDiasQuery->pluck('fecha')->flip()->all();
 
         $esDescanso = fn(string $fecha) => $esTurno
@@ -503,7 +507,7 @@ class VmHorasService
             ->where('tipo', 'ilike', 'comp%')
             ->where('fecha_fin', '<=', $hasta)
             ->where(function ($q) { $q->where('deleted', 0)->orWhereNull('deleted'); });
-        if ($desde) $compAusQuery->where('fecha_inicio', '>', $desde);
+        if ($desde) $compAusQuery->where('fecha_inicio', '>=', $desde);
         $compAus = $compAusQuery->get(['fecha_inicio', 'fecha_fin', 'tipo']);
 
         $compFestDiasCount = 0; // nº de días descontados específicamente por "Comp. festivo", en días ENTEROS
