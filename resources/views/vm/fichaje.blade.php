@@ -241,11 +241,12 @@ a.imp-row:hover{background:rgba(0,0,0,.03)}
         <i class="ti ti-clock" style="font-size:11px"></i>Pte validar
       </span>
     @endif
-    @if ($fichaje->festivo)
-      <span class="fbadge" style="background:#FEF3C7;border:0.5px solid #F59E0B;color:#92400E">
-        <i class="ti ti-sun" style="font-size:11px"></i>Festivo trab.
-      </span>
-    @endif
+    {{-- Mismos badges que el informe mensual para ese día (VmHorasService::badgesDia): antes se
+         pintaba "Festivo trab." según el checkbox manual vm_fichaje.festivo, que el informe dejó
+         de mirar, y las dos pantallas se contradecían. --}}
+    @foreach ($badgesDia ?? [] as $b)
+      <span class="fbadge" style="background:{{ $b[1] }};border:0.5px solid {{ $b[1] }};color:{{ $b[2] ?? '#fff' }}">{{ $b[0] }}</span>
+    @endforeach
     @if ($fichaje->fuera_de_turno)
       <span class="fbadge" style="background:#F5F3FF;border:0.5px solid #8B5CF6;color:#4C1D95">
         <i class="ti ti-arrows-shuffle" style="font-size:11px"></i>Fuera de turno

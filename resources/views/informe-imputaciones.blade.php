@@ -445,16 +445,17 @@ function firmarPaso(url, confirmMsg) {
                     // (real horario si es de turnos, o sábado/domingo si no -- ver
                     // es_descanso_efectivo) sin ser festivo -> "Trab. desc." Sustituyen por completo
                     // la pareja "Trabajo"+"Descanso", no se apilan las dos.
-                    $trabajaFestivo  = $dia['entrada'] && $dia['is_festivo'];
-                    $trabajaDescanso = $dia['entrada'] && $dia['es_descanso_efectivo'] && !$dia['is_festivo'];
-                    $badges = [];
-                    if ($dia['is_rotatorio'])       $badges[] = ['Desc. Fest.','#6f42c1'];
-                    elseif ($dia['is_fest_trab'] || $trabajaFestivo) $badges[] = ['Trab. fest.','#0d6efd'];
-                    elseif ($trabajaDescanso)         $badges[] = ['Trab. desc.','#0d6efd'];
-                    elseif ($dia['tipo'])            $badges[] = [$dia['tipo']->nombre, tipoColor($dia['tipo']->nombre, $tipo_color)];
-                    elseif ($dia['entrada'])         $badges[] = ['Trabajo', $color_trabajo];
-                    elseif ($dia['is_festivo'])      $badges[] = ['Festivo', '#ffe0e0', '#cc0000'];
-                    if ($es_turno && $dia['es_descanso_efectivo'] && !$trabajaFestivo && !$trabajaDescanso && !$dia['is_rotatorio']) $badges[] = ['Descanso', '#F3F4F6', '#6B7280'];
+                    // La cadena vive en VmHorasService::badgesDia() para que la ficha de fichaje
+                    // pinte exactamente los mismos badges que esta tabla.
+                    $badges = \App\Services\VmHorasService::badgesDia(
+                        !empty($dia['entrada']),
+                        (bool) $dia['is_festivo'],
+                        (bool) $dia['is_fest_trab'],
+                        (bool) $dia['is_rotatorio'],
+                        (bool) $dia['es_descanso_efectivo'],
+                        $dia['tipo']->nombre ?? null,
+                        (bool) $es_turno,
+                    );
                     $conflicto = count($badges) > 1;
                 @endphp
                 <tr class="{{ $dia['weekend'] ? 'weekend' : '' }}" @if($conflicto) style="background:#ffff00;" @endif>

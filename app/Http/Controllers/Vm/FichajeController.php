@@ -518,14 +518,36 @@ class FichajeController extends Controller
             ->where('fecha', $fichaje->fecha_fichaje)
             ->first(['tipo']);
 
-        $esTurno = VmHorasService::esDeptoTurno($fichaje->control_user);
+        $esTurno      = VmHorasService::esDeptoTurno($fichaje->control_user);
+        $isDescansoEf = VmHorasService::esDescansoEfectivo($fichaje->fecha_fichaje, $horario->tipo ?? null, $esTurno);
 
         $heMin = VmHorasService::calcularHeDia(
             $tfMin, $pMin, null, $contrato,
             $isFestivo,
             $isFestivo, // festivo trabajado = vm_festivos, ya no depende de vm_fichaje.festivo
-            VmHorasService::esDescansoEfectivo($fichaje->fecha_fichaje, $horario->tipo ?? null, $esTurno),
+            $isDescansoEf,
             (int) ($fichaje->ajuste_he ?? 0),
+            $esTurno
+        );
+
+        // Badges del día: los mismos que el informe mensual, calculados con la misma cadena
+        // (VmHorasService::badgesDia). El badge "Festivo trab." que pintaba antes esta ficha salía
+        // del checkbox manual vm_fichaje.festivo, que el informe ya no mira, así que las dos
+        // pantallas podían decir cosas distintas del mismo día.
+        $ausenciaDia = DB::table('vm_ausencias')
+            ->where('id_usuarios', $fichaje->control_user)
+            ->where('fecha_inicio', '<=', $fichaje->fecha_fichaje)
+            ->where('fecha_fin', '>=', $fichaje->fecha_fichaje)
+            ->where('deleted', 0)
+            ->value('tipo');
+
+        $badgesDia = VmHorasService::badgesDia(
+            !empty($fichaje->hora_inicio),
+            $isFestivo,
+            $isFestivo && !empty($fichaje->hora_inicio), // festivo trabajado = festivo + hay fichaje
+            $isFestivo && $isDescansoEf,                 // rotatorio = festivo que cae en el descanso
+            $isDescansoEf,
+            $ausenciaDia,
             $esTurno
         );
 
@@ -549,7 +571,7 @@ class FichajeController extends Controller
             'project', 'fichaje', 'usuario', 'usuarios',
             'imputaciones', 'totalImputado',
             'fichadoMin', 'esperadoMin', 'heMin', 'efectivasMin',
-            'puedeAjustar', 'puedeSinLimiteFecha', 'pendienteValidar'
+            'puedeAjustar', 'puedeSinLimiteFecha', 'pendienteValidar', 'badgesDia'
         ));
     }
 

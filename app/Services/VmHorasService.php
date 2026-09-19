@@ -545,6 +545,66 @@ class VmHorasService
         ];
     }
 
+    // ── Badges de un día ─────────────────────────────────────────────────────
+
+    // Color de cada tipo de ausencia, el mismo que la leyenda del informe mensual.
+    public static function colorTipoAusencia(string $nombre): string
+    {
+        $mapa = [
+            'Asuntos propios' => '#34c163',
+            'Baja'            => '#7b3f8c',
+            'Compensación'    => '#e83e8c',
+            'Revisar'         => '#fd7e14',
+            'Vacaciones'      => '#e8b800',
+            'Absentismo'      => '#dc3545',
+        ];
+        if (isset($mapa[$nombre])) return $mapa[$nombre];
+        $n = mb_strtolower($nombre);
+        if (str_starts_with($n, 'comp')) return '#e83e8c';
+        if (str_contains($n, 'vacac'))  return '#e8b800';
+        if (str_contains($n, 'baja'))   return '#7b3f8c';
+        if (str_contains($n, 'asunto')) return '#34c163';
+        return '#888';
+    }
+
+    /**
+     * Qué badges describen un día: la cadena de casos del informe mensual, extraída tal cual para
+     * que la ficha de fichaje muestre exactamente lo mismo. Antes la ficha pintaba "Festivo trab."
+     * a partir del checkbox manual vm_fichaje.festivo, que el informe dejó de usar hace tiempo, y
+     * las dos pantallas se contradecían.
+     *
+     * Solo el primer caso que encaja genera badge; "Descanso" sí puede apilarse encima, que es el
+     * único apilado intencionado (día de descanso con una ausencia registrada).
+     *
+     * @return array<int, array{0:string, 1:string, 2?:string}>  [texto, fondo, color de texto]
+     */
+    public static function badgesDia(
+        bool $hayFichaje,
+        bool $isFestivo,
+        bool $isFestTrab,
+        bool $isRotatorio,
+        bool $isDescansoEf,
+        ?string $tipoAusencia,
+        bool $esTurno
+    ): array {
+        $trabajaFestivo  = $hayFichaje && $isFestivo;
+        $trabajaDescanso = $hayFichaje && $isDescansoEf && !$isFestivo;
+
+        $badges = [];
+        if ($isRotatorio)                      $badges[] = ['Desc. Fest.', '#6f42c1'];
+        elseif ($isFestTrab || $trabajaFestivo) $badges[] = ['Trab. fest.', '#0d6efd'];
+        elseif ($trabajaDescanso)              $badges[] = ['Trab. desc.', '#0d6efd'];
+        elseif ($tipoAusencia)                 $badges[] = [$tipoAusencia, self::colorTipoAusencia($tipoAusencia)];
+        elseif ($hayFichaje)                   $badges[] = ['Trabajo', '#74aaf8'];
+        elseif ($isFestivo)                    $badges[] = ['Festivo', '#ffe0e0', '#cc0000'];
+
+        if ($esTurno && $isDescansoEf && !$trabajaFestivo && !$trabajaDescanso && !$isRotatorio) {
+            $badges[] = ['Descanso', '#F3F4F6', '#6B7280'];
+        }
+
+        return $badges;
+    }
+
     // ── Fichaje vs imputaciones ──────────────────────────────────────────────
 
     // Solo Limpieza (1) y Mantenimiento (4) imputan tiempo por tarea, así que comparar el fichaje
