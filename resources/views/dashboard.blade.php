@@ -320,11 +320,11 @@
       @endif
   </div>
 
-  <div class="db-grid">
-
-    {{-- Fichaje vs imputaciones: sin RRHH, que no gestiona la imputación por tarea --}}
-    @if($verFichajeVsImput)
-    <div class="db-card">
+  {{-- Fichaje vs imputaciones: sin RRHH, que no gestiona la imputación por tarea.
+       A ancho completo, igual que "Incidencias de fichaje": son seis columnas y a media página
+       se parten. --}}
+  @if($verFichajeVsImput)
+  <div class="db-card" style="margin-bottom:12px;">
       <p class="db-title"><i class="ti ti-scale"></i> Fichaje vs imputaciones (diff &gt; 30 min) <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Fichajes cuya duración real difiere en más de 30 minutos respecto al total de imputaciones registradas ese día para ese usuario.</span></span></p>
       @if($desviaciones->isEmpty())
         <p class="empty">Sin desviaciones</p>
@@ -370,12 +370,12 @@
         </tbody>
       </table>
       @endif
-    </div>
-    @endif
+  </div>
+  @endif
 
-    @if($verLimpSinImp)
-    {{-- Tareas limpieza completadas sin imputar --}}
-    <div class="db-card">
+  @if($verLimpSinImp)
+  {{-- Tareas limpieza completadas sin imputar, también a ancho completo --}}
+  <div class="db-card" style="margin-bottom:12px;">
       <p class="db-title"><i class="ti ti-wash"></i> Limpieza completada sin imputar <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Tareas de limpieza marcadas como Completada que no tienen ninguna imputación registrada.</span></span></p>
       @if($tareasLimpieza->isEmpty())
         <p class="empty">Sin pendientes</p>
@@ -406,10 +406,8 @@
         </tbody>
       </table>
       @endif
-    </div>
-
-    @endif
   </div>
+  @endif
   @endif
 
   @if($verMantSinImp)
