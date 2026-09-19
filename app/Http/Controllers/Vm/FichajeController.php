@@ -359,8 +359,6 @@ class FichajeController extends Controller
             'hora_fin'       => 'nullable|date_format:H:i',
             'pausa_inicio'   => 'nullable|date_format:H:i',
             'pausa_fin'      => 'nullable|date_format:H:i',
-            'festivo'        => 'nullable|boolean',
-            'fuera_de_turno' => 'nullable|boolean',
             'observacion'    => 'nullable|string|max:1000',
         ]);
 
@@ -425,8 +423,8 @@ class FichajeController extends Controller
             'hora_fin'       => $horaFin,
             'pausa_inicio'   => $data['pausa_inicio'] ?? null,
             'pausa_fin'      => $data['pausa_fin']    ?? null,
-            'festivo'        => (int) ($data['festivo'] ?? 0),
-            'fuera_de_turno' => (int) ($data['fuera_de_turno'] ?? 0),
+            // 'festivo' y 'fuera_de_turno' se quedan con el default 0 de la columna: son campos
+            // retirados (ver update()), nada los calcula ya.
             'observacion'    => $data['observacion'] ?? null,
             'deleted'        => 0,
             'createuser'     => $user->id, // admin_users.id, igual que el resto de la app (Auth::id())
@@ -593,8 +591,6 @@ class FichajeController extends Controller
             'hora_fin_auto'  => 'nullable|date_format:H:i',
             'pausa_ini_auto' => 'nullable|date_format:H:i',
             'pausa_fin_auto' => 'nullable|date_format:H:i',
-            'festivo'        => 'nullable|boolean',
-            'fuera_de_turno' => 'nullable|boolean',
             'validado'       => 'nullable|boolean',
             'km'             => 'nullable|numeric|min:0',
             'trayecto'       => 'nullable|string|max:255',
@@ -636,8 +632,11 @@ class FichajeController extends Controller
         }
 
         $data['ajuste_he']        = (int) ($data['ajuste_he'] ?? 0);
-        $data['festivo']        = (int) ($data['festivo'] ?? 0);
-        $data['fuera_de_turno'] = (int) ($data['fuera_de_turno'] ?? 0);
+        // 'festivo' y 'fuera_de_turno' se retiran del formulario: ni el informe mensual ni las
+        // horas extra los miran desde que el festivo sale de vm_festivos y el descanso del horario
+        // real. Se dejan de escribir en vez de forzarlos a 0, que es lo que hacía esta línea y
+        // borraba el dato histórico (44 fichajes con festivo=1, 1 con fuera_de_turno=1) en cuanto
+        // alguien editaba el fichaje desde esta pantalla, que nunca los ha enviado.
         $data['validado']       = (bool) ($data['validado'] ?? false);
         $data['updatedat']      = now();
 
