@@ -1112,6 +1112,11 @@ class InformeImputacionesController extends Controller
             }
 
             $diasCol = ['T' => $tCount, 'C' => 0, 'V' => 0, 'B' => 0, 'AA' => 0];
+            // El Total cuenta TODOS los días del mes que tienen algo, se muestren o no en su
+            // columna: los de "Comp. festivo" salieron de la columna C a propósito, pero siguen
+            // siendo días del mes y quitarlos del Total descuadraba el Total frente a Laborables
+            // (y podía dejar el Total a 0, con lo que la fila del mes ni se pintaba).
+            $totalDias = $tCount;
 
             $ausRaw = DB::table('vm_ausencias')
                 ->where('id_usuarios', $userId)
@@ -1133,6 +1138,7 @@ class InformeImputacionesController extends Controller
                 $lim = min($a->fecha_fin,   $me);
                 while ($cur <= $lim) {
                     if ($cuentaEnColumna) $diasCol[$cat]++;
+                    $totalDias++;
                     if ($cat === 'C') {
                         foreach ($contratos as $c) {
                             if ($c->fecha_alta <= $cur && (is_null($c->fecha_baja) || $c->fecha_baja >= $cur)) {
@@ -1162,7 +1168,7 @@ class InformeImputacionesController extends Controller
                 'total'      => ($ep + $en) / 60,
                 'has_ajuste' => $hasAjuste,
                 'dias_col'   => $diasCol,
-                'total_dias' => array_sum($diasCol),
+                'total_dias' => $totalDias,
                 'lab'        => $lab,
             ];
         }
