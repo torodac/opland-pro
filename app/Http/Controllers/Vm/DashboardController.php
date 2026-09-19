@@ -374,6 +374,9 @@ class DashboardController extends Controller
         $verAusenciasSin= $isAdmin || $rolId === 11;                     // Dir.RRHH
         $verLimpSinImp  = $isAdmin || in_array($rolId, [10, 2]);         // Dir.Op, Coord.limp
         $verMantSinImp  = $isAdmin || in_array($rolId, [10, 5]);         // Dir.Op, Coord.mant
+        // "Fichaje vs imputaciones" es cosa de quien gestiona la imputación por tarea, no de RRHH:
+        // mismos roles que $verRRHH pero sin Dir.RRHH (11).
+        $verFichajeVsImput = $isAdmin || in_array($rolId, [10, 5, 2]);   // Dir.Op, Coord.mant, Coord.limp
         $verInformesPendientes = $isAdmin || in_array($rolId, [11, 3, 10]); // Dir.RRHH, Dir.gral (todos) / Dir.Op (su equipo)
 
         // ── Próximas ausencias del usuario actual ────────────────────────────
@@ -441,6 +444,7 @@ class DashboardController extends Controller
             'usuariosFichaje', 'puedeFicharSinLimite', 'fechaMinimaFichaje',
             'vmUsuario', 'proximasAusencias',
             'verReservas', 'verRRHH', 'verAusenciasSin', 'verLimpSinImp', 'verMantSinImp',
+            'verFichajeVsImput',
             'verInformesPendientes'
         ));
 

@@ -245,11 +245,11 @@
   </div>
 
   @if($verRRHH)
-  <div class="db-grid">
-
-    {{-- Incidencias de fichaje: las tres casuísticas de un día problemático en un solo bloque.
-         Son excluyentes entre sí (o hay fichaje o no lo hay), así que ninguna fila se repite. --}}
-    <div class="db-card">
+  {{-- Incidencias de fichaje: las tres casuísticas de un día problemático en un solo bloque.
+       Son excluyentes entre sí (o hay fichaje o no lo hay), así que ninguna fila se repite.
+       Va a ancho completo, fuera del db-grid: con cuatro columnas (y la de acciones con hasta
+       tres botones) a media página se parten las líneas. --}}
+  <div class="db-card" style="margin-bottom:12px;">
       <p class="db-title"><i class="ti ti-alert-triangle"></i> Incidencias de fichaje <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Días en los que el fichaje no cuadra con lo planificado: turnos en fechas pasadas sin ningún fichaje, y fichajes que coinciden con un horario de descanso o con una ausencia registrada ese mismo día.</span></span></p>
       @if($incidenciasFichaje->isEmpty())
         <p class="empty">Sin incidencias</p>
@@ -273,42 +273,19 @@
             // vez de abrirlo. El alta solo se ofrece si de verdad se va a poder guardar: fuera del
             // límite de fecha, store() lo rechazaría (ver VmFichajePermisos).
             $puedeCrearFichaje = $puedeFicharSinLimite || $c->fecha >= $fechaMinimaFichaje;
-            // Mismos colores que el resto de la app para cada tipo de ausencia (ver horario.blade.php)
-            $colorAus = function (string $tipo): array {
-                $t = mb_strtolower($tipo);
-                if (str_starts_with($t, 'comp'))     return ['#FCE7F3', '#9D174D'];
-                if (str_contains($t, 'vacac'))       return ['#FEF3C7', '#92400E'];
-                if (str_contains($t, 'baja'))        return ['#EDE9FE', '#5B21B6'];
-                if (str_contains($t, 'asunto'))      return ['#D1FAE5', '#065F46'];
-                if (str_contains($t, 'absent'))      return ['#FEE2E2', '#991B1B'];
-                return ['#FFF3CD', '#856404'];
-            };
+            // Casuística en texto llano: puede haber más de una el mismo día (fichaje que cae a la
+            // vez en un descanso y en una ausencia), así que se enumeran separadas por coma.
+            $casuisticas = [];
+            if (!$c->fichaje_id) $casuisticas[] = 'Turno sin fichaje';
+            if ($c->descanso)    $casuisticas[] = 'Fichaje en descanso';
+            foreach ($c->ausencias as $aus) $casuisticas[] = 'Fichaje en ' . $aus['tipo'];
           @endphp
           <tr>
             <td>
               <a target="_blank" rel="noopener" href="{{ route('vm.usuario', [$project->slug, $c->id_usuario]) }}" style="color:#185FA5;text-decoration:none;font-weight:500;">{{ $c->usuario }}</a>
             </td>
             <td style="white-space:nowrap;font-size:12px;">{{ \Carbon\Carbon::parse($c->fecha)->translatedFormat('d M Y') }}</td>
-            <td>
-              <div style="display:flex;flex-direction:column;gap:3px;">
-                @if(!$c->fichaje_id)
-                <a target="_blank" rel="noopener" href="{{ $horarioUrl }}" style="text-decoration:none;">
-                  <span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:.72rem;font-weight:600;background:#FEF3C7;color:#92400E;">Turno sin fichaje</span>
-                </a>
-                @endif
-                @if($c->descanso)
-                <a target="_blank" rel="noopener" href="{{ $horarioUrl }}" style="text-decoration:none;">
-                  <span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:.72rem;font-weight:600;background:#F3F4F6;color:#6B7280;">Fichaje en descanso</span>
-                </a>
-                @endif
-                @foreach($c->ausencias as $aus)
-                @php [$bg, $col] = $colorAus($aus['tipo']); @endphp
-                <a target="_blank" rel="noopener" href="{{ route('ficha', [$project->slug, 'ausencias', $aus['id']]) }}" style="text-decoration:none;">
-                  <span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:.72rem;font-weight:600;background:{{ $bg }};color:{{ $col }};">Fichaje en {{ $aus['tipo'] }}</span>
-                </a>
-                @endforeach
-              </div>
-            </td>
+            <td style="color:#6b7280;">{{ implode(', ', $casuisticas) }}</td>
             <td style="white-space:nowrap;text-align:right;">
               <a target="_blank" rel="noopener" href="{{ $horarioUrl }}"
                  class="badge-sm" style="background:#EFF6FF;color:#1E40AF;text-decoration:none;padding:3px 8px;"
@@ -322,20 +299,31 @@
                       title="Crear el fichaje de ese día"
                       onclick="abrirFichajeNuevo({ usuario: {{ $c->id_usuario }}, fecha: '{{ $c->fecha }}', onGuardado: () => this.closest('tr').remove() })">Fichaje</button>
               @endif
-              @if($verAusenciasSin && !$c->ausencias)
-              <a target="_blank" rel="noopener" href="{{ route('vm.ausencias_form', $project->slug) }}?nueva=1&usuario={{ $c->id_usuario }}&fecha={{ $c->fecha }}"
+              {{-- Con la casuística en texto llano, este botón es la única vía a la ausencia que
+                   provoca el conflicto: si ese día ya tiene una, la abre en vez de crear otra. --}}
+              @forelse($c->ausencias as $aus)
+              <a target="_blank" rel="noopener" href="{{ route('ficha', [$project->slug, 'ausencias', $aus['id']]) }}"
                  class="badge-sm" style="background:#FEF3C7;color:#92400E;text-decoration:none;padding:3px 8px;"
-                 title="Registrar una ausencia ese día">Ausencia</a>
-              @endif
+                 title="Abrir la ausencia de ese día ({{ $aus['tipo'] }})">Ausencia</a>
+              @empty
+                @if($verAusenciasSin)
+                <a target="_blank" rel="noopener" href="{{ route('vm.ausencias_form', $project->slug) }}?nueva=1&usuario={{ $c->id_usuario }}&fecha={{ $c->fecha }}"
+                   class="badge-sm" style="background:#FEF3C7;color:#92400E;text-decoration:none;padding:3px 8px;"
+                   title="Registrar una ausencia ese día">Ausencia</a>
+                @endif
+              @endforelse
             </td>
           </tr>
           @endforeach
         </tbody>
       </table>
       @endif
-    </div>
+  </div>
 
-    {{-- Fichaje vs imputaciones --}}
+  <div class="db-grid">
+
+    {{-- Fichaje vs imputaciones: sin RRHH, que no gestiona la imputación por tarea --}}
+    @if($verFichajeVsImput)
     <div class="db-card">
       <p class="db-title"><i class="ti ti-scale"></i> Fichaje vs imputaciones (diff &gt; 30 min) <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Fichajes cuya duración real difiere en más de 30 minutos respecto al total de imputaciones registradas ese día para ese usuario.</span></span></p>
       @if($desviaciones->isEmpty())
@@ -383,6 +371,7 @@
       </table>
       @endif
     </div>
+    @endif
 
     @if($verLimpSinImp)
     {{-- Tareas limpieza completadas sin imputar --}}
