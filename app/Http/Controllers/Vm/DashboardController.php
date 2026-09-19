@@ -228,21 +228,6 @@ class DashboardController extends Controller
             ->orderByDesc('fecha_alta')
             ->get(['nombre', 'breezeway_id', 'fecha_alta', 'num_tareas']);
 
-        // ── Turno sin fichaje ────────────────────────────────────────────────
-        $turnoSinFichaje = DB::table('vm_horarios as h')
-            ->join('vm_usuarios as u', 'u.id', '=', 'h.id_usuario')
-            ->where('h.tipo', 'turno')
-            ->where('h.fecha', '<', $hoy)
-            ->whereNotExists(function ($q) {
-                $q->from('vm_fichaje as f')
-                    ->whereColumn('f.control_user', 'u.id')
-                    ->whereColumn('f.fecha_fichaje', 'h.fecha')
-                    ->where('f.deleted', 0);
-            })
-            ->orderByDesc('h.fecha')
-            ->limit(50)
-            ->get(['u.nombre as usuario', 'u.id as id_usuario', 'h.fecha']);
-
         // ── Fichaje vs imputaciones (diff > 30 min) ──────────────────────────
         // Mismo cálculo que el contador de pendientes del panel de aprobaciones
         // (InformeImputacionesController::pendientesValidacionDashboard): los dos salen del
@@ -252,8 +237,28 @@ class DashboardController extends Controller
         $desviaciones = VmHorasService::desviacionesFichajeImputacion()
             ->sortByDesc('fecha')->values()->take(50);
 
-        // ── Conflictos fichaje: descanso o ausencia el mismo día ─────────────
-        // Caso 1: fichaje + horario descanso
+        // ── Incidencias de fichaje ───────────────────────────────────────────
+        // Un solo bloque con las tres casuísticas de un día problemático, porque comparten grano
+        // (usuario + fecha), acciones y destinatario. Son excluyentes entre sí por construcción:
+        // la primera exige que NO haya fichaje ese día y las otras dos exigen que sí lo haya.
+        //
+        // Caso 1: turno planificado sin ningún fichaje
+        $rawSinFichaje = DB::table('vm_horarios as h')
+            ->join('vm_usuarios as u', fn($j) => $j
+                ->whereColumn('u.id', 'h.id_usuario')
+                ->where('u.deleted', 0)
+            )
+            ->where('h.tipo', 'turno')
+            ->where('h.fecha', '<', $hoy)
+            ->whereNotExists(function ($q) {
+                $q->from('vm_fichaje as f')
+                    ->whereColumn('f.control_user', 'u.id')
+                    ->whereColumn('f.fecha_fichaje', 'h.fecha')
+                    ->where('f.deleted', 0);
+            })
+            ->get(['u.id as id_usuario', 'u.nombre as usuario', 'h.fecha']);
+
+        // Caso 2: fichaje + horario descanso
         $rawDescanso = DB::table('vm_fichaje as f')
             ->join('vm_usuarios as u', fn($j) => $j
                 ->whereColumn('u.id', 'f.control_user')
@@ -267,7 +272,7 @@ class DashboardController extends Controller
             ->where('f.deleted', 0)
             ->get(['u.id as id_usuario', 'u.nombre as usuario', 'f.fecha_fichaje as fecha', 'f.id as fichaje_id']);
 
-        // Caso 2: fichaje + ausencia
+        // Caso 3: fichaje + ausencia
         $rawAusencia = DB::table('vm_fichaje as f')
             ->join('vm_usuarios as u', fn($j) => $j
                 ->whereColumn('u.id', 'f.control_user')
@@ -282,24 +287,33 @@ class DashboardController extends Controller
             ->where('f.deleted', 0)
             ->get(['u.id as id_usuario', 'u.nombre as usuario', 'f.fecha_fichaje as fecha', 'f.id as fichaje_id', 'a.id as ausencia_id', 'a.tipo as ausencia_tipo']);
 
-        // Agrupar por (id_usuario, fecha)
-        $conflictosMap = [];
+        // Agrupar por (id_usuario, fecha). 'fichaje_id' a null es justo lo que distingue el caso 1
+        // de los otros dos, y la vista lo usa para decidir si el botón abre el fichaje existente o
+        // la modal de alta.
+        $incidenciasMap = [];
+        $nuevaFila = fn($r, $fichajeId) => [
+            'id_usuario' => $r->id_usuario,
+            'usuario'    => $r->usuario,
+            'fecha'      => $r->fecha,
+            'fichaje_id' => $fichajeId,
+            'descanso'   => false,
+            'ausencias'  => [],
+        ];
+        foreach ($rawSinFichaje as $r) {
+            $incidenciasMap[$r->id_usuario . '_' . $r->fecha] ??= $nuevaFila($r, null);
+        }
         foreach ($rawDescanso as $r) {
             $key = $r->id_usuario . '_' . $r->fecha;
-            if (!isset($conflictosMap[$key])) {
-                $conflictosMap[$key] = ['id_usuario' => $r->id_usuario, 'usuario' => $r->usuario, 'fecha' => $r->fecha, 'fichaje_id' => $r->fichaje_id, 'descanso' => false, 'ausencias' => []];
-            }
-            $conflictosMap[$key]['descanso'] = true;
+            $incidenciasMap[$key] ??= $nuevaFila($r, $r->fichaje_id);
+            $incidenciasMap[$key]['descanso'] = true;
         }
         foreach ($rawAusencia as $r) {
             $key = $r->id_usuario . '_' . $r->fecha;
-            if (!isset($conflictosMap[$key])) {
-                $conflictosMap[$key] = ['id_usuario' => $r->id_usuario, 'usuario' => $r->usuario, 'fecha' => $r->fecha, 'fichaje_id' => $r->fichaje_id, 'descanso' => false, 'ausencias' => []];
-            }
-            $conflictosMap[$key]['ausencias'][] = ['id' => $r->ausencia_id, 'tipo' => $r->ausencia_tipo];
+            $incidenciasMap[$key] ??= $nuevaFila($r, $r->fichaje_id);
+            $incidenciasMap[$key]['ausencias'][] = ['id' => $r->ausencia_id, 'tipo' => $r->ausencia_tipo];
         }
 
-        $conflictosFichaje = collect(array_values($conflictosMap))
+        $incidenciasFichaje = collect(array_values($incidenciasMap))
             ->sortByDesc('fecha')->values()->take(50);
 
         // ── Conflictos de ausencias: dos o más ausencias el mismo día ─────────
@@ -422,8 +436,8 @@ class DashboardController extends Controller
             'project',
             'conciliaciones',
             'tareasLimpieza', 'tareasMantPisc', 'breezewayPendientes',
-            'turnoSinFichaje', 'desviaciones', 'recordatoriosSscc',
-            'conflictosFichaje', 'conflictosAusencias', 'informesPendientes',
+            'incidenciasFichaje', 'desviaciones', 'recordatoriosSscc',
+            'conflictosAusencias', 'informesPendientes',
             'usuariosFichaje', 'puedeFicharSinLimite', 'fechaMinimaFichaje',
             'vmUsuario', 'proximasAusencias',
             'verReservas', 'verRRHH', 'verAusenciasSin', 'verLimpSinImp', 'verMantSinImp',
