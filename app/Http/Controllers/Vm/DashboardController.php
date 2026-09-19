@@ -242,12 +242,23 @@ class DashboardController extends Controller
         // (usuario + fecha), acciones y destinatario. Son excluyentes entre sí por construcción:
         // la primera exige que NO haya fichaje ese día y las otras dos exigen que sí lo haya.
         //
+        // Los dos casos que salen de vm_horarios se limitan a los departamentos que el
+        // planificador muestra (visible_horarios), como hace HorarioController: no tiene sentido
+        // reclamar un turno contra un cuadrante que nadie ve ni puede editar. Deja fuera a quien
+        // no tiene departamento (Selian S.L., Ugo), que arrastra filas de horario heredadas.
+        // El caso 3 no depende del cuadrante, así que no lleva este filtro.
+        $soloDeptoConHorario = fn($j) => $j
+            ->whereColumn('dp.id', 'u.id_departamento')
+            ->where('dp.visible_horarios', true)
+            ->where('dp.deleted', 0);
+
         // Caso 1: turno planificado sin ningún fichaje
         $rawSinFichaje = DB::table('vm_horarios as h')
             ->join('vm_usuarios as u', fn($j) => $j
                 ->whereColumn('u.id', 'h.id_usuario')
                 ->where('u.deleted', 0)
             )
+            ->join('vm_departamentos as dp', $soloDeptoConHorario)
             ->where('h.tipo', 'turno')
             ->where('h.fecha', '<', $hoy)
             ->whereNotExists(function ($q) {
@@ -264,6 +275,7 @@ class DashboardController extends Controller
                 ->whereColumn('u.id', 'f.control_user')
                 ->where('u.deleted', 0)
             )
+            ->join('vm_departamentos as dp', $soloDeptoConHorario)
             ->join('vm_horarios as h', fn($j) => $j
                 ->whereColumn('h.id_usuario', 'u.id')
                 ->whereColumn('h.fecha', 'f.fecha_fichaje')
