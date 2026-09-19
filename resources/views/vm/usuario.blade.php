@@ -50,6 +50,12 @@ $horasDiarias = ($contratoActivo && $contratoActivo->horas_semana)
 $initials = collect(explode(' ', $usuario->nombre))->take(2)->map(fn($w) => strtoupper($w[0]))->implode('');
 
 $hoy = date('Y-m-d');
+// Borrar un usuario con contrato en vigor dejaría un trabajador dado de baja en el sistema pero
+// contratado en la realidad, y seguiría contando en nóminas, informes y costes. Se usa el mismo
+// estadoContrato() que pinta la pestaña de contratos, para que la comprobación coincida con lo
+// que se ve en pantalla.
+$contratosActivos = $contratos->filter(fn($c) => estadoContrato($c, $contratos) === 'Activo')->values();
+
 $sinVigente = $contratos->isNotEmpty()
     && $contratos->every(fn($c) => $c->fecha_baja && $c->fecha_baja <= $hoy)
     && $contratos->every(fn($c) => $c->fecha_alta <= $hoy);
@@ -81,7 +87,7 @@ $sinVigente = $contratos->isNotEmpty()
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>
             Reset password
         </button>
-        <button onclick="openModal('modal-delete')"
+        <button onclick="openModal('{{ (!$usuario->deleted && $contratosActivos->isNotEmpty()) ? 'modal-delete-bloqueado' : 'modal-delete' }}')"
                 class="flex items-center gap-1.5 px-3 py-1.5 text-sm {{ $usuario->deleted ? 'text-green-600 border-green-200 hover:bg-green-50' : 'text-red-500 border-red-200 hover:bg-red-50' }} border rounded-lg transition-colors">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
             {{ $usuario->deleted ? 'Restaurar' : 'Borrar' }}
@@ -574,6 +580,31 @@ td{padding:8px;font-size:13px;}
   </div>
 </div>
 
+
+{{-- Informativa: se intenta borrar un usuario que sigue contratado --}}
+<div class="modal-overlay" id="modal-delete-bloqueado">
+  <div class="modal" style="width:380px;">
+    <p class="modal-title">No se puede borrar todavía</p>
+    <p style="font-size:13px;color:#888;margin:0 0 12px;">
+      <strong>{{ $usuario->nombre }}</strong> tiene {{ $contratosActivos->count() === 1 ? 'un contrato en vigor' : 'contratos en vigor' }}:
+    </p>
+    <ul style="font-size:13px;color:#374151;margin:0 0 14px;padding-left:18px;">
+      @foreach($contratosActivos as $c)
+        <li style="margin-bottom:3px;">
+          Desde el {{ \Carbon\Carbon::parse($c->fecha_alta)->translatedFormat('d/m/Y') }},
+          {{ $c->horas_semana ? rtrim(rtrim(number_format($c->horas_semana, 2, ',', ''), '0'), ',') . ' h/semana' : 'sin jornada indicada' }}
+          @if($c->fecha_baja) · baja prevista el {{ \Carbon\Carbon::parse($c->fecha_baja)->translatedFormat('d/m/Y') }} @endif
+        </li>
+      @endforeach
+    </ul>
+    <p style="font-size:13px;color:#888;margin:0 0 1rem;">
+      Ponle fecha de baja al contrato en la pestaña <strong>Contratos</strong> y vuelve a intentarlo. Si lo borras con el contrato abierto, seguiría contando en nóminas, informes y costes laborales.
+    </p>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-delete-bloqueado')">Entendido</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal-overlay" id="modal-delete">
   <div class="modal" style="width:320px;">
