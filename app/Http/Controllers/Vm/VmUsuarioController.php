@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 
 use App\Models\Project;
 use App\Services\InformeAprobacionGuard;
+use App\Services\VmAusenciaTipos;
 use App\Services\VmHorasService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -253,16 +254,7 @@ class VmUsuarioController extends Controller
 
     private function getTiposAusencia(): array
     {
-        $field = DB::table('admin_table_fields as tf')
-            ->join('admin_project_tables as pt', 'tf.project_table_id', '=', 'pt.id')
-            ->where('pt.name', 'ausencias')
-            ->where('tf.name', 'tipo')
-            ->value('tf.extras');
-
-        if (!$field) return [];
-
-        $opts = str_replace('opt:', '', $field);
-        return array_map('trim', explode(',', $opts));
+        return VmAusenciaTipos::opciones();
     }
 
     public function update(Request $request, Project $project, int $id)

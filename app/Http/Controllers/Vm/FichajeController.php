@@ -240,21 +240,7 @@ class FichajeController extends Controller
     // badge de un tipo de ausencia se vea exactamente igual en ambas pantallas.
     private static function tipoColor(string $nombre): string
     {
-        $mapa = [
-            'Asuntos propios' => '#34c163',
-            'Baja'            => '#7b3f8c',
-            'Compensación'    => '#e83e8c',
-            'Revisar'         => '#fd7e14',
-            'Vacaciones'      => '#e8b800',
-            'Absentismo'      => '#dc3545',
-        ];
-        if (isset($mapa[$nombre])) return $mapa[$nombre];
-        $n = mb_strtolower($nombre);
-        if (str_starts_with($n, 'comp'))    return '#e83e8c';
-        if (str_contains($n, 'vacac'))      return '#e8b800';
-        if (str_contains($n, 'baja'))       return '#7b3f8c';
-        if (str_contains($n, 'asunto'))     return '#34c163';
-        return '#888';
+        return VmHorasService::colorTipoAusencia($nombre);
     }
 
     // Tareas planificadas de cada usuario del array dado, en el rango de fechas, sin ninguna

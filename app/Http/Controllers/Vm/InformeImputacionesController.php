@@ -1060,12 +1060,6 @@ class InformeImputacionesController extends Controller
             foreach (($fichajesYear[$m] ?? []) as $f) {
                 $hasFin = !empty($f->hora_fin);
                 $isFestivo    = isset($festivosYear[$f->fecha_fichaje]);
-                // Festivo trabajado = vm_festivos, ya no depende de vm_fichaje.festivo. Solo cuenta
-                // como jornada tasada para el personal de turnos; el resto cobra todo lo fichado
-                // (mismo criterio que calcularHeDia() y saldoAcumuladoHoras() -- este sitio se
-                // quedó sin el && $esTurno al introducir los dos regímenes y pagaba la jornada de
-                // contrato donde las otras dos cifras del informe pagaban lo trabajado).
-                $isFest = $isFestivo && $esTurno;
                 $isDescansoEf = $esDescanso($f->fecha_fichaje);
                 $fichajesFechas[$f->fecha_fichaje] = true;
 
@@ -1079,25 +1073,23 @@ class InformeImputacionesController extends Controller
 
                 $tCount++;
 
-                if ($contratoDia && $contratoDia->horas_semana) {
-                    $esperadoMin = VmHorasService::esperadoMinDia($contratoDia);
-                    if ($hasFin) {
-                        $tf   = VmHorasService::hmsToMinutes($f->hora_fin) - VmHorasService::hmsToMinutes($f->hora_inicio);
-                        $pMin = (($f->pausa_inicio ?? null) && ($f->pausa_fin ?? null))
-                            ? VmHorasService::hmsToMinutes($f->pausa_fin) - VmHorasService::hmsToMinutes($f->pausa_inicio)
-                            : null;
-                        $ded  = VmHorasService::pausaDeducible($pMin, (float) $contratoDia->horas_semana);
-                        // Festivo trabajado: la extra es siempre la jornada diaria del contrato,
-                        // no el tiempo realmente fichado ese día (mismo criterio que calcularHeDia()).
-                        $he   = $isFest ? $esperadoMin : $tf - $esperadoMin - $ded;
-                    } else {
-                        continue;
-                    }
-                    // Bono solo si el festivo/descanso no se ha trabajado ya (si no, ya cuenta
-                    // arriba) -- y las horas de contrato del día, no un fijo de 8h para todos.
-                    if (($isFestivo || $isDescansoEf) && !$isFest) $he += $esperadoMin;
-                    $ajMin = (int) ($f->ajuste_he ?? 0);
-                    $he += $ajMin;
+                // El cálculo del día es SIEMPRE el de VmHorasService::calcularHeDia(): esta tabla
+                // llegó a tener su propia copia de la fórmula y se quedó atrás cada vez que la
+                // regla cambió (el último caso, los dos regímenes de festivo trabajado).
+                $tf   = $hasFin
+                    ? VmHorasService::hmsToMinutes($f->hora_fin) - VmHorasService::hmsToMinutes($f->hora_inicio)
+                    : null;
+                $pMin = (($f->pausa_inicio ?? null) && ($f->pausa_fin ?? null))
+                    ? VmHorasService::hmsToMinutes($f->pausa_fin) - VmHorasService::hmsToMinutes($f->pausa_inicio)
+                    : null;
+
+                $he = VmHorasService::calcularHeDia(
+                    $tf, $pMin, null, $contratoDia,
+                    $isFestivo, $isFestivo, $isDescansoEf,
+                    (int) ($f->ajuste_he ?? 0), $esTurno
+                );
+
+                if ($he !== null) {
                     if ($he > 0) $ep += $he;
                     else         $en += $he;
                 }

@@ -437,32 +437,22 @@ class VmHorasService
                     break;
                 }
             }
-            if (!$contratoDia || !$contratoDia->horas_semana) {
-                // Sin contrato no hay jornada de referencia contra la que medir nada, pero un
-                // ajuste manual cuenta igual (mismo criterio que calcularHeDia()).
-                $total += (int) ($f->ajuste_he ?? 0);
-                continue;
-            }
+            // El cálculo del día es SIEMPRE el de calcularHeDia(), incluido el caso sin contrato
+            // (donde solo cuenta el ajuste manual) y el bono de festivo/descanso. Este bucle llegó
+            // a tener su propia copia de la fórmula, que es justo como se introdujo el fallo de
+            // los dos regímenes de festivo trabajado.
+            $tf   = $hasFin
+                ? self::hmsToMinutes($f->hora_fin) - self::hmsToMinutes($f->hora_inicio)
+                : null;
+            $pMin = (($f->pausa_inicio ?? null) && ($f->pausa_fin ?? null))
+                ? self::hmsToMinutes($f->pausa_fin) - self::hmsToMinutes($f->pausa_inicio)
+                : null;
 
-            $esperadoMin = self::esperadoMinDia($contratoDia);
-            $diaMin = 0;
-            if ($hasFin) {
-                $tf   = self::hmsToMinutes($f->hora_fin) - self::hmsToMinutes($f->hora_inicio);
-                $pMin = (($f->pausa_inicio ?? null) && ($f->pausa_fin ?? null))
-                    ? self::hmsToMinutes($f->pausa_fin) - self::hmsToMinutes($f->pausa_inicio)
-                    : null;
-                $ded   = self::pausaDeducible($pMin, (float) $contratoDia->horas_semana);
-                // Festivo trabajado: la extra es siempre la jornada diaria del contrato, no el
-                // tiempo realmente fichado ese día (mismo criterio que calcularHeDia()).
-                $diaMin = $isFest ? $esperadoMin : $tf - $esperadoMin - $ded;
-            }
-            // El bono es para festivos o descansos SIN trabajar (fichaje.festivo=false) o sin
-            // fichaje (bloque de más abajo) -- si ya se trabajó, todo lo trabajado cuenta como
-            // extra en la rama de arriba, y sumar el bono aquí sería contarlo dos veces. El bono
-            // son las horas de contrato del día, no un fijo de 8h para todos.
-            if (($isFestivo || $isDescansoEf) && !$isFest) $diaMin += $esperadoMin;
-
-            $diaTotal = $diaMin + (int) ($f->ajuste_he ?? 0);
+            $diaTotal = self::calcularHeDia(
+                $tf, $pMin, null, $contratoDia,
+                $isFestivo, $isFestivo, $isDescansoEf,
+                (int) ($f->ajuste_he ?? 0), $esTurno
+            ) ?? 0;
 
             // Solo los FESTIVOS trabajados acumulan día compensable, y solo para el personal de
             // turnos ($isFest ya lleva dentro esa condición). Trabajar un descanso normal genera

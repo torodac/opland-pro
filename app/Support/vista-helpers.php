@@ -66,17 +66,12 @@ function sprintfDiasHorasMin($totalMin)
 
 // ── Colores y celdas ─────────────────────────────────────────────────────────
 
-// informe-imputaciones.blade.php -- color de la leyenda de tipos de ausencia. La misma tabla vive
-// en VmHorasService::colorTipoAusencia(), que es la que usan los badges del día.
-function tipoColor($nombre, $map)
+// informe-imputaciones.blade.php -- color de la leyenda de tipos de ausencia. El criterio es el de
+// VmHorasService::colorTipoAusencia(), el mismo que usan los badges del día; $map solo permite
+// que una vista concreta sobrescriba algún color puntual.
+function tipoColor($nombre, $map = [])
 {
-    if (isset($map[$nombre])) return $map[$nombre];
-    $n = mb_strtolower($nombre);
-    if (str_starts_with($n, 'comp')) return '#e83e8c';
-    if (str_contains($n, 'vacac'))  return '#e8b800';
-    if (str_contains($n, 'baja'))   return '#7b3f8c';
-    if (str_contains($n, 'asunto')) return '#34c163';
-    return '#888';
+    return $map[$nombre] ?? \App\Services\VmHorasService::colorTipoAusencia($nombre);
 }
 
 // horario.blade.php -- celda del cuadrante

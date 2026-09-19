@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Vm;
 use App\Http\Controllers\Controller;
 use App\Models\Project;
 use App\Services\InformeAprobacionGuard;
+use App\Services\VmAusenciaTipos;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -21,22 +22,7 @@ class AusenciaController extends Controller
 
     private function getTiposAusencia(): array
     {
-        $field = DB::table('admin_table_fields as tf')
-            ->join('admin_project_tables as pt', 'tf.project_table_id', '=', 'pt.id')
-            ->where('pt.name', 'ausencias')
-            ->where('tf.name', 'tipo')
-            ->value('tf.extras');
-
-        if (!$field) return [];
-
-        $opts  = str_replace('opt:', '', $field);
-        $tipos = array_map('trim', explode(',', $opts));
-
-        // "Compensación" (genérico) queda retirado: se sustituyó por "Comp. horas" y
-        // "Comp. festivo", que sí distinguen qué se está compensando. No queda ninguna ausencia
-        // activa con ese tipo, así que se oculta del alta y del filtro; los registros históricos
-        // que lo tengan se siguen viendo con su texto.
-        return array_values(array_filter($tipos, fn($t) => $t !== 'Compensación'));
+        return VmAusenciaTipos::opciones();
     }
 
     public function index(Request $request, Project $project)
