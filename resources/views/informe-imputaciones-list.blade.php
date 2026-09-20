@@ -39,7 +39,7 @@ foreach (['rrhh','coordinador','trabajador','direccion','completado'] as $p) {
 .ap-rol-pills { display:flex; gap:6px; }
 .ap-rol-pill { border:1px solid #e5e7eb; background:#fff; color:#6b7280; font-size:12.5px; font-weight:600; padding:6px 12px; border-radius:20px; cursor:pointer; }
 .ap-rol-pill:hover { background:#f9fafb; color:#374151; }
-.ap-rol-pill.active { background:#2c5c86; border-color:#2c5c86; color:#fff; }
+.ap-rol-pill.active { background:#f97316; border-color:#f97316; color:#fff; }
 .ap-btn-listado:hover { background:#e5e7eb; color:#374151; }
 
 .ap-chevrons { display:flex; margin-bottom:16px; flex-wrap:wrap; }
@@ -48,7 +48,7 @@ foreach (['rrhh','coordinador','trabajador','direccion','completado'] as $p) {
 .ap-chev:last-child { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 12px 50%); }
 .ap-chevrons .ap-chev:nth-child(1){z-index:1}.ap-chevrons .ap-chev:nth-child(2){z-index:2}.ap-chevrons .ap-chev:nth-child(3){z-index:3}.ap-chevrons .ap-chev:nth-child(4){z-index:4}.ap-chevrons .ap-chev:nth-child(5){z-index:5}.ap-chevrons .ap-chev:nth-child(6){z-index:6}
 .ap-chev:hover { background:#e2e6ec; color:#374151; }
-.ap-chev.active { background:#2c5c86; color:#fff; }
+.ap-chev.active { background:#f97316; color:#fff; }
 .ap-chev.active.done { background:#2e8f5d; }
 .ap-chev .n { font-family:ui-monospace,monospace; font-size:11px; font-weight:700; opacity:.85; }
 
@@ -60,12 +60,12 @@ foreach (['rrhh','coordinador','trabajador','direccion','completado'] as $p) {
 .ap-row-top { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
 .ap-row-right { display:flex; align-items:center; gap:14px; flex-shrink:0; margin-left:auto; }
 .ap-who { display:flex; align-items:center; gap:10px; min-width:0; }
-.ap-avatar { width:32px; height:32px; border-radius:50%; background:#e4edf5; color:#1b3e5c; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; flex-shrink:0; }
+.ap-avatar { width:32px; height:32px; border-radius:50%; background:#ffedd5; color:#9a3412; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; flex-shrink:0; }
 .ap-who-name { font-weight:700; font-size:13.5px; color:#111827; display:flex; align-items:center; gap:8px; }
 .ap-progress { display:inline-flex; align-items:center; gap:6px; }
 .ap-progress-bar { width:56px; height:6px; border-radius:4px; background:#e5e7eb; overflow:hidden; flex-shrink:0; }
-.ap-progress-fill { display:block; height:100%; background:#2c5c86; border-radius:4px; }
-.ap-progress-fill.off-range { background:#f97316; }
+.ap-progress-fill { display:block; height:100%; background:#f97316; border-radius:4px; }
+.ap-progress-fill.off-range { background:#c24236; }
 .ap-progress-label { font-family:ui-monospace,monospace; font-size:10.5px; font-weight:700; color:#6b7280; }
 .ap-pct-fuera { font-size:10.5px; font-weight:700; color:#c24236; background:#FBE7E4; padding:2px 7px; border-radius:20px; }
 .ap-who-dept { font-size:11.5px; color:#6b7280; }
@@ -73,8 +73,8 @@ foreach (['rrhh','coordinador','trabajador','direccion','completado'] as $p) {
 .ap-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; }
 .ap-pendientes-validacion { font-size:11px; font-weight:700; color:#ff0000; background:#FBE7E4; padding:2px 8px; border-radius:20px; margin-left:auto; }
 .ap-btn { border:1px solid transparent; border-radius:8px; padding:7px 13px; font-size:12.5px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; text-decoration:none; }
-.ap-btn-sign { background:#2c5c86; color:#fff; }
-.ap-btn-sign:hover { background:#1b3e5c; }
+.ap-btn-sign { background:#f97316; color:#fff; }
+.ap-btn-sign:hover { background:#ea580c; }
 .ap-btn-sign:disabled { background:#f3f4f6; color:#9ca3af; cursor:not-allowed; }
 .ap-btn-ghost { background:transparent; color:#6b7280; border-color:#e5e7eb; padding:7px 9px; }
 .ap-btn-white { background:#fff; color:#374151; border-color:#e5e7eb; font-weight:400; }
@@ -85,7 +85,7 @@ foreach (['rrhh','coordinador','trabajador','direccion','completado'] as $p) {
 .ap-paso-badge { display:none; align-items:center; gap:6px; padding:3px 9px 3px 7px; border-radius:20px; font-size:11px; font-weight:700; white-space:nowrap; }
 .ap-list.showing-todos .ap-paso-badge { display:inline-flex; }
 .ap-paso-badge .dot { width:5px; height:5px; border-radius:50%; background:currentColor; }
-.ap-paso-badge.s-rrhh { background:#e4edf5; color:#1b3e5c; }
+.ap-paso-badge.s-rrhh { background:#ffedd5; color:#9a3412; }
 .ap-paso-badge.s-coordinador { background:#fbf0dd; color:#b8790f; }
 .ap-paso-badge.s-trabajador { background:#ede7fb; color:#6b48c7; }
 .ap-paso-badge.s-direccion { background:#fbe7ef; color:#b23368; }
