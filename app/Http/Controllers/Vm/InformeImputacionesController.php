@@ -95,6 +95,19 @@ class InformeImputacionesController extends Controller
 
         [$year, $month, , $allUsuarios, $canSelect, $canSelectTodos] = $this->resolveParams($request, $project, $user, $isAdmin);
 
+        // El panel de aprobaciones arranca en el MES ANTERIOR, no en el corriente: la validación
+        // del informe se hace a mes vencido, así que entrar en el mes en curso mostraba siempre
+        // una cola vacía. Solo afecta a esta pantalla; el informe individual sigue abriéndose en
+        // el mes corriente, que es el que se está consultando mientras se trabaja.
+        if (!$request->filled('month')) {
+            $anterior = now()->startOfMonth()->subMonth();
+            $month    = $anterior->month;
+            // Si tampoco venía el año, enero tiene que caer en diciembre del año anterior.
+            if (!$request->filled('year')) {
+                $year = $anterior->year;
+            }
+        }
+
         $currentVmUserId = $user->projectUserId($project);
         $authRol         = $currentVmUserId ? DB::table('vm_usuarios')->where('id', $currentVmUserId)->value('id_rol') : null;
 
