@@ -192,8 +192,15 @@ class DashboardController extends Controller
         $hoy    = Carbon::today()->toDateString();
 
         // ── Conciliaciones horario ↔ ausencias ──────────────────────────────
+        // Detecta el horario especial SIN ninguna ausencia detrás. El caso complementario -- que
+        // la ausencia exista pero sea de otro tipo -- lo cubre "Incidencias en el registro de
+        // jornadas y ausencias", porque este whereNotExists solo mira si hay algo registrado, no
+        // si dice lo mismo que el cuadrante.
         $conciliaciones = DB::table('vm_horarios as h')
-            ->join('vm_usuarios as u', 'u.id', '=', 'h.id_usuario')
+            ->join('vm_usuarios as u', fn($j) => $j
+                ->whereColumn('u.id', 'h.id_usuario')
+                ->where('u.deleted', 0)
+            )
             ->whereNotIn('h.tipo', ['turno', 'descanso'])
             ->where('h.fecha', '<', $hoy)
             ->whereNotExists(function ($q) {
