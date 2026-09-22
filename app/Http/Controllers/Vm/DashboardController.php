@@ -18,7 +18,7 @@ class DashboardController extends Controller
     // Mapeo tipo horario → tipo ausencia
     private const TIPO_MAP = [
         'vacaciones'  => 'Vacaciones',
-        'baja'        => 'Baja médica',
+        'baja'        => 'Baja',
         'comp_festivo'=> 'Comp. festivo',
         'comp_horas'  => 'Comp. horas',
         'asuntos'     => 'Asuntos propios',
@@ -28,10 +28,9 @@ class DashboardController extends Controller
     private const BOOKING_STATUS_CANCELADO = ['cancelled', 'canceled'];
 
     // ¿El tipo de horario del cuadrante se corresponde con el tipo de la ausencia registrada?
-    // No se comparan las cadenas tal cual porque no coinciden: el horario usa claves ('comp_festivo')
-    // y la ausencia un texto libre del catálogo ('Comp. festivo'), y TIPO_MAP además traduce 'baja'
-    // como 'Baja médica' mientras el catálogo real solo tiene 'Baja'. Se compara por una palabra
-    // que tiene que aparecer en el tipo de la ausencia.
+    // No se comparan las cadenas tal cual porque no coinciden: el horario usa claves
+    // ('comp_festivo') y la ausencia el texto del catálogo ('Comp. festivo'). Se compara por una
+    // palabra que tiene que aparecer en el tipo de la ausencia.
     private const HORARIO_AUSENCIA_CLAVE = [
         'vacaciones'   => 'vacac',
         'baja'         => 'baja',
@@ -39,18 +38,6 @@ class DashboardController extends Controller
         'comp_horas'   => 'hora',
         'asuntos'      => 'asunto',
         'absentismo'   => 'absent',
-    ];
-
-    // Etiqueta del tipo de horario tal y como la ve el usuario en el cuadrante (ver
-    // horarioCellHtml() en app/Support/vista-helpers.php). No se usa TIPO_MAP para esto porque
-    // traduce 'baja' como 'Baja médica', un tipo que no existe en el catálogo de ausencias.
-    private const HORARIO_LABEL = [
-        'vacaciones'   => 'Vacaciones',
-        'baja'         => 'Baja',
-        'comp_festivo' => 'Comp. festivo',
-        'comp_horas'   => 'Comp. horas',
-        'asuntos'      => 'Asuntos propios',
-        'absentismo'   => 'Absentismo',
     ];
 
     private static function horarioCuadraConAusencia(?string $tipoHorario, ?string $tipoAusencia): bool
@@ -391,7 +378,7 @@ class DashboardController extends Controller
             $key = $r->id_usuario . '_' . $r->fecha;
             $incidenciasMap[$key] ??= $nuevaFila($r, null);
             $incidenciasMap[$key]['horario_distinto'] = [
-                'horario'  => self::HORARIO_LABEL[$r->horario_tipo] ?? $r->horario_tipo,
+                'horario'  => self::TIPO_MAP[$r->horario_tipo] ?? $r->horario_tipo,
                 'ausencia' => $r->ausencia_tipo,
             ];
             // Para que el botón "Ausencia" abra la que provoca el conflicto en vez de ofrecer

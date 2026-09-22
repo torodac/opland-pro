@@ -250,7 +250,7 @@
        Va a ancho completo, fuera del db-grid: con cuatro columnas (y la de acciones con hasta
        tres botones) a media página se parten las líneas. --}}
   <div class="db-card" style="margin-bottom:12px;">
-      <p class="db-title"><i class="ti ti-alert-triangle"></i> Incidencias de fichaje <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Días en los que el fichaje no cuadra con lo planificado: turnos en fechas pasadas sin ningún fichaje, y fichajes que coinciden con un horario de descanso o con una ausencia registrada ese mismo día.</span></span></p>
+      <p class="db-title"><i class="ti ti-alert-triangle"></i> Incidencias en el registro de jornadas y ausencias <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Días pasados en los que lo registrado no cuadra con lo planificado. Cuatro casos:<br><br>&bull; <b>Turno sin fichaje</b> — tenía turno en el cuadrante y no hay ningún fichaje suyo ese día.<br>&bull; <b>Fichaje en descanso</b> — fichó un día que su cuadrante marca como descanso.<br>&bull; <b>Fichaje en &lt;ausencia&gt;</b> — fichó un día que tiene una ausencia registrada (vacaciones, baja...).<br>&bull; <b>Horario dice X y la ausencia es Y</b> — el cuadrante y la ausencia registrada dicen cosas distintas para el mismo día.<br><br>Un mismo día puede acumular varios casos. Los dos primeros solo se reclaman a los departamentos que aparecen en el planificador de horarios.</span></span></p>
       @if($incidenciasFichaje->isEmpty())
         <p class="empty">Sin incidencias</p>
       @else
@@ -666,7 +666,7 @@ async function marcarSsccHecho(btn, id) {
   const badges = document.getElementById('fw-badges');
   const TIPO_LABEL = {
     turno: 'Turno', descanso: 'Descanso', vacaciones: 'Vacaciones',
-    baja: 'Baja médica', comp_festivo: 'Comp. festivo',
+    baja: 'Baja', comp_festivo: 'Comp. festivo',
     comp_horas: 'Comp. horas', asuntos: 'Asuntos propios', absentismo: 'Absentismo',
   };
   const TIPO_COLOR = {
