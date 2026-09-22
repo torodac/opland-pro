@@ -330,10 +330,13 @@ class DashboardController extends Controller
             ->where('f.deleted', 0)
             ->get(['u.id as id_usuario', 'u.nombre as usuario', 'f.fecha_fichaje as fecha', 'f.id as fichaje_id', 'a.id as ausencia_id', 'a.tipo as ausencia_tipo']);
 
-        // Caso 4: el cuadrante dice una cosa y la ausencia registrada dice otra. Distinto del
-        // bloque "Ausencias en Horario no registradas por RRHH", que busca horarios especiales SIN
-        // ninguna ausencia detrás: aquí la ausencia existe, pero es de otro tipo (caso real: Saida
-        // Mounssi el 03/08/2026, horario "baja" contra una ausencia "Comp. festivo").
+        // ── Incidencias de ausencias en Horario (bloque de RRHH) ─────────────
+        // El cuadrante dice una cosa y la ausencia registrada dice otra. Va en su propio bloque,
+        // y no junto a las incidencias de fichaje, porque quien lo corrige es RRHH: son las dos
+        // fuentes de la ausencia contradiciéndose, no un problema de jornada.
+        // Distinto de "Ausencias en Horario no registradas por RRHH", que busca horarios
+        // especiales SIN ninguna ausencia detrás: aquí la ausencia existe, pero es de otro tipo
+        // (caso real: Saida Mounssi del 03 al 05/08/2026, horario "baja" contra "Comp. festivo").
         $rawHorarioDistinto = DB::table('vm_horarios as h')
             ->join('vm_usuarios as u', fn($j) => $j
                 ->whereColumn('u.id', 'h.id_usuario')
@@ -362,7 +365,6 @@ class DashboardController extends Controller
             'sin_fichaje'       => false,
             'descanso'          => false,
             'ausencias'         => [],
-            'horario_distinto'  => null,   // ['horario' => tipo del cuadrante, 'ausencia' => tipo registrado]
         ];
         foreach ($rawSinFichaje as $r) {
             $key = $r->id_usuario . '_' . $r->fecha;
@@ -379,24 +381,21 @@ class DashboardController extends Controller
             $incidenciasMap[$key] ??= $nuevaFila($r, $r->fichaje_id);
             $incidenciasMap[$key]['ausencias'][] = ['id' => $r->ausencia_id, 'tipo' => $r->ausencia_tipo];
         }
-        foreach ($rawHorarioDistinto as $r) {
-            if (self::horarioCuadraConAusencia($r->horario_tipo, $r->ausencia_tipo)) continue;
-
-            $key = $r->id_usuario . '_' . $r->fecha;
-            $incidenciasMap[$key] ??= $nuevaFila($r, null);
-            $incidenciasMap[$key]['horario_distinto'] = [
-                'horario'  => self::TIPO_MAP[$r->horario_tipo] ?? $r->horario_tipo,
-                'ausencia' => $r->ausencia_tipo,
-            ];
-            // Para que el botón "Ausencia" abra la que provoca el conflicto en vez de ofrecer
-            // crear otra. Si ya venía por el caso 3, no se duplica.
-            $yaEsta = collect($incidenciasMap[$key]['ausencias'])->contains('id', $r->ausencia_id);
-            if (!$yaEsta) {
-                $incidenciasMap[$key]['ausencias'][] = ['id' => $r->ausencia_id, 'tipo' => $r->ausencia_tipo];
-            }
-        }
-
         $incidenciasFichaje = collect(array_values($incidenciasMap))
+            ->sortByDesc('fecha')->values()->take(50);
+
+        // Bloque aparte, el de RRHH: una fila por día en el que el cuadrante y la ausencia no
+        // dicen lo mismo.
+        $incidenciasAusencias = collect($rawHorarioDistinto)
+            ->reject(fn($r) => self::horarioCuadraConAusencia($r->horario_tipo, $r->ausencia_tipo))
+            ->map(fn($r) => [
+                'id_usuario'  => $r->id_usuario,
+                'usuario'     => $r->usuario,
+                'fecha'       => $r->fecha,
+                'horario'     => self::TIPO_MAP[$r->horario_tipo] ?? $r->horario_tipo,
+                'ausencia'    => $r->ausencia_tipo,
+                'ausencia_id' => $r->ausencia_id,
+            ])
             ->sortByDesc('fecha')->values()->take(50);
 
         // ── Conflictos de ausencias: dos o más ausencias el mismo día ─────────
@@ -460,6 +459,9 @@ class DashboardController extends Controller
         // "Fichaje vs imputaciones" es cosa de quien gestiona la imputación por tarea, no de RRHH:
         // mismos roles que $verRRHH pero sin Dir.RRHH (11).
         $verFichajeVsImput = $isAdmin || in_array($rolId, [10, 5, 2]);   // Dir.Op, Coord.mant, Coord.limp
+        // Las incidencias de fichaje contra el cuadrante las corrige Operaciones; las de ausencia
+        // contra el cuadrante, RRHH ($verAusenciasSin). Por eso van en dos bloques distintos.
+        $verIncidenciasFichaje = $verFichajeVsImput;
         $verInformesPendientes = $isAdmin || in_array($rolId, [11, 3, 10]); // Dir.RRHH, Dir.gral (todos) / Dir.Op (su equipo)
 
         // ── Próximas ausencias del usuario actual ────────────────────────────
@@ -522,12 +524,12 @@ class DashboardController extends Controller
             'project',
             'conciliaciones',
             'tareasLimpieza', 'tareasMantPisc', 'breezewayPendientes',
-            'incidenciasFichaje', 'desviaciones', 'recordatoriosSscc',
+            'incidenciasFichaje', 'incidenciasAusencias', 'desviaciones', 'recordatoriosSscc',
             'conflictosAusencias', 'informesPendientes',
             'usuariosFichaje', 'puedeFicharSinLimite', 'fechaMinimaFichaje',
             'vmUsuario', 'proximasAusencias',
             'verReservas', 'verRRHH', 'verAusenciasSin', 'verLimpSinImp', 'verMantSinImp',
-            'verFichajeVsImput',
+            'verFichajeVsImput', 'verIncidenciasFichaje',
             'verInformesPendientes'
         ));
 

@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use App\Services\RoleHierarchy;
+use App\Services\VmFichajePermisos;
 
 /**
  * Ficha de un registro: ver, editar, archivar, borrar.
@@ -142,17 +143,15 @@ class FichaController extends Controller
             ? $projectTable->fields->where('name', '!=', 'nombre')->values()
             : $projectTable->fields;
 
+        // Los dos permisos de fichaje salen de VmFichajePermisos, que es donde los aplican la
+        // pantalla propia y el dashboard: aquí vivía una tercera copia con los roles a mano, y
+        // además mezclaba en una sola variable el límite de fecha y el ajuste manual de horas
+        // extra, que ya no coinciden.
         $puedeSinLimiteFecha = null;
         if ($projectTable->name === 'fichaje' && $project->slug === 'vm') {
-            $authUserId = Auth::user()->projectUserId($project);
-            $authRol    = $authUserId
-                ? DB::table($project->slug . '_usuarios')->where('id', $authUserId)->value('id_rol')
-                : null;
-            $puedeSinLimiteFecha = Auth::user()->isAdmin()
-                || Auth::user()->isProjectAdmin($project)
-                || in_array((int) $authRol, [3, 11]);
+            $puedeSinLimiteFecha = VmFichajePermisos::puedeSinLimiteFecha($project);
 
-            if (!$puedeSinLimiteFecha) {
+            if (!VmFichajePermisos::puedeAjustarHe($project)) {
                 $camposFicha = $camposFicha->whereNotIn('name', ['ajuste_he', 'ajuste_he_motivo'])->values();
             }
         }
@@ -352,21 +351,15 @@ class FichaController extends Controller
         }
 
         if ($projectTable->name === 'fichaje' && $project->slug === 'vm') {
-            $authUserId = Auth::user()->projectUserId($project);
-            $authRol    = $authUserId
-                ? DB::table($project->slug . '_usuarios')->where('id', $authUserId)->value('id_rol')
-                : null;
-            $puedeSinLimiteFecha = Auth::user()->isAdmin()
-                || Auth::user()->isProjectAdmin($project)
-                || in_array((int) $authRol, [3, 11]);
+            $puedeSinLimiteFecha = VmFichajePermisos::puedeSinLimiteFecha($project);
 
-            if (!$puedeSinLimiteFecha) {
+            if (!VmFichajePermisos::puedeAjustarHe($project)) {
                 unset($data['ajuste_he'], $data['ajuste_he_motivo']);
             }
 
             $fechaFichaje = $data['fecha_fichaje'] ?? $registro->fecha_fichaje ?? null;
-            if ($fechaFichaje && !$puedeSinLimiteFecha && $fechaFichaje < now()->subDays(2)->toDateString()) {
-                return back()->withErrors(['fecha_fichaje' => 'Solo se pueden editar fichajes de los últimos 2 días'])->withInput();
+            if ($fechaFichaje && !$puedeSinLimiteFecha && $fechaFichaje < VmFichajePermisos::fechaMinima()) {
+                return back()->withErrors(['fecha_fichaje' => 'Solo se pueden editar fichajes de los últimos ' . VmFichajePermisos::DIAS_LIMITE . ' días'])->withInput();
             }
 
             $horarioError = \App\Services\FichajeValidator::validarHorario(

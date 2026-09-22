@@ -244,13 +244,49 @@
     @endif
   </div>
 
-  @if($verRRHH)
-  {{-- Incidencias de fichaje: las tres casuísticas de un día problemático en un solo bloque.
-       Son excluyentes entre sí (o hay fichaje o no lo hay), así que ninguna fila se repite.
+  {{-- Incidencias de ausencias en Horario: las revisa RRHH, no Operaciones. Es la ausencia
+       registrada contra el cuadrante, no el fichaje contra el cuadrante. --}}
+  @if($verAusenciasSin)
+  <div class="db-card" style="margin-bottom:12px;">
+    <p class="db-title"><i class="ti ti-calendar-question"></i> Incidencias de ausencias en Horario <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Días pasados en los que el cuadrante y la ausencia registrada dicen cosas distintas: por ejemplo, el Horario marca "Baja" y la ausencia que cubre ese día es "Comp. festivo". Una de las dos está mal y hay que decidir cuál.<br><br>No es lo mismo que "Ausencias en Horario no registradas por RRHH": allí no existe ninguna ausencia detrás del horario; aquí existe, pero no coincide.<br><br>Solo se revisan los departamentos que aparecen en el planificador de horarios.</span></span></p>
+    @if($incidenciasAusencias->isEmpty())
+      <p class="empty">Sin incidencias</p>
+    @else
+    <table class="db-table">
+      <thead><tr><th>Empleado</th><th>Fecha</th><th>Horario</th><th>Ausencia registrada</th><th></th></tr></thead>
+      <tbody>
+        @foreach($incidenciasAusencias as $a)
+        @php $a = (object) $a; @endphp
+        <tr>
+          <td>
+            <a target="_blank" rel="noopener" href="{{ route('vm.usuario', [$project->slug, $a->id_usuario]) }}" style="color:#185FA5;text-decoration:none;font-weight:500;">{{ $a->usuario }}</a>
+          </td>
+          <td style="white-space:nowrap;font-size:12px;">{{ \Carbon\Carbon::parse($a->fecha)->translatedFormat('d M Y') }}</td>
+          <td style="color:#6b7280;">{{ $a->horario }}</td>
+          <td style="color:#6b7280;">{{ $a->ausencia }}</td>
+          <td style="white-space:nowrap;text-align:right;">
+            <a target="_blank" rel="noopener" href="{{ route('horario', $project->slug) }}?semana={{ \Carbon\Carbon::parse($a->fecha)->startOfWeek(\Carbon\Carbon::MONDAY)->toDateString() }}"
+               class="badge-sm" style="background:#EFF6FF;color:#1E40AF;text-decoration:none;padding:3px 8px;"
+               title="Ver el horario de esa semana">Horario</a>
+            <a target="_blank" rel="noopener" href="{{ route('ficha', [$project->slug, 'ausencias', $a->ausencia_id]) }}"
+               class="badge-sm" style="background:#FEF3C7;color:#92400E;text-decoration:none;padding:3px 8px;"
+               title="Abrir la ausencia registrada">Ausencia</a>
+          </td>
+        </tr>
+        @endforeach
+      </tbody>
+    </table>
+    @endif
+  </div>
+  @endif
+
+  @if($verIncidenciasFichaje)
+  {{-- Incidencias de fichaje contra el cuadrante: las corrige Operaciones. Las tres casuísticas
+       son excluyentes entre sí (o hay fichaje o no lo hay), así que ninguna fila se repite.
        Va a ancho completo, fuera del db-grid: con cuatro columnas (y la de acciones con hasta
        tres botones) a media página se parten las líneas. --}}
   <div class="db-card" style="margin-bottom:12px;">
-      <p class="db-title"><i class="ti ti-alert-triangle"></i> Incidencias en el registro de jornadas y ausencias <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Días pasados en los que lo registrado no cuadra con lo planificado. Cuatro casos:<br><br>&bull; <b>Turno sin fichaje</b> — tenía turno en el cuadrante y no hay ningún fichaje suyo ese día.<br>&bull; <b>Fichaje en descanso</b> — fichó un día que su cuadrante marca como descanso.<br>&bull; <b>Fichaje en &lt;ausencia&gt;</b> — fichó un día que tiene una ausencia registrada (vacaciones, baja...).<br>&bull; <b>Horario dice X y la ausencia es Y</b> — el cuadrante y la ausencia registrada dicen cosas distintas para el mismo día.<br><br>Un mismo día puede acumular varios casos. Los dos primeros solo se reclaman a los departamentos que aparecen en el planificador de horarios.</span></span></p>
+      <p class="db-title"><i class="ti ti-alert-triangle"></i> Incidencias de fichajes con turnos y descansos del Horario <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Días pasados en los que el fichaje no cuadra con el cuadrante. Los corrige el área de Operaciones. Tres casos:<br><br>&bull; <b>Turno sin fichaje</b> — tenía turno en el cuadrante y no hay ningún fichaje suyo ese día.<br>&bull; <b>Fichaje en descanso</b> — fichó un día que su cuadrante marca como descanso.<br>&bull; <b>Fichaje en &lt;ausencia&gt;</b> — fichó un día que tiene una ausencia registrada (vacaciones, baja...).<br><br>Un mismo día puede acumular varios casos. Los dos primeros solo se reclaman a los departamentos que aparecen en el planificador de horarios.<br><br>Cuando el cuadrante y la ausencia se contradicen entre sí, eso va al bloque "Incidencias de ausencias en Horario", que revisa RRHH.</span></span></p>
       @if($incidenciasFichaje->isEmpty())
         <p class="empty">Sin incidencias</p>
       @else
@@ -282,10 +318,6 @@
             // ausencias por el conflicto de horario de abajo sin que nadie fichara ese día.
             if ($c->fichaje_id) {
                 foreach ($c->ausencias as $aus) $casuisticas[] = 'Fichaje en ' . $aus['tipo'];
-            }
-            if ($c->horario_distinto) {
-                $casuisticas[] = 'Horario dice ' . $c->horario_distinto['horario']
-                    . ' y la ausencia es ' . $c->horario_distinto['ausencia'];
             }
           @endphp
           <tr>

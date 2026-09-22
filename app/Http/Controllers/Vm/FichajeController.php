@@ -535,10 +535,12 @@ class FichajeController extends Controller
             $esTurno
         );
 
-        // Ver/editar el ajuste HE y saltarse el límite de fecha son el mismo permiso:
-        // Dirección general, Director de RRHH y administradores.
-        $puedeAjustar        = VmFichajePermisos::puedeSinLimiteFecha($project);
-        $puedeSinLimiteFecha = $puedeAjustar;
+        // Dos permisos distintos, aunque durante un tiempo fueran el mismo: tocar el ajuste manual
+        // de horas extra sigue siendo de Dirección general y RRHH, mientras que editar fechas
+        // antiguas lo tiene también Operaciones, que es quien resuelve las incidencias de fichaje
+        // del dashboard.
+        $puedeAjustar        = VmFichajePermisos::puedeAjustarHe($project);
+        $puedeSinLimiteFecha = VmFichajePermisos::puedeSinLimiteFecha($project);
 
         // "Pendiente" solo tiene sentido para el mismo caso que el bloque del dashboard
         // "Fichaje vs imputaciones (diff > 30 min)": roles que imputan tiempo por tarea
