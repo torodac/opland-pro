@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 
 use App\Models\Project;
 use App\Services\InformeAprobacionGuard;
+use App\Services\VmHorarioPublicacion;
 use App\Services\VmHorasService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -131,7 +132,42 @@ class HorarioController extends Controller
             'colUserMaxLen'  => $colUserMaxLen,
             'prevWeek'       => $weekStart->copy()->subWeek()->toDateString(),
             'nextWeek'       => $weekStart->copy()->addWeek()->toDateString(),
-            'breadcrumb'     => [['label' => 'Horarios', 'url' => '']],
+            // Publicación del cuadrante: si esta semana está oculta, la PWA no deja pasar de aquí
+            // (ver VmHorarioPublicacion).
+            'semanaPublicada' => VmHorarioPublicacion::estaPublicada(
+                (int) $weekStart->isoFormat('GGGG'), (int) $weekStart->isoFormat('W')
+            ),
+            'puedePublicar'   => $isAdmin || $user->canEditTable($project, 'horarios'),
+            'breadcrumb'      => [['label' => 'Horarios', 'url' => '']],
+        ]);
+    }
+
+    /**
+     * Publica u oculta la semana del cuadrante para la PWA.
+     */
+    public function publicar(Request $request, Project $project)
+    {
+        $user = auth()->user();
+        abort_unless($user->isProjectAdmin($project) || $user->canEditTable($project, 'horarios'), 403);
+
+        $data = $request->validate([
+            'semana'    => 'required|date',
+            'publicado' => 'required|boolean',
+        ]);
+
+        $lunes = Carbon::parse($data['semana'])->startOfWeek(Carbon::MONDAY);
+
+        VmHorarioPublicacion::guardar(
+            (int) $lunes->isoFormat('GGGG'),
+            (int) $lunes->isoFormat('W'),
+            (bool) $data['publicado'],
+            auth()->id()
+        );
+
+        return response()->json([
+            'ok'             => true,
+            'publicado'      => (bool) $data['publicado'],
+            'ultima_visible' => VmHorarioPublicacion::ultimaVisible(),
         ]);
     }
 

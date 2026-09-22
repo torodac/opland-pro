@@ -191,6 +191,7 @@ Route::middleware('auth')->group(function () {
         Route::get('horario/planificar', [HorarioController::class, 'index'])->name('horario');
         Route::get('horario', [HorarioController::class, 'listado'])->name('horario.listado');
         Route::post('horario', [HorarioController::class, 'store'])->name('horario.store');
+        Route::post('horario/publicar', [HorarioController::class, 'publicar'])->name('horario.publicar');
         Route::delete('horario', [HorarioController::class, 'destroy'])->name('horario.destroy');
 
         // ->where('project','vm'): sin esto, esta ruta literal "dashboard" (sin parametros) coincide

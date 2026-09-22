@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Services\InformeAprobacionGuard;
 use App\Services\RoleHierarchy;
+use App\Services\VmHorarioPublicacion;
 use Illuminate\Support\Str;
 use Minishlink\WebPush\WebPush;
 use Minishlink\WebPush\Subscription;
@@ -1153,17 +1154,26 @@ class VacationmarbellaPwaController extends Controller
         $desde = $lunes->format('Y-m-d');
         $hasta = $domingo->format('Y-m-d');
 
-        $horarios = DB::table('vm_horarios')
-            ->where('id_usuario', $user->id)
-            ->whereBetween('fecha', [$desde, $hasta])
-            ->orderBy('fecha')
-            ->get(['fecha', 'tipo', 'hora_inicio', 'hora_fin']);
+        // Cuadrante sin publicar: no se devuelven los días. Ocultar una semana tapa esa y todas
+        // las posteriores (ver VmHorarioPublicacion), para poder ir montando el cuadrante sin que
+        // el equipo vea borradores.
+        $visible = VmHorarioPublicacion::visible((int) $lunes->format('o'), (int) $lunes->format('W'));
+
+        $horarios = $visible
+            ? DB::table('vm_horarios')
+                ->where('id_usuario', $user->id)
+                ->whereBetween('fecha', [$desde, $hasta])
+                ->orderBy('fecha')
+                ->get(['fecha', 'tipo', 'hora_inicio', 'hora_fin'])
+            : collect();
 
         return response()->json([
-            'semana' => $lunes->format('o') . '-W' . $lunes->format('W'),
-            'desde'  => $desde,
-            'hasta'  => $hasta,
-            'dias'   => $horarios,
+            'semana'        => $lunes->format('o') . '-W' . $lunes->format('W'),
+            'desde'         => $desde,
+            'hasta'         => $hasta,
+            'dias'          => $horarios,
+            'publicada'     => $visible,
+            'ultima_semana' => VmHorarioPublicacion::ultimaVisible(),
         ]);
     }
 
@@ -1198,10 +1208,16 @@ class VacationmarbellaPwaController extends Controller
             ->orderBy('u.nombre')
             ->get(['u.id', 'u.nombre', 'u.id_departamento', 'd.nombre as departamento_nombre']);
 
-        $horarioRows = DB::table('vm_horarios')
-            ->whereIn('id_usuario', $usuarios->pluck('id'))
-            ->whereBetween('fecha', [$desde, $hasta])
-            ->get(['id_usuario', 'fecha', 'tipo', 'hora_inicio', 'hora_fin']);
+        // Mismo muro que en la agenda personal: si la semana no está publicada, el cuadrante del
+        // equipo sale vacío (ver VmHorarioPublicacion).
+        $visible = VmHorarioPublicacion::visible((int) $lunes->format('o'), (int) $lunes->format('W'));
+
+        $horarioRows = $visible
+            ? DB::table('vm_horarios')
+                ->whereIn('id_usuario', $usuarios->pluck('id'))
+                ->whereBetween('fecha', [$desde, $hasta])
+                ->get(['id_usuario', 'fecha', 'tipo', 'hora_inicio', 'hora_fin'])
+            : collect();
 
         $horarioMap = [];
         foreach ($horarioRows as $h) {
@@ -1228,10 +1244,12 @@ class VacationmarbellaPwaController extends Controller
         }
 
         return response()->json([
-            'semana' => $lunes->format('o') . '-W' . $lunes->format('W'),
-            'desde'  => $desde,
-            'hasta'  => $hasta,
-            'grupos' => $grupos,
+            'semana'        => $lunes->format('o') . '-W' . $lunes->format('W'),
+            'desde'         => $desde,
+            'hasta'         => $hasta,
+            'grupos'        => $grupos,
+            'publicada'     => $visible,
+            'ultima_semana' => VmHorarioPublicacion::ultimaVisible(),
         ]);
     }
 

@@ -121,6 +121,18 @@ $pastBlocked = $isPastWeek && !($canEditPast ?? false);
 <div class="hor-nav">
     <h2>Horarios semanales</h2>
 
+    {{-- Publicación del cuadrante para la PWA. Ocultar una semana levanta un muro: el trabajador
+         no ve esa ni ninguna posterior, estén como estén. Las futuras nacen ocultas. --}}
+    @if($puedePublicar)
+    <button type="button" id="btn-publicar" class="hor-btn"
+            data-publicado="{{ $semanaPublicada ? 1 : 0 }}"
+            data-semana="{{ $weekStart->toDateString() }}"
+            style="{{ $semanaPublicada ? 'background:#e8f2e2;border-color:#7BBF50;color:#27500A;' : 'background:#fdf3d3;border-color:#e8b800;color:#8a6300;' }}"
+            title="{{ $semanaPublicada ? 'Visible en la app del trabajador. Pulsa para ocultarla.' : 'Oculta en la app del trabajador: no verá esta semana ni ninguna posterior. Pulsa para publicarla.' }}">
+        {{ $semanaPublicada ? 'Publicada' : '🚫 Oculta' }}
+    </button>
+    @endif
+
     <a href="?semana={{ $prevWeek }}" class="hor-btn">&#8592;</a>
     <span class="week-label">
         {{ $weekStart->isoFormat('D MMM') }} – {{ $weekEnd->isoFormat('D MMM YYYY') }}
@@ -128,6 +140,41 @@ $pastBlocked = $isPastWeek && !($canEditPast ?? false);
     <a href="?semana={{ $nextWeek }}" class="hor-btn">&#8594;</a>
     <a href="?" class="hor-btn">Esta semana</a>
 </div>
+
+@if($puedePublicar)
+<script>
+document.getElementById('btn-publicar')?.addEventListener('click', async function () {
+    const btn = this;
+    const publicar = btn.dataset.publicado !== '1';
+    if (!publicar && !confirm('Al ocultar esta semana, en la app del trabajador dejará de verse esta y todas las posteriores, aunque estén publicadas.\n\n¿Continuar?')) return;
+
+    btn.disabled = true;
+    try {
+        const res = await fetch(@json(route('horario.publicar', $project->slug)), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json',
+                       'X-CSRF-TOKEN': @json(csrf_token()) },
+            body: JSON.stringify({ semana: btn.dataset.semana, publicado: publicar }),
+        });
+        if (!res.ok) throw new Error('http ' + res.status);
+        const data = await res.json();
+
+        btn.dataset.publicado = data.publicado ? '1' : '0';
+        btn.textContent = data.publicado ? 'Publicada' : '🚫 Oculta';
+        btn.style.cssText = data.publicado
+            ? 'background:#e8f2e2;border-color:#7BBF50;color:#27500A;'
+            : 'background:#fdf3d3;border-color:#e8b800;color:#8a6300;';
+        btn.title = data.publicado
+            ? 'Visible en la app del trabajador. Pulsa para ocultarla.'
+            : 'Oculta en la app del trabajador: no verá esta semana ni ninguna posterior. Pulsa para publicarla.';
+    } catch (e) {
+        alert('No se ha podido cambiar la publicación de la semana.');
+    } finally {
+        btn.disabled = false;
+    }
+});
+</script>
+@endif
 
 @foreach($departamentos as $dept)
 @php

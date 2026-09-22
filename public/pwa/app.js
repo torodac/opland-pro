@@ -1733,14 +1733,20 @@ function renderHorario(data) {
   }
 
   const esHoySemana = data.semana === isoWeek(new Date());
+  // Cuadrante sin publicar: ni se muestran los días ni se deja avanzar más. El servidor ya
+  // devuelve la semana vacía; esto solo evita que la flecha lleve a semanas en blanco.
+  const sinPublicar = data.publicada === false;
+  const topeAlcanzado = sinPublicar || (data.ultima_semana && data.semana >= data.ultima_semana);
   content.innerHTML = `
     <div class="agenda-semana-nav">
       <button id="btn-sem-prev">‹</button>
       <span class="semana-label">${semanaLabel(data.desde, data.hasta)}</span>
-      <button id="btn-sem-next">›</button>
+      <button id="btn-sem-next"${topeAlcanzado ? ' disabled style="opacity:.35"' : ''}>›</button>
       <button id="btn-sem-hoy" style="font-size:12px;padding:5px 10px${esHoySemana ? ';opacity:.35;pointer-events:none' : ''}">Hoy</button>
     </div>
-    ${diasHtml}
+    ${sinPublicar
+      ? '<div class="empty-state"><div class="icon">🗓️</div><p>El cuadrante de esta semana todavía no está publicado.</p></div>'
+      : diasHtml}
     <div style="margin-top:16px">
       <button class="btn btn-outline" id="btn-ver-equipo">Ver todos</button>
     </div>`;
@@ -1810,19 +1816,23 @@ function renderHorarioEquipo(data) {
   }
 
   const esHoyEquipo = data.semana === isoWeek(new Date());
+  // Mismo tope que en la agenda personal (ver renderHorario).
+  const sinPublicarEq   = data.publicada === false;
+  const topeAlcanzadoEq = sinPublicarEq || (data.ultima_semana && data.semana >= data.ultima_semana);
   content.innerHTML = `
     <div class="agenda-semana-nav">
       <button id="btn-equipo-prev">‹</button>
       <span class="semana-label">${semanaLabel(data.desde, data.hasta)}</span>
-      <button id="btn-equipo-next">›</button>
+      <button id="btn-equipo-next"${topeAlcanzadoEq ? ' disabled style="opacity:.35"' : ''}>›</button>
       <button id="btn-equipo-hoy" style="font-size:12px;padding:5px 10px${esHoyEquipo ? ';opacity:.35;pointer-events:none' : ''}">Hoy</button>
     </div>
+    ${sinPublicarEq ? '<div class="empty-state"><div class="icon">🗓️</div><p>El cuadrante de esta semana todavía no está publicado.</p></div>' : `
     <div class="equipo-table-wrap">
       <table class="equipo-table">
         <thead><tr><th class="col-usuario">Usuario</th>${thFechas}</tr></thead>
         <tbody>${gruposHtml}</tbody>
       </table>
-    </div>`;
+    </div>`}`;
 
   document.getElementById('btn-equipo-prev').addEventListener('click', () => loadHorarioEquipo(moverSemana(equipoSemana, -1)));
   document.getElementById('btn-equipo-next').addEventListener('click', () => loadHorarioEquipo(moverSemana(equipoSemana, +1)));
