@@ -364,7 +364,6 @@ class DashboardController extends Controller
             'fichaje_id'        => $fichajeId,
             'sin_fichaje'       => false,
             'descanso'          => false,
-            'ausencias'         => [],
         ];
         foreach ($rawSinFichaje as $r) {
             $key = $r->id_usuario . '_' . $r->fecha;
@@ -376,26 +375,44 @@ class DashboardController extends Controller
             $incidenciasMap[$key] ??= $nuevaFila($r, $r->fichaje_id);
             $incidenciasMap[$key]['descanso'] = true;
         }
-        foreach ($rawAusencia as $r) {
-            $key = $r->id_usuario . '_' . $r->fecha;
-            $incidenciasMap[$key] ??= $nuevaFila($r, $r->fichaje_id);
-            $incidenciasMap[$key]['ausencias'][] = ['id' => $r->ausencia_id, 'tipo' => $r->ausencia_tipo];
-        }
         $incidenciasFichaje = collect(array_values($incidenciasMap))
             ->sortByDesc('fecha')->values()->take(50);
 
-        // Bloque aparte, el de RRHH: una fila por día en el que el cuadrante y la ausencia no
-        // dicen lo mismo.
-        $incidenciasAusencias = collect($rawHorarioDistinto)
-            ->reject(fn($r) => self::horarioCuadraConAusencia($r->horario_tipo, $r->ausencia_tipo))
-            ->map(fn($r) => [
-                'id_usuario'  => $r->id_usuario,
-                'usuario'     => $r->usuario,
-                'fecha'       => $r->fecha,
-                'horario'     => self::TIPO_MAP[$r->horario_tipo] ?? $r->horario_tipo,
-                'ausencia'    => $r->ausencia_tipo,
-                'ausencia_id' => $r->ausencia_id,
-            ])
+        // ── Bloque de RRHH ───────────────────────────────────────────────────
+        // Los dos casos en los que el problema está en la ausencia y no en la jornada: se fichó un
+        // día que tiene ausencia registrada, o el cuadrante y la ausencia se contradicen. Los dos
+        // los corrige RRHH, así que van juntos y separados de las incidencias de fichaje.
+        $ausenciasMap = [];
+        $nuevaFilaAus = fn($r, $fichajeId) => [
+            'id_usuario'       => $r->id_usuario,
+            'usuario'          => $r->usuario,
+            'fecha'            => $r->fecha,
+            'fichaje_id'       => $fichajeId,
+            'ausencias'        => [],
+            'horario_distinto' => null,   // ['horario' => tipo del cuadrante, 'ausencia' => tipo registrado]
+        ];
+        foreach ($rawAusencia as $r) {
+            $key = $r->id_usuario . '_' . $r->fecha;
+            $ausenciasMap[$key] ??= $nuevaFilaAus($r, $r->fichaje_id);
+            $ausenciasMap[$key]['ausencias'][] = ['id' => $r->ausencia_id, 'tipo' => $r->ausencia_tipo];
+        }
+        foreach ($rawHorarioDistinto as $r) {
+            if (self::horarioCuadraConAusencia($r->horario_tipo, $r->ausencia_tipo)) continue;
+
+            $key = $r->id_usuario . '_' . $r->fecha;
+            $ausenciasMap[$key] ??= $nuevaFilaAus($r, null);
+            $ausenciasMap[$key]['horario_distinto'] = [
+                'horario'  => self::TIPO_MAP[$r->horario_tipo] ?? $r->horario_tipo,
+                'ausencia' => $r->ausencia_tipo,
+            ];
+            // Para que el botón "Ausencia" abra la que provoca el conflicto. Si ya venía por el
+            // otro caso, no se duplica.
+            if (!collect($ausenciasMap[$key]['ausencias'])->contains('id', $r->ausencia_id)) {
+                $ausenciasMap[$key]['ausencias'][] = ['id' => $r->ausencia_id, 'tipo' => $r->ausencia_tipo];
+            }
+        }
+
+        $incidenciasAusencias = collect(array_values($ausenciasMap))
             ->sortByDesc('fecha')->values()->take(50);
 
         // ── Conflictos de ausencias: dos o más ausencias el mismo día ─────────

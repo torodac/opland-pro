@@ -248,29 +248,46 @@
        registrada contra el cuadrante, no el fichaje contra el cuadrante. --}}
   @if($verAusenciasSin)
   <div class="db-card" style="margin-bottom:12px;">
-    <p class="db-title"><i class="ti ti-calendar-question"></i> Incidencias de ausencias en Horario <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Días pasados en los que el cuadrante y la ausencia registrada dicen cosas distintas: por ejemplo, el Horario marca "Baja" y la ausencia que cubre ese día es "Comp. festivo". Una de las dos está mal y hay que decidir cuál.<br><br>No es lo mismo que "Ausencias en Horario no registradas por RRHH": allí no existe ninguna ausencia detrás del horario; aquí existe, pero no coincide.<br><br>Solo se revisan los departamentos que aparecen en el planificador de horarios.</span></span></p>
+    <p class="db-title"><i class="ti ti-calendar-question"></i> Incidencias de ausencias en Horario <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Días pasados en los que el problema está en la ausencia. Los revisa RRHH. Dos casos:<br><br>&bull; <b>Fichaje en &lt;ausencia&gt;</b> — fichó un día que tiene una ausencia registrada (vacaciones, baja...). O el fichaje sobra, o la ausencia no debería cubrir ese día.<br>&bull; <b>Horario dice X y la ausencia es Y</b> — el cuadrante y la ausencia registrada se contradicen: por ejemplo, el Horario marca "Baja" y la ausencia que cubre ese día es "Comp. festivo". Una de las dos está mal y hay que decidir cuál.<br><br>El segundo caso no es lo mismo que "Ausencias en Horario no registradas por RRHH": allí no existe ninguna ausencia detrás del horario; aquí existe, pero no coincide. Y solo se revisan los departamentos que aparecen en el planificador.<br><br>Lo que no cuadra entre el fichaje y el turno o el descanso va al bloque "Incidencias de fichajes con turnos y descansos del Horario", que resuelve Operaciones.</span></span></p>
     @if($incidenciasAusencias->isEmpty())
       <p class="empty">Sin incidencias</p>
     @else
     <table class="db-table">
-      <thead><tr><th>Empleado</th><th>Fecha</th><th>Horario</th><th>Ausencia registrada</th><th></th></tr></thead>
+      <thead><tr><th>Empleado</th><th>Fecha</th><th>Casuística</th><th></th></tr></thead>
       <tbody>
         @foreach($incidenciasAusencias as $a)
-        @php $a = (object) $a; @endphp
+        @php
+          $a = (object) $a;
+          $casos = [];
+          if ($a->fichaje_id) {
+              foreach ($a->ausencias as $aus) $casos[] = 'Fichaje en ' . $aus['tipo'];
+          }
+          if ($a->horario_distinto) {
+              $casos[] = 'Horario dice ' . $a->horario_distinto['horario']
+                  . ' y la ausencia es ' . $a->horario_distinto['ausencia'];
+          }
+          $lunes = \Carbon\Carbon::parse($a->fecha)->startOfWeek(\Carbon\Carbon::MONDAY)->toDateString();
+        @endphp
         <tr>
           <td>
             <a target="_blank" rel="noopener" href="{{ route('vm.usuario', [$project->slug, $a->id_usuario]) }}" style="color:#185FA5;text-decoration:none;font-weight:500;">{{ $a->usuario }}</a>
           </td>
           <td style="white-space:nowrap;font-size:12px;">{{ \Carbon\Carbon::parse($a->fecha)->translatedFormat('d M Y') }}</td>
-          <td style="color:#6b7280;">{{ $a->horario }}</td>
-          <td style="color:#6b7280;">{{ $a->ausencia }}</td>
+          <td style="color:#6b7280;">{{ implode(', ', $casos) }}</td>
           <td style="white-space:nowrap;text-align:right;">
-            <a target="_blank" rel="noopener" href="{{ route('horario', $project->slug) }}?semana={{ \Carbon\Carbon::parse($a->fecha)->startOfWeek(\Carbon\Carbon::MONDAY)->toDateString() }}"
+            <a target="_blank" rel="noopener" href="{{ route('horario', $project->slug) }}?semana={{ $lunes }}"
                class="badge-sm" style="background:#EFF6FF;color:#1E40AF;text-decoration:none;padding:3px 8px;"
                title="Ver el horario de esa semana">Horario</a>
-            <a target="_blank" rel="noopener" href="{{ route('ficha', [$project->slug, 'ausencias', $a->ausencia_id]) }}"
+            @if($a->fichaje_id)
+            <a target="_blank" rel="noopener" href="{{ route('vm.fichaje_form', [$project->slug, $a->fichaje_id]) }}"
+               class="badge-sm" style="background:#EAF3DE;color:#27500A;text-decoration:none;padding:3px 8px;"
+               title="Abrir el fichaje de ese día">Fichaje</a>
+            @endif
+            @foreach($a->ausencias as $aus)
+            <a target="_blank" rel="noopener" href="{{ route('ficha', [$project->slug, 'ausencias', $aus['id']]) }}"
                class="badge-sm" style="background:#FEF3C7;color:#92400E;text-decoration:none;padding:3px 8px;"
-               title="Abrir la ausencia registrada">Ausencia</a>
+               title="Abrir la ausencia de ese día ({{ $aus['tipo'] }})">Ausencia</a>
+            @endforeach
           </td>
         </tr>
         @endforeach
@@ -286,7 +303,7 @@
        Va a ancho completo, fuera del db-grid: con cuatro columnas (y la de acciones con hasta
        tres botones) a media página se parten las líneas. --}}
   <div class="db-card" style="margin-bottom:12px;">
-      <p class="db-title"><i class="ti ti-alert-triangle"></i> Incidencias de fichajes con turnos y descansos del Horario <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Días pasados en los que el fichaje no cuadra con el cuadrante. Los corrige el área de Operaciones. Tres casos:<br><br>&bull; <b>Turno sin fichaje</b> — tenía turno en el cuadrante y no hay ningún fichaje suyo ese día.<br>&bull; <b>Fichaje en descanso</b> — fichó un día que su cuadrante marca como descanso.<br>&bull; <b>Fichaje en &lt;ausencia&gt;</b> — fichó un día que tiene una ausencia registrada (vacaciones, baja...).<br><br>Un mismo día puede acumular varios casos. Los dos primeros solo se reclaman a los departamentos que aparecen en el planificador de horarios.<br><br>Cuando el cuadrante y la ausencia se contradicen entre sí, eso va al bloque "Incidencias de ausencias en Horario", que revisa RRHH.</span></span></p>
+      <p class="db-title"><i class="ti ti-alert-triangle"></i> Incidencias de fichajes con turnos y descansos del Horario <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Días pasados en los que el fichaje no cuadra con el turno o el descanso del cuadrante. Los corrige el área de Operaciones. Dos casos:<br><br>&bull; <b>Turno sin fichaje</b> — tenía turno en el cuadrante y no hay ningún fichaje suyo ese día.<br>&bull; <b>Fichaje en descanso</b> — fichó un día que su cuadrante marca como descanso.<br><br>Un mismo día puede acumular los dos. Solo se reclaman a los departamentos que aparecen en el planificador de horarios.<br><br>Todo lo que tiene que ver con ausencias — fichar un día de vacaciones o de baja, o que el cuadrante y la ausencia se contradigan — va al bloque "Incidencias de ausencias en Horario", que revisa RRHH.</span></span></p>
       @if($incidenciasFichaje->isEmpty())
         <p class="empty">Sin incidencias</p>
       @else
@@ -309,16 +326,11 @@
             // vez de abrirlo. El alta solo se ofrece si de verdad se va a poder guardar: fuera del
             // límite de fecha, store() lo rechazaría (ver VmFichajePermisos).
             $puedeCrearFichaje = $puedeFicharSinLimite || $c->fecha >= $fechaMinimaFichaje;
-            // Casuística en texto llano: puede haber más de una el mismo día (fichaje que cae a la
-            // vez en un descanso y en una ausencia), así que se enumeran separadas por coma.
+            // Casuística en texto llano. Los dos casos son excluyentes entre sí (o hay fichaje o
+            // no lo hay), pero se enumeran igual por si en el futuro deja de serlo.
             $casuisticas = [];
             if ($c->sin_fichaje) $casuisticas[] = 'Turno sin fichaje';
             if ($c->descanso)    $casuisticas[] = 'Fichaje en descanso';
-            // "Fichaje en X" solo tiene sentido si de verdad hay fichaje: una fila puede traer
-            // ausencias por el conflicto de horario de abajo sin que nadie fichara ese día.
-            if ($c->fichaje_id) {
-                foreach ($c->ausencias as $aus) $casuisticas[] = 'Fichaje en ' . $aus['tipo'];
-            }
           @endphp
           <tr>
             <td>
@@ -343,17 +355,13 @@
               @endif
               {{-- Con la casuística en texto llano, este botón es la única vía a la ausencia que
                    provoca el conflicto: si ese día ya tiene una, la abre en vez de crear otra. --}}
-              @forelse($c->ausencias as $aus)
-              <a target="_blank" rel="noopener" href="{{ route('ficha', [$project->slug, 'ausencias', $aus['id']]) }}"
+              {{-- Los días de este bloque no tienen ausencia por definición (si la tuvieran
+                   estarían en el de RRHH), así que aquí el botón solo puede ofrecer crearla --}}
+              @if($verAusenciasSin)
+              <a target="_blank" rel="noopener" href="{{ route('vm.ausencias_form', $project->slug) }}?nueva=1&usuario={{ $c->id_usuario }}&fecha={{ $c->fecha }}"
                  class="badge-sm" style="background:#FEF3C7;color:#92400E;text-decoration:none;padding:3px 8px;"
-                 title="Abrir la ausencia de ese día ({{ $aus['tipo'] }})">Ausencia</a>
-              @empty
-                @if($verAusenciasSin)
-                <a target="_blank" rel="noopener" href="{{ route('vm.ausencias_form', $project->slug) }}?nueva=1&usuario={{ $c->id_usuario }}&fecha={{ $c->fecha }}"
-                   class="badge-sm" style="background:#FEF3C7;color:#92400E;text-decoration:none;padding:3px 8px;"
-                   title="Registrar una ausencia ese día">Ausencia</a>
-                @endif
-              @endforelse
+                 title="Registrar una ausencia ese día">Ausencia</a>
+              @endif
             </td>
           </tr>
           @endforeach
