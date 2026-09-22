@@ -27,6 +27,43 @@ class DashboardController extends Controller
 
     private const BOOKING_STATUS_CANCELADO = ['cancelled', 'canceled'];
 
+    // ¿El tipo de horario del cuadrante se corresponde con el tipo de la ausencia registrada?
+    // No se comparan las cadenas tal cual porque no coinciden: el horario usa claves ('comp_festivo')
+    // y la ausencia un texto libre del catálogo ('Comp. festivo'), y TIPO_MAP además traduce 'baja'
+    // como 'Baja médica' mientras el catálogo real solo tiene 'Baja'. Se compara por una palabra
+    // que tiene que aparecer en el tipo de la ausencia.
+    private const HORARIO_AUSENCIA_CLAVE = [
+        'vacaciones'   => 'vacac',
+        'baja'         => 'baja',
+        'comp_festivo' => 'festiv',
+        'comp_horas'   => 'hora',
+        'asuntos'      => 'asunto',
+        'absentismo'   => 'absent',
+    ];
+
+    // Etiqueta del tipo de horario tal y como la ve el usuario en el cuadrante (ver
+    // horarioCellHtml() en app/Support/vista-helpers.php). No se usa TIPO_MAP para esto porque
+    // traduce 'baja' como 'Baja médica', un tipo que no existe en el catálogo de ausencias.
+    private const HORARIO_LABEL = [
+        'vacaciones'   => 'Vacaciones',
+        'baja'         => 'Baja',
+        'comp_festivo' => 'Comp. festivo',
+        'comp_horas'   => 'Comp. horas',
+        'asuntos'      => 'Asuntos propios',
+        'absentismo'   => 'Absentismo',
+    ];
+
+    private static function horarioCuadraConAusencia(?string $tipoHorario, ?string $tipoAusencia): bool
+    {
+        $clave = self::HORARIO_AUSENCIA_CLAVE[$tipoHorario] ?? null;
+
+        // Tipo de horario que no sabemos traducir: no se marca como conflicto, para no inventar
+        // incidencias sobre datos que no entendemos.
+        if ($clave === null) return true;
+
+        return mb_stripos((string) $tipoAusencia, $clave) !== false;
+    }
+
     public function validarConciliacion(Request $request, Project $project)
     {
         $idUsuario = (int) $request->id_usuario;
@@ -299,20 +336,44 @@ class DashboardController extends Controller
             ->where('f.deleted', 0)
             ->get(['u.id as id_usuario', 'u.nombre as usuario', 'f.fecha_fichaje as fecha', 'f.id as fichaje_id', 'a.id as ausencia_id', 'a.tipo as ausencia_tipo']);
 
-        // Agrupar por (id_usuario, fecha). 'fichaje_id' a null es justo lo que distingue el caso 1
-        // de los otros dos, y la vista lo usa para decidir si el botón abre el fichaje existente o
-        // la modal de alta.
+        // Caso 4: el cuadrante dice una cosa y la ausencia registrada dice otra. Distinto del
+        // bloque "Ausencias en Horario no registradas por RRHH", que busca horarios especiales SIN
+        // ninguna ausencia detrás: aquí la ausencia existe, pero es de otro tipo (caso real: Saida
+        // Mounssi el 03/08/2026, horario "baja" contra una ausencia "Comp. festivo").
+        $rawHorarioDistinto = DB::table('vm_horarios as h')
+            ->join('vm_usuarios as u', fn($j) => $j
+                ->whereColumn('u.id', 'h.id_usuario')
+                ->where('u.deleted', 0)
+            )
+            ->join('vm_departamentos as dp', $soloDeptoConHorario)
+            ->join('vm_ausencias as a', fn($j) => $j
+                ->whereColumn('a.id_usuarios', 'u.id')
+                ->whereColumn('a.fecha_inicio', '<=', 'h.fecha')
+                ->whereColumn('a.fecha_fin', '>=', 'h.fecha')
+                ->where('a.deleted', 0)
+            )
+            ->whereNotIn('h.tipo', ['turno', 'descanso'])
+            ->where('h.fecha', '<', $hoy)
+            ->get(['u.id as id_usuario', 'u.nombre as usuario', 'h.fecha', 'h.tipo as horario_tipo',
+                   'a.id as ausencia_id', 'a.tipo as ausencia_tipo']);
+
+        // Agrupar por (id_usuario, fecha). Cada caso deja su propia marca en la fila; la vista las
+        // enumera en la columna Casuística y decide con ellas qué botones ofrece.
         $incidenciasMap = [];
         $nuevaFila = fn($r, $fichajeId) => [
-            'id_usuario' => $r->id_usuario,
-            'usuario'    => $r->usuario,
-            'fecha'      => $r->fecha,
-            'fichaje_id' => $fichajeId,
-            'descanso'   => false,
-            'ausencias'  => [],
+            'id_usuario'        => $r->id_usuario,
+            'usuario'           => $r->usuario,
+            'fecha'             => $r->fecha,
+            'fichaje_id'        => $fichajeId,
+            'sin_fichaje'       => false,
+            'descanso'          => false,
+            'ausencias'         => [],
+            'horario_distinto'  => null,   // ['horario' => tipo del cuadrante, 'ausencia' => tipo registrado]
         ];
         foreach ($rawSinFichaje as $r) {
-            $incidenciasMap[$r->id_usuario . '_' . $r->fecha] ??= $nuevaFila($r, null);
+            $key = $r->id_usuario . '_' . $r->fecha;
+            $incidenciasMap[$key] ??= $nuevaFila($r, null);
+            $incidenciasMap[$key]['sin_fichaje'] = true;
         }
         foreach ($rawDescanso as $r) {
             $key = $r->id_usuario . '_' . $r->fecha;
@@ -323,6 +384,22 @@ class DashboardController extends Controller
             $key = $r->id_usuario . '_' . $r->fecha;
             $incidenciasMap[$key] ??= $nuevaFila($r, $r->fichaje_id);
             $incidenciasMap[$key]['ausencias'][] = ['id' => $r->ausencia_id, 'tipo' => $r->ausencia_tipo];
+        }
+        foreach ($rawHorarioDistinto as $r) {
+            if (self::horarioCuadraConAusencia($r->horario_tipo, $r->ausencia_tipo)) continue;
+
+            $key = $r->id_usuario . '_' . $r->fecha;
+            $incidenciasMap[$key] ??= $nuevaFila($r, null);
+            $incidenciasMap[$key]['horario_distinto'] = [
+                'horario'  => self::HORARIO_LABEL[$r->horario_tipo] ?? $r->horario_tipo,
+                'ausencia' => $r->ausencia_tipo,
+            ];
+            // Para que el botón "Ausencia" abra la que provoca el conflicto en vez de ofrecer
+            // crear otra. Si ya venía por el caso 3, no se duplica.
+            $yaEsta = collect($incidenciasMap[$key]['ausencias'])->contains('id', $r->ausencia_id);
+            if (!$yaEsta) {
+                $incidenciasMap[$key]['ausencias'][] = ['id' => $r->ausencia_id, 'tipo' => $r->ausencia_tipo];
+            }
         }
 
         $incidenciasFichaje = collect(array_values($incidenciasMap))

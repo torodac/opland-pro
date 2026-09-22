@@ -276,9 +276,17 @@
             // Casuística en texto llano: puede haber más de una el mismo día (fichaje que cae a la
             // vez en un descanso y en una ausencia), así que se enumeran separadas por coma.
             $casuisticas = [];
-            if (!$c->fichaje_id) $casuisticas[] = 'Turno sin fichaje';
+            if ($c->sin_fichaje) $casuisticas[] = 'Turno sin fichaje';
             if ($c->descanso)    $casuisticas[] = 'Fichaje en descanso';
-            foreach ($c->ausencias as $aus) $casuisticas[] = 'Fichaje en ' . $aus['tipo'];
+            // "Fichaje en X" solo tiene sentido si de verdad hay fichaje: una fila puede traer
+            // ausencias por el conflicto de horario de abajo sin que nadie fichara ese día.
+            if ($c->fichaje_id) {
+                foreach ($c->ausencias as $aus) $casuisticas[] = 'Fichaje en ' . $aus['tipo'];
+            }
+            if ($c->horario_distinto) {
+                $casuisticas[] = 'Horario dice ' . $c->horario_distinto['horario']
+                    . ' y la ausencia es ' . $c->horario_distinto['ausencia'];
+            }
           @endphp
           <tr>
             <td>
@@ -294,7 +302,9 @@
               <a target="_blank" rel="noopener" href="{{ route('vm.fichaje_form', [$project->slug, $c->fichaje_id]) }}"
                  class="badge-sm" style="background:#EAF3DE;color:#27500A;text-decoration:none;padding:3px 8px;"
                  title="Abrir el fichaje de ese día">Fichaje</a>
-              @elseif($puedeCrearFichaje)
+              {{-- Crear fichaje solo se ofrece cuando la incidencia es un turno sin fichar: en un
+                   conflicto de horario contra ausencia, dar de alta un fichaje no arregla nada. --}}
+              @elseif($c->sin_fichaje && $puedeCrearFichaje)
               <button class="badge-sm" style="background:#EAF3DE;color:#27500A;border:none;cursor:pointer;padding:3px 8px;"
                       title="Crear el fichaje de ese día"
                       onclick="abrirFichajeNuevo({ usuario: {{ $c->id_usuario }}, fecha: '{{ $c->fecha }}', onGuardado: () => this.closest('tr').remove() })">Fichaje</button>
