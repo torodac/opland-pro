@@ -251,6 +251,7 @@ Route::middleware('auth')->group(function () {
             Route::post('fichaje_form',      [\App\Http\Controllers\Vm\FichajeController::class, 'store'])->name('vm.fichaje_form.store');
             Route::get('fichaje_form/{id}',  [\App\Http\Controllers\Vm\FichajeController::class, 'show'])->where(['id' => '[0-9]+'])->name('vm.fichaje_form');
             Route::patch('fichajes/{id}',    [\App\Http\Controllers\Vm\FichajeController::class, 'update'])->where(['id' => '[0-9]+'])->name('vm.fichaje.update');
+            Route::delete('fichajes/{id}',   [\App\Http\Controllers\Vm\FichajeController::class, 'destroy'])->where(['id' => '[0-9]+'])->name('vm.fichaje.destroy');
         });
         Route::get('tareas_limpieza/planificar', [PlanificadorLimpiezaController::class, 'index'])->name('planificador-limpieza');
         Route::patch('tareas_{tipo}_form/{id}/asignados', [\App\Http\Controllers\Vm\TareaController::class, 'updateAsignados'])

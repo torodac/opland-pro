@@ -561,6 +561,48 @@ class FichajeController extends Controller
         ));
     }
 
+    /**
+     * Borrado lógico de un fichaje (deleted = 1).
+     *
+     * Tiene endpoint propio porque el botón "Borrar" intentaba hacerlo por update() enviando solo
+     * {deleted: 1}: ese método exige control_user, fecha_fichaje y hora_inicio, así que la
+     * validación fallaba y Laravel respondía con un redirect. fetch() lo seguía hasta un 200, el
+     * JS daba la operación por buena y llevaba al listado, y el fichaje seguía ahí.
+     */
+    public function destroy(Request $request, Project $project, int $id)
+    {
+        abort_unless(auth()->user()->canEditTable($project, 'fichaje'), 403);
+
+        $fichaje = DB::table('vm_fichaje')->where('id', $id)->where('deleted', 0)->first(['control_user', 'fecha_fichaje']);
+        if (!$fichaje) {
+            return response()->json(['error' => 'Fichaje no encontrado.'], 404);
+        }
+
+        // Mismo límite de fecha que para editarlo: borrar un fichaje antiguo pesa al menos tanto.
+        if (!VmFichajePermisos::puedeSinLimiteFecha($project) && $fichaje->fecha_fichaje < VmFichajePermisos::fechaMinima()) {
+            return response()->json(['error' => 'Solo se pueden borrar fichajes de los últimos ' . VmFichajePermisos::DIAS_LIMITE . ' días'], 422);
+        }
+
+        if (InformeAprobacionGuard::estaCompletado((int) $fichaje->control_user, $fichaje->fecha_fichaje)) {
+            return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede modificar.'], 423);
+        }
+        if (!$request->boolean('confirmar_reset') && $aviso = InformeAprobacionGuard::mensajeSiEnAprobacion((int) $fichaje->control_user, $fichaje->fecha_fichaje)) {
+            return response()->json(['requiere_confirmacion' => true, 'mensaje' => $aviso], 409);
+        }
+
+        DB::table('vm_fichaje')->where('id', $id)->update([
+            'deleted'    => 1,
+            'updateuser' => auth()->id(),
+            'updatedat'  => now(),
+        ]);
+
+        $aviso = InformeAprobacionGuard::checkAndLog(
+            (int) $fichaje->control_user, $fichaje->fecha_fichaje, 'vm_fichaje', 'delete', $id, $request
+        );
+
+        return response()->json(['ok' => true, 'aviso_aprobacion' => $aviso]);
+    }
+
     public function update(Request $request, Project $project, int $id)
     {
         abort_unless(auth()->user()->canViewTable($project, 'fichaje'), 403);

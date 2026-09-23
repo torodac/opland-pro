@@ -497,7 +497,8 @@ a.imp-row:hover{background:rgba(0,0,0,.03)}
 </div>
 
 <script>
-const PATCH_URL = "{{ route('vm.fichaje.update', [$project->slug, $fichaje->id]) }}";
+const PATCH_URL  = "{{ route('vm.fichaje.update', [$project->slug, $fichaje->id]) }}";
+const DELETE_URL = "{{ route('vm.fichaje.destroy', [$project->slug, $fichaje->id]) }}";
 const LIST_URL  = "{{ route('listado', [$project->slug, 'fichaje']) }}";
 const CSRF      = document.querySelector('meta[name=csrf-token]')?.content ?? '';
 
@@ -624,11 +625,13 @@ async function guardar() {
   }
 }
 
+// Endpoint propio: intentar el borrado por update() enviando solo {deleted: 1} fallaba la
+// validación (ese método exige control_user, fecha_fichaje y hora_inicio) y Laravel respondía con
+// un redirect que fetch seguía hasta un 200, así que esto daba el borrado por bueno sin borrar.
 async function borrar() {
-  const r = await window.fetchConAprobacion(PATCH_URL, {
-    method: 'POST',
+  const r = await window.fetchConAprobacion(DELETE_URL, {
+    method: 'DELETE',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' },
-    body: JSON.stringify({ _method: 'PATCH', deleted: 1 }),
   });
   if (!r) return;
   if (r.ok) {
@@ -637,7 +640,9 @@ async function borrar() {
     if (data.aviso_aprobacion) alert(data.aviso_aprobacion);
     window.location.href = LIST_URL;
   } else {
-    alert('Error al borrar.');
+    let msg = 'Error al borrar.';
+    try { msg = (await r.json()).error || msg; } catch {}
+    alert(msg);
   }
 }
 
