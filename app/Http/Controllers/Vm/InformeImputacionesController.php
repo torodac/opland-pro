@@ -692,15 +692,13 @@ class InformeImputacionesController extends Controller
         ini_set('memory_limit', '512M');
         $user    = auth()->user();
         $isAdmin = $user->isProjectAdmin($project);
-        if (!$isAdmin) abort(403);
 
-        $year  = max(2020, min(2040, (int) $request->input('year',  now()->year)));
-        $month = max(1,    min(12,   (int) $request->input('month', now()->month)));
+        // Mismo permiso que pinta el botón "Descargar todos" en la pantalla ($can_select_todos):
+        // administradores del proyecto, Dirección general y Director de RRHH. Exigir aquí ser
+        // administrador dejaba el botón visible para RRHH y devolvía 403 al pulsarlo.
+        [$year, $month, , $allUsuarios, , $canSelectTodos] = $this->resolveParams($request, $project, $user, $isAdmin);
 
-        $allUsuarios = DB::table('vm_usuarios')
-            ->where('deleted', 0)
-            ->orderBy('nombre')
-            ->get(['id', 'nombre']);
+        abort_unless($canSelectTodos, 403);
 
         $meses = ['enero','febrero','marzo','abril','mayo','junio',
                   'julio','agosto','septiembre','octubre','noviembre','diciembre'];
