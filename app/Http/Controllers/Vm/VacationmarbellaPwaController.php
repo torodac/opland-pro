@@ -8,7 +8,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Services\InformeAprobacionGuard;
 use App\Services\RoleHierarchy;
+use App\Services\VmAusenciaTipos;
 use App\Services\VmHorarioPublicacion;
+use App\Services\VmHorasService;
 use Illuminate\Support\Str;
 use Minishlink\WebPush\WebPush;
 use Minishlink\WebPush\Subscription;
@@ -1159,22 +1161,100 @@ class VacationmarbellaPwaController extends Controller
         // el equipo vea borradores.
         $visible = VmHorarioPublicacion::visible((int) $lunes->format('o'), (int) $lunes->format('W'));
 
-        $horarios = $visible
-            ? DB::table('vm_horarios')
-                ->where('id_usuario', $user->id)
-                ->whereBetween('fecha', [$desde, $hasta])
-                ->orderBy('fecha')
-                ->get(['fecha', 'tipo', 'hora_inicio', 'hora_fin'])
-            : collect();
+        $dias = $visible
+            ? $this->diasCuadrante([$user->id], $desde, $hasta, $lunes)[$user->id]
+            : [];
 
         return response()->json([
             'semana'        => $lunes->format('o') . '-W' . $lunes->format('W'),
             'desde'         => $desde,
             'hasta'         => $hasta,
-            'dias'          => $horarios,
+            // Solo los días con algo que contar, que es lo que esperaba la app antes de que esto
+            // devolviera también ausencias y festivos.
+            'dias'          => array_values(array_filter($dias, fn ($d) => $d !== null)),
             'publicada'     => $visible,
             'ultima_semana' => VmHorarioPublicacion::ultimaVisible(),
         ]);
+    }
+
+    /**
+     * Los 7 días de la semana para cada usuario, cruzando las tres fuentes que ya cruza el
+     * planificador web (vm_horarios, vm_ausencias y vm_festivos), con sus mismas reglas:
+     *
+     *  - si hay horario, manda el horario; la ausencia solo se señala como conflicto,
+     *  - y solo si de verdad discrepan (horario "vacaciones" + ausencia "Vacaciones" no avisa),
+     *  - si no hay horario pero sí ausencia, se muestra la ausencia.
+     *
+     * @param  int[] $userIds
+     * @return array<int, array<string, array|null>>  [id_usuario][fecha] => día o null
+     */
+    private function diasCuadrante(array $userIds, string $desde, string $hasta, \DateTime $lunes): array
+    {
+        $horarios = DB::table('vm_horarios')
+            ->whereIn('id_usuario', $userIds)
+            ->whereBetween('fecha', [$desde, $hasta])
+            ->get(['id_usuario', 'fecha', 'tipo', 'hora_inicio', 'hora_fin']);
+
+        $horarioMap = [];
+        foreach ($horarios as $h) {
+            $horarioMap[$h->id_usuario][$h->fecha] = $h;
+        }
+
+        // Las ausencias se guardan por rango, así que se expanden a los días de esta semana.
+        $ausenciaMap = [];
+        $ausencias = DB::table('vm_ausencias')
+            ->whereIn('id_usuarios', $userIds)
+            ->where('fecha_inicio', '<=', $hasta)
+            ->where('fecha_fin', '>=', $desde)
+            ->where(fn ($q) => $q->where('deleted', 0)->orWhereNull('deleted'))
+            ->get(['id_usuarios', 'tipo', 'fecha_inicio', 'fecha_fin']);
+        foreach ($ausencias as $a) {
+            $cur = max($a->fecha_inicio, $desde);
+            $lim = min($a->fecha_fin, $hasta);
+            while ($cur <= $lim) {
+                $ausenciaMap[$a->id_usuarios][$cur] = $a->tipo;
+                $cur = date('Y-m-d', strtotime('+1 day', strtotime($cur)));
+            }
+        }
+
+        // Los festivos dependen de la sede de cada persona.
+        $sedes = DB::table('vm_usuarios')->whereIn('id', $userIds)->pluck('sede', 'id');
+        $festivosPorSede = [];
+
+        $salida = [];
+        foreach ($userIds as $uid) {
+            $sede = (string) ($sedes[$uid] ?? '');
+            $festivosPorSede[$sede] ??= VmHorasService::festivosSet($sede, $desde, $hasta);
+
+            for ($i = 0; $i < 7; $i++) {
+                $fecha    = (clone $lunes)->modify("+{$i} days")->format('Y-m-d');
+                $horario  = $horarioMap[$uid][$fecha]  ?? null;
+                $ausencia = $ausenciaMap[$uid][$fecha] ?? null;
+                // festivosSet() devuelve [fecha => índice] por el flip(), así que el valor no
+                // sirve de nada y además el del primero es 0: hay que mirar la clave.
+                $festivo  = isset($festivosPorSede[$sede][$fecha]);
+
+                if (!$horario && !$ausencia && !$festivo) {
+                    $salida[$uid][$fecha] = null;
+                    continue;
+                }
+
+                $salida[$uid][$fecha] = [
+                    'fecha'       => $fecha,
+                    'tipo'        => $horario->tipo ?? null,
+                    'hora_inicio' => $horario->hora_inicio ?? null,
+                    'hora_fin'    => $horario->hora_fin ?? null,
+                    'ausencia'    => $ausencia,
+                    'festivo'     => $festivo,
+                    // El cuadrante dice una cosa y la ausencia otra: mismo aviso que el amarillo
+                    // de la web.
+                    'conflicto'   => (bool) ($horario && $ausencia
+                        && !VmAusenciaTipos::coincideConHorario($horario->tipo, $ausencia)),
+                ];
+            }
+        }
+
+        return $salida;
     }
 
     public function horarioEquipo(Request $request)
@@ -1212,17 +1292,10 @@ class VacationmarbellaPwaController extends Controller
         // equipo sale vacío (ver VmHorarioPublicacion).
         $visible = VmHorarioPublicacion::visible((int) $lunes->format('o'), (int) $lunes->format('W'));
 
-        $horarioRows = $visible
-            ? DB::table('vm_horarios')
-                ->whereIn('id_usuario', $usuarios->pluck('id'))
-                ->whereBetween('fecha', [$desde, $hasta])
-                ->get(['id_usuario', 'fecha', 'tipo', 'hora_inicio', 'hora_fin'])
-            : collect();
-
-        $horarioMap = [];
-        foreach ($horarioRows as $h) {
-            $horarioMap[$h->id_usuario][$h->fecha] = $h;
-        }
+        // Mismas tres fuentes que la web: horarios, ausencias y festivos (ver diasCuadrante()).
+        $diasPorUsuario = $visible
+            ? $this->diasCuadrante($usuarios->pluck('id')->all(), $desde, $hasta, $lunes)
+            : [];
 
         $grupos = [];
         foreach ($deptosVisibles as $dept) {
@@ -1230,10 +1303,11 @@ class VacationmarbellaPwaController extends Controller
             if ($miembros->isEmpty()) continue;
             $grupos[$dept->nombre] = [];
             foreach ($miembros as $u) {
-                $dias = [];
-                for ($i = 0; $i < 7; $i++) {
-                    $fecha = (clone $lunes)->modify("+{$i} days")->format('Y-m-d');
-                    $dias[$fecha] = $horarioMap[$u->id][$fecha] ?? null;
+                $dias = $diasPorUsuario[$u->id] ?? [];
+                if (!$dias) {
+                    for ($i = 0; $i < 7; $i++) {
+                        $dias[(clone $lunes)->modify("+{$i} days")->format('Y-m-d')] = null;
+                    }
                 }
                 $grupos[$dept->nombre][] = [
                     'id'     => $u->id,

@@ -2,16 +2,9 @@
 @php
 $diasNombres = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 
-$tipoLabels = [
-    'turno'        => 'Turno',
-    'descanso'     => 'Descanso',
-    'vacaciones'   => 'Vacaciones',
-    'baja'         => 'Baja',
-    'comp_festivo' => 'Comp. festivo',
-    'comp_horas'   => 'Comp. horas',
-    'asuntos'      => 'Asuntos propios',
-    'absentismo'   => 'Absentismo',
-];
+// La tabla de etiquetas vive en VmAusenciaTipos: la comparten esta pantalla, la PWA, el
+// dashboard y la conciliación que crea la ausencia a partir del horario.
+$tipoLabels = \App\Services\VmAusenciaTipos::LABEL_HORARIO;
 
 // horarioCellHtml() y ausenciaCellHtml() viven en app/Support/vista-helpers.php
 @endphp

@@ -9,54 +9,21 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use App\Services\InformeAprobacionGuard;
 use App\Services\RoleHierarchy;
+use App\Services\VmAusenciaTipos;
 use App\Services\VmFichajePermisos;
 use App\Services\VmHorasService;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
-    // Mapeo tipo horario → tipo ausencia
-    private const TIPO_MAP = [
-        'vacaciones'  => 'Vacaciones',
-        'baja'        => 'Baja',
-        'comp_festivo'=> 'Comp. festivo',
-        'comp_horas'  => 'Comp. horas',
-        'asuntos'     => 'Asuntos propios',
-        'absentismo'  => 'Absentismo',
-    ];
-
     private const BOOKING_STATUS_CANCELADO = ['cancelled', 'canceled'];
-
-    // ¿El tipo de horario del cuadrante se corresponde con el tipo de la ausencia registrada?
-    // No se comparan las cadenas tal cual porque no coinciden: el horario usa claves
-    // ('comp_festivo') y la ausencia el texto del catálogo ('Comp. festivo'). Se compara por una
-    // palabra que tiene que aparecer en el tipo de la ausencia.
-    private const HORARIO_AUSENCIA_CLAVE = [
-        'vacaciones'   => 'vacac',
-        'baja'         => 'baja',
-        'comp_festivo' => 'festiv',
-        'comp_horas'   => 'hora',
-        'asuntos'      => 'asunto',
-        'absentismo'   => 'absent',
-    ];
-
-    private static function horarioCuadraConAusencia(?string $tipoHorario, ?string $tipoAusencia): bool
-    {
-        $clave = self::HORARIO_AUSENCIA_CLAVE[$tipoHorario] ?? null;
-
-        // Tipo de horario que no sabemos traducir: no se marca como conflicto, para no inventar
-        // incidencias sobre datos que no entendemos.
-        if ($clave === null) return true;
-
-        return mb_stripos((string) $tipoAusencia, $clave) !== false;
-    }
 
     public function validarConciliacion(Request $request, Project $project)
     {
         $idUsuario = (int) $request->id_usuario;
         $tipo      = $request->tipo;
         $fecha     = $request->fecha;
-        $tipoAus   = self::TIPO_MAP[$tipo] ?? ucfirst($tipo);
+        $tipoAus   = VmAusenciaTipos::labelHorario($tipo);
 
         $dias = DB::table('vm_horarios as h')
             ->where('h.id_usuario', $idUsuario)
@@ -397,12 +364,12 @@ class DashboardController extends Controller
             $ausenciasMap[$key]['ausencias'][] = ['id' => $r->ausencia_id, 'tipo' => $r->ausencia_tipo];
         }
         foreach ($rawHorarioDistinto as $r) {
-            if (self::horarioCuadraConAusencia($r->horario_tipo, $r->ausencia_tipo)) continue;
+            if (VmAusenciaTipos::coincideConHorario($r->horario_tipo, $r->ausencia_tipo)) continue;
 
             $key = $r->id_usuario . '_' . $r->fecha;
             $ausenciasMap[$key] ??= $nuevaFilaAus($r, null);
             $ausenciasMap[$key]['horario_distinto'] = [
-                'horario'  => self::TIPO_MAP[$r->horario_tipo] ?? $r->horario_tipo,
+                'horario'  => VmAusenciaTipos::labelHorario($r->horario_tipo),
                 'ausencia' => $r->ausencia_tipo,
             ];
             // Para que el botón "Ausencia" abra la que provoca el conflicto. Si ya venía por el

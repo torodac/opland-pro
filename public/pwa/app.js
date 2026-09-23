@@ -1710,20 +1710,29 @@ function renderHorario(data) {
     const [, m, dd] = fecha.split('-');
     const fechaStr = `${diasSem[new Date(fecha + 'T12:00:00').getDay()]} ${parseInt(dd)}/${parseInt(m)}`;
 
+    // Mismas reglas que el planificador web: si hay horario manda el horario, y la ausencia solo
+    // se señala cuando discrepa; sin horario, se muestra la ausencia.
     let contenido = '';
-    if (!dia) {
-      contenido = `<span style="color:var(--muted);font-size:13px">Sin horario asignado</span>`;
-    } else if (dia.tipo === 'turno') {
+    if (dia && dia.tipo === 'turno') {
       const ini = dia.hora_inicio ? dia.hora_inicio.slice(0,5) : '--:--';
       const fin = dia.hora_fin    ? dia.hora_fin.slice(0,5)    : '--:--';
       contenido = `<span class="hbadge hbadge-turno" style="font-size:13px;padding:4px 10px">${ini} – ${fin}</span>`;
-    } else {
-      const cls = tipoBadgeClass(dia.tipo);
-      contenido = `<span class="hbadge ${cls}" style="font-size:13px;padding:4px 10px">${esc(tipoLabel(dia.tipo))}</span>`;
+    } else if (dia && dia.tipo) {
+      contenido = `<span class="hbadge ${tipoBadgeClass(dia.tipo)}" style="font-size:13px;padding:4px 10px">${esc(tipoLabel(dia.tipo))}</span>`;
+    } else if (dia && dia.ausencia) {
+      contenido = `<span class="hbadge ${tipoBadgeClass(dia.ausencia)}" style="font-size:13px;padding:4px 10px">${esc(dia.ausencia)}</span>`;
+    } else if (!dia || !dia.festivo) {
+      contenido = `<span style="color:var(--muted);font-size:13px">Sin horario asignado</span>`;
+    }
+    if (dia && dia.festivo) {
+      contenido += ` <span class="hbadge hbadge-festivo" style="font-size:13px;padding:4px 10px">Festivo</span>`;
+    }
+    if (dia && dia.conflicto) {
+      contenido += `<div style="margin-top:6px;font-size:12px;color:#8a6300">⚠ Tienes registrada una ausencia de tipo «${esc(dia.ausencia)}» este día</div>`;
     }
 
     diasHtml += `
-      <div class="agenda-dia${esHoy ? ' hoy' : ''}">
+      <div class="agenda-dia${esHoy ? ' hoy' : ''}"${dia && dia.conflicto ? ' style="background:#fdf3d3"' : ''}>
         <div class="agenda-dia-header">
           <span class="agenda-dia-fecha">${fechaStr}</span>
           ${esHoy ? '<span class="agenda-dia-hoy-badge">Hoy</span>' : ''}
@@ -1799,17 +1808,32 @@ function renderHorarioEquipo(data) {
   for (const [rolNombre, usuarios] of Object.entries(data.grupos || {})) {
     gruposHtml += `<tr><td colspan="8" style="padding:14px 4px 6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">${esc(rolNombre)}</td></tr>`;
     for (const u of usuarios) {
+      // Mismas reglas que la agenda personal y que el planificador web (ver renderHorario).
       const celdas = fechas.map(f => {
         const dia = u.dias[f];
         const esHoy = f === hoyStr;
+        // El amarillo del conflicto es el mismo aviso que pinta la web cuando el cuadrante y la
+        // ausencia registrada no dicen lo mismo.
+        const cls = (esHoy ? 'col-hoy' : '') + (dia && dia.conflicto ? ' celda-conflicto' : '');
+        const title = dia && dia.conflicto ? ` title="El cuadrante dice «${esc(tipoLabel(dia.tipo))}» y hay registrada una ausencia de tipo «${esc(dia.ausencia)}»"` : '';
+
         if (!dia) return `<td class="${esHoy ? 'col-hoy' : ''}"><span style="color:var(--border)">—</span></td>`;
+
+        let badge;
         if (dia.tipo === 'turno') {
           const ini = dia.hora_inicio ? dia.hora_inicio.slice(0,5) : '--';
           const fin = dia.hora_fin    ? dia.hora_fin.slice(0,5)    : '--';
-          return `<td class="${esHoy ? 'col-hoy' : ''}"><span class="hbadge hbadge-turno">${ini}–${fin}</span></td>`;
+          badge = `<span class="hbadge hbadge-turno">${ini}–${fin}</span>`;
+        } else if (dia.tipo) {
+          badge = `<span class="hbadge ${tipoBadgeClass(dia.tipo)}">${esc(tipoLabel(dia.tipo))}</span>`;
+        } else if (dia.ausencia) {
+          badge = `<span class="hbadge ${tipoBadgeClass(dia.ausencia)}">${esc(dia.ausencia)}</span>`;
+        } else if (dia.festivo) {
+          badge = `<span class="hbadge hbadge-festivo">Festivo</span>`;
+        } else {
+          badge = `<span style="color:var(--border)">—</span>`;
         }
-        const cls = tipoBadgeClass(dia.tipo);
-        return `<td class="${esHoy ? 'col-hoy' : ''}"><span class="hbadge ${cls}">${esc(tipoLabel(dia.tipo))}</span></td>`;
+        return `<td class="${cls}"${title}>${badge}</td>`;
       }).join('');
       gruposHtml += `<tr><td class="col-usuario">${esc(u.nombre)}</td>${celdas}</tr>`;
     }

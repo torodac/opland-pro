@@ -14,6 +14,39 @@ class VmAusenciaTipos
     // compensa. Los registros históricos se siguen viendo con su texto.
     public const RETIRADOS = ['Compensación'];
 
+    // Etiqueta de cada tipo de horario, que es a la vez el tipo de ausencia equivalente: el
+    // cuadrante guarda claves ('comp_festivo') y las ausencias el texto del catálogo
+    // ('Comp. festivo'). Lo usan el planificador, la PWA, el dashboard y la conciliación que crea
+    // la ausencia a partir del horario.
+    public const LABEL_HORARIO = [
+        'turno'        => 'Turno',
+        'descanso'     => 'Descanso',
+        'vacaciones'   => 'Vacaciones',
+        'baja'         => 'Baja',
+        'comp_festivo' => 'Comp. festivo',
+        'comp_horas'   => 'Comp. horas',
+        'asuntos'      => 'Asuntos propios',
+        'absentismo'   => 'Absentismo',
+    ];
+
+    public static function labelHorario(?string $tipoHorario): string
+    {
+        return self::LABEL_HORARIO[$tipoHorario] ?? (string) $tipoHorario;
+    }
+
+    /**
+     * ¿El tipo del cuadrante dice lo mismo que el de la ausencia registrada? Se compara por la
+     * etiqueta, no por la cadena cruda, porque las dos tablas guardan formatos distintos. Un tipo
+     * de horario desconocido se da por bueno, para no inventar conflictos sobre datos que no
+     * entendemos.
+     */
+    public static function coincideConHorario(?string $tipoHorario, ?string $tipoAusencia): bool
+    {
+        if (!isset(self::LABEL_HORARIO[$tipoHorario])) return true;
+
+        return self::LABEL_HORARIO[$tipoHorario] === $tipoAusencia;
+    }
+
     /** @return string[] */
     public static function opciones(): array
     {
