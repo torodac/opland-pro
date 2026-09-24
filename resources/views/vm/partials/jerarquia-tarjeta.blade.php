@@ -2,7 +2,12 @@
 <div class="jer-card">
     <div class="jer-card-h">
         <span class="jer-pill">{{ $nodo['id'] }}</span>
-        <span class="jer-titulo">{{ $nodo['titulo'] }}</span>
+        @if(!empty($nodo['url']))
+            {{-- Se abre en pestaña nueva para no perder el estado desplegado del árbol. --}}
+            <a class="jer-titulo jer-link" href="{{ $nodo['url'] }}" target="_blank" rel="noopener">{{ $nodo['titulo'] }}</a>
+        @else
+            <span class="jer-titulo">{{ $nodo['titulo'] }}</span>
+        @endif
         @if(($hijos ?? 0) > 0)
             <span class="jer-count">{{ $hijos }}</span>
         @endif

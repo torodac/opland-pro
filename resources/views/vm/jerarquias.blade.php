@@ -135,6 +135,8 @@
     font-size:11px; font-weight:700; font-variant-numeric:tabular-nums;
   }
   .jer-titulo{ font-weight:600; color:var(--text-primary); }
+  a.jer-link{ text-decoration:none; }
+  a.jer-link:hover{ color:var(--accent); text-decoration:underline; }
   .jer-count{
     margin-left:auto; color:var(--accent); background:var(--accent-soft);
     border-radius:99px; padding:1px 7px; font-size:11px; font-weight:700;
@@ -243,6 +245,12 @@
       root.querySelectorAll('.jer-cols:not([hidden]) details')
           .forEach(d => { d.open = abrir; });
     });
+  });
+
+  // El título es un enlace dentro de un <summary>: sin esto, pulsarlo abriría la ficha Y
+  // además plegaría/desplegaría el nodo.
+  root.querySelectorAll('a.jer-link').forEach(a => {
+    a.addEventListener('click', e => e.stopPropagation());
   });
 
   activar('roles');

@@ -32,8 +32,8 @@ class JerarquiasController extends Controller
             ->orderBy('nombre')
             ->get(['id', 'nombre', 'id_rol', 'id_aprueba_informe']);
 
-        [$arbolRoles, $sueltosRoles]     = $this->arbolRoles($roles, $usuarios);
-        [$arbolAprueba, $sueltosAprueba] = $this->arbolAprueba($roles, $usuarios);
+        [$arbolRoles, $sueltosRoles]     = $this->arbolRoles($roles, $usuarios, $project);
+        [$arbolAprueba, $sueltosAprueba] = $this->arbolAprueba($roles, $usuarios, $project);
 
         return view('vm.jerarquias', [
             'project'         => $project,
@@ -51,7 +51,7 @@ class JerarquiasController extends Controller
     // Nodo = un rol, con los trabajadores que lo tienen. Raíz = rol al que nadie supervisa y que
     // sí supervisa a alguien. "Suelto" = rol sin relación en ninguna dirección (ni supervisa ni
     // es supervisado), como hoy Dirección general o Director RRHH, con roles_supervisados = [].
-    private function arbolRoles($roles, $usuarios): array
+    private function arbolRoles($roles, $usuarios, Project $project): array
     {
         $porRol = [];
         foreach ($usuarios as $u) {
@@ -76,6 +76,8 @@ class JerarquiasController extends Controller
                 'subtitulo'   => null,
                 'personas'    => $porRol[$id] ?? [],
                 'vacio_texto' => 'Sin trabajadores con este rol',
+                // Ficha genérica del rol: /vm/roles/{id}
+                'url'         => route('ficha', [$project->slug, 'roles', $id]),
             ];
         }
 
@@ -96,7 +98,7 @@ class JerarquiasController extends Controller
     // ── Árbol de aprobación ───────────────────────────────────────────────────
     // Nodo = una persona, con su rol debajo. Raíz = persona sin aprobador que sí aprueba a
     // alguien. "Suelto" = persona sin aprobador y a la que nadie tiene asignada.
-    private function arbolAprueba($roles, $usuarios): array
+    private function arbolAprueba($roles, $usuarios, Project $project): array
     {
         $nombreRol = $roles->pluck('nombre', 'id');
         $activos   = $usuarios->pluck('id')->map(fn($id) => (int) $id)->flip();
@@ -114,6 +116,8 @@ class JerarquiasController extends Controller
                 'subtitulo'   => $rol ? $rol . ' · ' . ($nombreRol[$rol] ?? 'rol desconocido') : 'Sin rol asignado',
                 'personas'    => [],
                 'vacio_texto' => null,
+                // Ficha propia de usuario de VM (VmUsuarioController), no la genérica.
+                'url'         => route('vm.usuario_form', [$project->slug, $id]),
             ];
         }
 
@@ -145,7 +149,7 @@ class JerarquiasController extends Controller
     // nada impide hoy que A apruebe a B y B a A, y sin este corte la recursión no terminaría.
     private function construir(int $id, array $hijos, array $meta, array $camino): array
     {
-        $nodo = $meta[$id] ?? ['id' => $id, 'titulo' => '#' . $id, 'subtitulo' => null, 'personas' => [], 'vacio_texto' => null];
+        $nodo = $meta[$id] ?? ['id' => $id, 'titulo' => '#' . $id, 'subtitulo' => null, 'personas' => [], 'vacio_texto' => null, 'url' => null];
 
         if (in_array($id, $camino, true)) {
             $nodo['ciclo']  = true;
