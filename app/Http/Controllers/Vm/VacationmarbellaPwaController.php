@@ -1528,12 +1528,12 @@ class VacationmarbellaPwaController extends Controller
         $estado = DB::table('vm_informes_estado')
             ->where('id_usuario', $user->id)->where('anio', $year)->where('mes', $month)
             ->first();
-        $pasoActual = $estado->paso_actual ?? 'rrhh';
+        $pasoActual = $estado->paso_actual ?? \App\Services\VmJerarquiaAprobacion::pasoInicial((int) $user->id);
 
         $aprobaciones = DB::table('vm_informes_aprobaciones as a')
             ->join('admin_users as u', 'u.id', '=', 'a.aprobado_por')
             ->where('a.id_usuario', $user->id)->where('a.anio', $year)->where('a.mes', $month)
-            ->orderByRaw("array_position(array['rrhh','coordinador','trabajador','direccion'], a.step)")
+            ->orderByRaw("array_position(array['aprueba','rrhh','coordinador','trabajador','direccion'], a.step)")
             ->get(['a.step', 'a.aprobado_at', 'u.name as aprobado_por_nombre']);
 
         return response()->json([

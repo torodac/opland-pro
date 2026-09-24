@@ -497,7 +497,7 @@
 @endif
 
 @if($verInformesPendientes)
-@php $pasoLabels = ['rrhh' => 'RRHH', 'coordinador' => 'Coordinador', 'trabajador' => 'Trabajador', 'direccion' => 'Dirección']; @endphp
+@php $pasoLabels = ['aprueba' => 'Supervisor', 'rrhh' => 'RRHH', 'coordinador' => 'Coordinador', 'trabajador' => 'Trabajador', 'direccion' => 'Dirección']; @endphp
   {{-- Informes mensuales pendientes de alguna firma --}}
   <div class="db-card" style="margin-bottom:12px;">
     <p class="db-title"><i class="ti ti-file-check"></i> Informes mensuales pendientes de firma <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Informes mensuales con el flujo de aprobación iniciado y sin completar todavía. Director RRHH y Dirección general ven todos; Dirección de Operaciones solo los de su equipo supervisado.</span></span></p>

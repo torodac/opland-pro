@@ -10,6 +10,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use App\Services\RoleHierarchy;
 use App\Services\VmHorasService;
+use App\Services\VmJerarquiaAprobacion;
 use Illuminate\Support\Facades\DB;
 
 class InformeImputacionesController extends Controller
@@ -45,16 +46,18 @@ class InformeImputacionesController extends Controller
         $estadoAprobacion = DB::table('vm_informes_estado')
             ->where('id_usuario', $userId)->where('anio', $year)->where('mes', $month)
             ->first();
-        $pasoActual = $estadoAprobacion->paso_actual ?? 'rrhh';
+        $pasoActual = $estadoAprobacion->paso_actual ?? VmJerarquiaAprobacion::pasoInicial($userId);
 
         $aprobaciones = DB::table('vm_informes_aprobaciones as a')
             ->join('admin_users as u', 'u.id', '=', 'a.aprobado_por')
             ->where('a.id_usuario', $userId)->where('a.anio', $year)->where('a.mes', $month)
-            ->orderByRaw("array_position(array['rrhh','coordinador','trabajador','direccion'], a.step)")
+            ->orderByRaw("array_position(array['aprueba','rrhh','coordinador','trabajador','direccion'], a.step)")
             ->get(['a.step', 'a.aprobado_at', 'u.name as aprobado_por_nombre']);
 
         $currentVmUserId = $user->projectUserId($project);
         $authRol         = $currentVmUserId ? DB::table('vm_usuarios')->where('id', $currentVmUserId)->value('id_rol') : null;
+        $puedeFirmarAprueba     = $pasoActual === 'aprueba' && VmJerarquiaAprobacion::puedeFirmarAprueba(
+            $currentVmUserId ? (int) $currentVmUserId : null, $userId, $isAdmin, $authRol ? (int) $authRol : null);
         $puedeFirmarCoordinador = $pasoActual === 'coordinador' && ($isAdmin || in_array((int) $authRol, [10, 3], true));
         $puedeFirmarDireccion   = $pasoActual === 'direccion'   && ($isAdmin || (int) $authRol === 3);
         $puedeFirmarTrabajador  = $pasoActual === 'trabajador'
@@ -74,6 +77,7 @@ class InformeImputacionesController extends Controller
             'validado_at'        => $estadoAprobacion->marcado_at ?? null,
             'paso_actual'        => $pasoActual,
             'aprobaciones'       => $aprobaciones,
+            'puede_firmar_aprueba'     => $puedeFirmarAprueba,
             'puede_firmar_coordinador' => $puedeFirmarCoordinador,
             'puede_firmar_direccion'   => $puedeFirmarDireccion,
             'puede_firmar_trabajador'  => $puedeFirmarTrabajador,
@@ -111,12 +115,9 @@ class InformeImputacionesController extends Controller
         $currentVmUserId = $user->projectUserId($project);
         $authRol         = $currentVmUserId ? DB::table('vm_usuarios')->where('id', $currentVmUserId)->value('id_rol') : null;
 
-        // Mismos gates que cada botón de firma en la ficha individual (validar/firmarCoordinador/
-        // firmarDireccion) -- se reutilizan tal cual, no se inventa un permiso nuevo para esta vista.
+        // Mismos gates que cada botón de firma en la ficha individual (validar/firmarDireccion)
+        // -- se reutilizan tal cual, no se inventa un permiso nuevo para esta vista.
         $puedeFirmarRrhh        = $canSelectTodos; // isAdmin || authRol en [3,11]
-        // Direccion general (3) puede actuar tambien como Coordinador, igual que ya puede como
-        // RRHH (canSelectTodos, arriba) -- rol superior cubre los pasos de aprobacion inferiores.
-        $puedeFirmarCoordinador = $isAdmin || in_array((int) $authRol, [10, 3], true);
         $puedeFirmarDireccion   = $isAdmin || (int) $authRol === 3;
         $viewerSignaturePath    = DB::table('admin_users')->where('id', auth()->id())->value('signature_path');
 
@@ -124,18 +125,31 @@ class InformeImputacionesController extends Controller
         // directamente en su cola de trabajo, en vez de en "Todos".
         $defaultTab = match (true) {
             (int) $authRol === 11 => 'rrhh',
-            (int) $authRol === 10 => 'coordinador',
             (int) $authRol === 3  => 'direccion',
             $isAdmin               => 'todos',
-            $currentVmUserId       => 'trabajador',
+            $currentVmUserId       => 'aprueba',
             default                 => 'todos',
         };
 
-        // Si no puede seleccionar a nadie más, el listado se reduce a su propia fila (su
-        // "Informe mensual" personal, mismo caso que hoy al entrar en la ficha individual).
-        $usuarios = $canSelect ? $allUsuarios : DB::table('vm_usuarios')
-            ->where('id', $currentVmUserId)->where('deleted', 0)
-            ->get(['id', 'nombre', 'id_rol', 'admin_user_id']);
+        // A DIFERENCIA de la ficha individual (que une las dos jerarquías), este panel se limita
+        // a la jerarquía de APROBACIÓN: cada usuario ve solo su propia rama de
+        // vm_usuarios.id_aprueba_informe -- quien no aprueba a nadie se ve solo a sí mismo.
+        // Decisión explícita 2026-09-24.
+        //
+        // Excepción: admin, Dirección general y Director RRHH siguen viendo a todos, porque
+        // firman pasos globales del circuito (RRHH el segundo de TODOS los informes, Dirección el
+        // cuarto); limitarles la vista a su rama les dejaría sin poder firmar al resto.
+        if (VmJerarquiaAprobacion::vePanelCompleto($isAdmin, $authRol ? (int) $authRol : null)) {
+            $usuarios = $allUsuarios;
+        } else {
+            $idsRama  = $currentVmUserId ? VmJerarquiaAprobacion::ramaDe((int) $currentVmUserId) : [];
+            $usuarios = $idsRama
+                ? DB::table('vm_usuarios')
+                    ->where('deleted', 0)->whereIn('id', $idsRama)
+                    ->orderBy('nombre')
+                    ->get(['id', 'nombre', 'id_rol', 'admin_user_id'])
+                : collect();
+        }
 
         // Fuera de este panel: Santi Ramón-Llin (id 1, ficha de Dirección general que no pasa
         // por el flujo de aprobación) y el rol "Proveedor limpieza" (6, externo, no informe
@@ -173,8 +187,8 @@ class InformeImputacionesController extends Controller
         $claseAusencia = ['C' => 'Compensacion', 'V' => 'Vacaciones', 'B' => 'Baja', 'AA' => 'Asuntos', 'otro' => 'Absentismo'];
         $pendientesValidacion = $this->pendientesValidacionDashboard($userIds);
 
-        $filas = $usuarios->map(function ($u) use ($year, $month, $estados, $editadosTrasInicio, $firmasPorUsuario, $rolesMap, $claseAusencia, $pendientesValidacion) {
-            $paso     = $estados[$u->id] ?? 'rrhh';
+        $filas = $usuarios->map(function ($u) use ($year, $month, $estados, $editadosTrasInicio, $firmasPorUsuario, $rolesMap, $claseAusencia, $pendientesValidacion, $currentVmUserId, $isAdmin, $authRol) {
+            $paso     = $estados[$u->id] ?? VmJerarquiaAprobacion::pasoInicial((int) $u->id);
             $metricas = $this->metricasResumen($u->id, $year, $month);
 
             $ausenciasPills = collect($metricas['ausencias'])->map(fn($count, $nombre) => [
@@ -199,6 +213,12 @@ class InformeImputacionesController extends Controller
                 'editado_tras_inicio' => $editadosTrasInicio->has($u->id),
                 'tiene_firma'         => (bool) ($firmasPorUsuario[$u->id] ?? null),
                 'es_mi_informe'       => $u->admin_user_id && (int) $u->admin_user_id === (int) auth()->id(),
+                // El permiso del paso "Supervisor" depende de la PERSONA de cada fila (quién
+                // figura en su celda "Aprueba informe"), no del rol de quien mira: por eso se
+                // resuelve fila a fila, igual que 'es_mi_informe'.
+                'puede_firmar_aprueba' => VmJerarquiaAprobacion::puedeFirmarAprueba(
+                    $currentVmUserId ? (int) $currentVmUserId : null, (int) $u->id, $isAdmin, $authRol ? (int) $authRol : null
+                ),
                 'es_turno'            => $metricas['es_turno'],
                 'dias_turno'          => $metricas['dias_turno'],
                 'dias_descanso'       => $metricas['dias_descanso'],
@@ -215,7 +235,6 @@ class InformeImputacionesController extends Controller
             'rol_filtro'               => $rolFiltro,
             'default_tab'              => $defaultTab,
             'puede_firmar_rrhh'        => $puedeFirmarRrhh,
-            'puede_firmar_coordinador' => $puedeFirmarCoordinador,
             'puede_firmar_direccion'   => $puedeFirmarDireccion,
             'viewer_tiene_firma'       => (bool) $viewerSignaturePath,
             'breadcrumb' => [
@@ -376,7 +395,27 @@ class InformeImputacionesController extends Controller
         ];
     }
 
-    // Paso 1/4 del flujo de aprobación: RRHH (o Dirección general/admin) firma. A partir de
+    // Paso 1/4: el supervisor designado en la ficha del trabajador (vm_usuarios.id_aprueba_informe)
+    // firma. Admin, Dirección general y RRHH pueden firmarlo en su lugar para que una baja o unas
+    // vacaciones del titular no bloqueen el cierre de mes (decisión explícita 2026-09-24).
+    public function firmarAprueba(Request $request, Project $project)
+    {
+        $user    = auth()->user();
+        $isAdmin = $user->isProjectAdmin($project);
+        [$year, $month, $userId] = $this->resolveParams($request, $project, $user, $isAdmin);
+
+        $currentVmUserId = $user->projectUserId($project);
+        $authRol         = $currentVmUserId ? DB::table('vm_usuarios')->where('id', $currentVmUserId)->value('id_rol') : null;
+
+        if (!VmJerarquiaAprobacion::puedeFirmarAprueba(
+                $currentVmUserId ? (int) $currentVmUserId : null, $userId, $isAdmin, $authRol ? (int) $authRol : null)) {
+            return response()->json(['error' => 'Solo el supervisor asignado en la ficha de este trabajador (o RRHH y Dirección general) puede firmar este paso.'], 403);
+        }
+
+        return $this->responderFirma($this->firmarPaso($userId, $year, $month, 'aprueba', (int) auth()->id(), $request));
+    }
+
+    // Paso 2/4 del flujo de aprobación: RRHH (o Dirección general/admin) firma. A partir de
     // ahí, cualquier edición de ausencias/fichaje/horarios/imputaciones de ese usuario+mes
     // muestra un aviso, queda registrada en vm_informes_ediciones_log y reinicia todo el
     // flujo (InformeAprobacionGuard) -- nunca bloquea el guardado, solo avisa y reinicia.
@@ -392,7 +431,8 @@ class InformeImputacionesController extends Controller
         return $this->responderFirma($this->firmarPaso($userId, $year, $month, 'rrhh', (int) auth()->id(), $request));
     }
 
-    // Paso 2/4: el coordinador del equipo (rol 10, Dirección de Operaciones) firma.
+    // Retirado del flujo (2026-09-24), sustituido por firmarAprueba(). Se conserva para no
+    // romper enlaces guardados: devuelve 409 porque ningún informe llega ya a 'coordinador'.
     public function firmarCoordinador(Request $request, Project $project)
     {
         $user    = auth()->user();
@@ -471,15 +511,19 @@ class InformeImputacionesController extends Controller
             return response()->json(['error' => 'Este informe ya está aprobado y bloqueado. No se puede reiniciar.'], 423);
         }
 
+        // Vuelve al primer paso REAL de este trabajador, que no siempre es 'rrhh': si tiene
+        // supervisor asignado, el circuito arranca en 'aprueba'.
+        $pasoInicial = VmJerarquiaAprobacion::pasoInicial($userId);
+
         DB::table('vm_informes_estado')
             ->where('id_usuario', $userId)->where('anio', $year)->where('mes', $month)
-            ->update(['en_aprobacion' => false, 'paso_actual' => 'rrhh', 'updatedat' => now()]);
+            ->update(['en_aprobacion' => false, 'paso_actual' => $pasoInicial, 'updatedat' => now()]);
 
         DB::table('vm_informes_aprobaciones')
             ->where('id_usuario', $userId)->where('anio', $year)->where('mes', $month)
             ->delete();
 
-        return response()->json(['ok' => true, 'en_aprobacion' => false, 'paso_actual' => 'rrhh']);
+        return response()->json(['ok' => true, 'en_aprobacion' => false, 'paso_actual' => $pasoInicial]);
     }
 
     // Registra la firma de $step (validando que sea justo el paso en curso y que quien firma
@@ -488,20 +532,24 @@ class InformeImputacionesController extends Controller
     // firma de arriba y por VacationmarbellaPwaController::firmarInformeTrabajador().
     public function firmarPaso(int $userId, int $year, int $month, string $step, int $aprobadoPor, Request $request): array
     {
-        // Flujo de firmas (2026-09-19). El primer paso, "aprueba" -- la persona designada en
-        // vm_usuarios.id_aprueba_informe -- está acordado pero DESACTIVADO de momento: hoy el
-        // flujo arranca en RRHH. Para activarlo basta con descomentar las dos líneas marcadas y
-        // que el paso inicial de vm_informes_estado pase a ser 'aprueba' en vez de 'rrhh'.
+        // Flujo de firmas (activado 2026-09-24). El primer paso, "aprueba" (etiquetado
+        // "Supervisor" en la interfaz), lo firma la persona designada en la ficha del usuario,
+        // en vm_usuarios.id_aprueba_informe:
         //
-        //   aprueba (desactivado) → rrhh → trabajador → direccion → completado
+        //   aprueba → rrhh → trabajador → direccion → completado
+        //
+        // Ese primer paso se salta -- el informe arranca en 'rrhh' -- cuando el usuario no tiene
+        // aprobador asignado o cuando quien lo aprueba es Dirección general, que ya firma el
+        // último paso (ver VmJerarquiaAprobacion::pasoInicial()).
         //
         // Sustituye al antiguo paso "coordinador", que se deducía de la jerarquía de roles
         // (vm_roles.roles_supervisados, Dirección de Operaciones) y no admitía excepciones por
-        // persona. Su endpoint y su botón siguen existiendo pero ya no entran en la cadena: firmar
-        // ese paso devuelve 409 porque ningún informe llega nunca a estar en 'coordinador'.
+        // persona. Su endpoint sigue existiendo pero ya no entra en la cadena ni aparece como
+        // pestaña: firmar ese paso devuelve 409 porque ningún informe nuevo llega a 'coordinador'.
+        // Se conserva para los informes históricos que sí lo tienen firmado.
         $siguientePaso = [
-            // 'aprueba'  => 'rrhh',        // ← descomentar para activar el primer paso
-            'rrhh'        => 'trabajador',  // ← al activarlo, este sigue igual
+            'aprueba'     => 'rrhh',
+            'rrhh'        => 'trabajador',
             'coordinador' => 'trabajador',  // retirado del flujo; se conserva por compatibilidad
             'trabajador'  => 'direccion',
             'direccion'   => 'completado',
@@ -512,7 +560,7 @@ class InformeImputacionesController extends Controller
 
         $pasoActual = DB::table('vm_informes_estado')
             ->where('id_usuario', $userId)->where('anio', $year)->where('mes', $month)
-            ->value('paso_actual') ?? 'rrhh';
+            ->value('paso_actual') ?? VmJerarquiaAprobacion::pasoInicial($userId);
         if ($pasoActual !== $step) {
             return ['error' => "El informe no está en el paso '{$step}' (está en '{$pasoActual}').", 'status' => 409];
         }
@@ -669,15 +717,18 @@ class InformeImputacionesController extends Controller
             ->value('paso_actual');
         if ($pasoActual !== 'completado') return null;
 
-        $orden = ['rrhh' => 0, 'coordinador' => 1, 'trabajador' => 2, 'direccion' => 3];
-        $labels = ['rrhh' => 'RRHH', 'coordinador' => 'Coordinador', 'trabajador' => 'Trabajador', 'direccion' => 'Dirección'];
+        $orden  = ['aprueba' => 0, 'rrhh' => 1, 'coordinador' => 2, 'trabajador' => 3, 'direccion' => 4];
+        $labels = ['aprueba' => 'Supervisor', 'rrhh' => 'RRHH', 'coordinador' => 'Coordinador', 'trabajador' => 'Trabajador', 'direccion' => 'Dirección'];
 
         $rows = DB::table('vm_informes_aprobaciones as a')
             ->join('admin_users as u', 'u.id', '=', 'a.aprobado_por')
             ->where('a.id_usuario', $userId)->where('a.anio', $year)->where('a.mes', $month)
             ->get(['a.step', 'a.aprobado_at', 'u.name as nombre', 'u.signature_path']);
 
-        if ($rows->count() !== 4) return null;
+        // 4 firmas en el caso normal, 3 cuando el circuito se salta el paso "Supervisor" (sin
+        // aprobador asignado, o aprobado por Dirección general, que ya firma el último paso).
+        // Antes se exigían exactamente 4 y esos informes se quedaban sin bloque de firmas.
+        if ($rows->count() < 3) return null;
 
         return $rows->sortBy(fn($r) => $orden[$r->step] ?? 99)->map(fn($r) => [
             'step'           => $labels[$r->step] ?? $r->step,
@@ -755,24 +806,44 @@ class InformeImputacionesController extends Controller
 
         if ($canSelectTodos) {
             $allUsuarios = DB::table('vm_usuarios')->where('deleted', 0)->orderBy('nombre')->get(['id', 'nombre', 'id_rol', 'admin_user_id']);
-        } elseif ($canSelectEquipo) {
-            $visibleIds = RoleHierarchy::visibleUserIds(
-                $project->slug . '_roles', $project->slug . '_usuarios',
-                (int) $currentVmUserId, (int) $authRol
-            );
-            $allUsuarios = DB::table('vm_usuarios')
-                ->where('deleted', 0)
-                ->whereIn('id', array_map('intval', $visibleIds))
-                ->orderBy('nombre')
-                ->get(['id', 'nombre', 'id_rol', 'admin_user_id']);
         } else {
-            $allUsuarios = collect();
+            // Unión de las DOS jerarquías, no sustitución (decisión explícita 2026-09-24):
+            //   - roles      → RoleHierarchy sobre vm_roles.roles_supervisados, como hasta ahora;
+            //   - aprobación → la rama que cuelga de esta persona en vm_usuarios.id_aprueba_informe.
+            // Lo segundo solo AÑADE: quien tiene que firmar un informe necesita poder abrirlo
+            // aunque su rol no alcance a esa persona (caso Dirección contabilidad, que supervisa
+            // Contabilidad y Transformación digital pero no figura en ninguna de las dos listas
+            // de roles de arriba y hasta hoy solo se veía a sí misma).
+            $visibleIds = $canSelectEquipo
+                ? RoleHierarchy::visibleUserIds(
+                    $project->slug . '_roles', $project->slug . '_usuarios',
+                    (int) $currentVmUserId, (int) $authRol
+                  )
+                : [];
+
+            $idsAprobacion = $currentVmUserId ? VmJerarquiaAprobacion::ramaDe((int) $currentVmUserId) : [];
+
+            $visibleIds = array_values(array_unique(array_merge(
+                array_map('intval', $visibleIds),
+                array_map('intval', $idsAprobacion)
+            )));
+
+            $allUsuarios = $visibleIds
+                ? DB::table('vm_usuarios')
+                    ->where('deleted', 0)
+                    ->whereIn('id', $visibleIds)
+                    ->orderBy('nombre')
+                    ->get(['id', 'nombre', 'id_rol', 'admin_user_id'])
+                : collect();
+
+            // Se puede seleccionar en cuanto hay alguien más que uno mismo en la lista.
+            $canSelect = $allUsuarios->count() > 1;
         }
 
         if ($canSelect) {
             $userId = (int) $request->input('user_id', $currentVmUserId ?? ($allUsuarios->first()->id ?? 0));
-            // Si pide un user_id fuera de su equipo (manipulando el parámetro), se cae a su propio informe.
-            if ($canSelectEquipo && !$allUsuarios->contains('id', $userId)) {
+            // Si pide un user_id fuera de su alcance (manipulando el parámetro), se cae a su propio informe.
+            if (!$canSelectTodos && !$allUsuarios->contains('id', $userId)) {
                 $userId = (int) $currentVmUserId;
             }
         } else {

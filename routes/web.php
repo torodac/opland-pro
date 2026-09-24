@@ -167,6 +167,7 @@ Route::middleware('auth')->group(function () {
         Route::get('informe-imputaciones/pdf-todos', [InformeImputacionesController::class, 'pdfTodos'])->name('informe-imputaciones.pdf-todos');
         Route::post('informe-imputaciones/validar', [InformeImputacionesController::class, 'validar'])->name('informe-imputaciones.validar');
         Route::post('informe-imputaciones/anular-validacion', [InformeImputacionesController::class, 'anularValidacion'])->name('informe-imputaciones.anular-validacion');
+        Route::post('informe-imputaciones/firmar-aprueba', [InformeImputacionesController::class, 'firmarAprueba'])->name('informe-imputaciones.firmar-aprueba');
         Route::post('informe-imputaciones/firmar-coordinador', [InformeImputacionesController::class, 'firmarCoordinador'])->name('informe-imputaciones.firmar-coordinador');
         Route::post('informe-imputaciones/firmar-trabajador', [InformeImputacionesController::class, 'firmarTrabajador'])->name('informe-imputaciones.firmar-trabajador');
         Route::post('informe-imputaciones/firmar-direccion', [InformeImputacionesController::class, 'firmarDireccion'])->name('informe-imputaciones.firmar-direccion');

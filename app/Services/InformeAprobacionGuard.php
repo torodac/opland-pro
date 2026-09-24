@@ -107,7 +107,10 @@ class InformeAprobacionGuard
             ->where('id_usuario', $idUsuario)
             ->where('anio', $anio)
             ->where('mes', $mes)
-            ->update(['en_aprobacion' => false, 'paso_actual' => 'rrhh', 'updatedat' => $ahora]);
+            // Al principio del circuito de ESE trabajador, que no siempre es 'rrhh': si tiene
+            // supervisor asignado en su ficha, arranca en 'aprueba'. Con el 'rrhh' fijo, una
+            // edición se saltaba el primer paso al reiniciar.
+            ->update(['en_aprobacion' => false, 'paso_actual' => VmJerarquiaAprobacion::pasoInicial($idUsuario), 'updatedat' => $ahora]);
 
         DB::table('vm_informes_aprobaciones')
             ->where('id_usuario', $idUsuario)

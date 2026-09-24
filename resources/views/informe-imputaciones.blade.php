@@ -141,10 +141,10 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
 </form>
 
 @php
-$paso_labels = ['rrhh' => 'RRHH', 'coordinador' => 'Coordinador', 'trabajador' => 'Trabajador', 'direccion' => 'Dirección', 'completado' => 'Completado'];
+$paso_labels = ['aprueba' => 'Supervisor', 'rrhh' => 'RRHH', 'coordinador' => 'Coordinador', 'trabajador' => 'Trabajador', 'direccion' => 'Dirección', 'completado' => 'Completado'];
 @endphp
 
-@if($en_aprobacion || $can_select_todos || $puede_firmar_coordinador || $puede_firmar_trabajador || $puede_firmar_direccion)
+@if($en_aprobacion || $can_select_todos || $puede_firmar_aprueba || $puede_firmar_coordinador || $puede_firmar_trabajador || $puede_firmar_direccion)
 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fff;padding:10px 14px;border-radius:8px;box-shadow:0 1px 6px rgba(0,0,0,.07);margin-top:10px;">
 
     <span class="inline-flex items-center gap-1.5 px-3 py-1.5 {{ $paso_actual === 'completado' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-200' }} text-sm font-medium rounded-lg border">
@@ -165,7 +165,17 @@ $paso_labels = ['rrhh' => 'RRHH', 'coordinador' => 'Coordinador', 'trabajador' =
         </span>
     @endforeach
 
-    @if($can_select_todos && $paso_actual === 'rrhh' && !$en_aprobacion)
+    @if($puede_firmar_aprueba)
+        <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 text-sm font-medium rounded-lg transition-colors border border-orange-200"
+            onclick="firmarPaso('{{ route('informe-imputaciones.firmar-aprueba', $project->slug) }}')">
+            Firmar como supervisor
+        </button>
+    @endif
+
+    {{-- Sin "&& !$en_aprobacion": desde que existe el paso previo de Supervisor, el informe ya
+         llega aquí con el flujo iniciado, y esa condición escondía el botón de RRHH. Que
+         $paso_actual sea 'rrhh' ya garantiza que RRHH no ha firmado todavía. --}}
+    @if($can_select_todos && $paso_actual === 'rrhh')
         <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 text-sm font-medium rounded-lg transition-colors border border-orange-200"
             onclick="firmarPaso('{{ route('informe-imputaciones.validar', $project->slug) }}')">
             Validar informe (RRHH)

@@ -1555,7 +1555,7 @@ document.getElementById('btn-push-test').addEventListener('click', probarSuscrip
 
 // ── Mi informe mensual ───────────────────────────────────────────────────────
 const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-const PASO_LABELS = { rrhh: 'RRHH', coordinador: 'Coordinador', trabajador: 'Trabajador', direccion: 'Dirección', completado: 'Completado' };
+const PASO_LABELS = { aprueba: 'Supervisor', rrhh: 'RRHH', coordinador: 'Coordinador', trabajador: 'Trabajador', direccion: 'Dirección', completado: 'Completado' };
 let informeSel = { year: new Date().getFullYear(), month: new Date().getMonth() + 1 };
 
 function initInformeSelectores() {

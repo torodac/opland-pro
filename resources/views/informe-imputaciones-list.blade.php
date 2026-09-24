@@ -4,23 +4,28 @@ $meses_es = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
 $year_min = now()->year - 3;
 $year_max = now()->year + 1;
 
-$paso_labels = ['rrhh' => 'RRHH', 'coordinador' => 'Coordinador', 'trabajador' => 'Trabajador', 'direccion' => 'Dirección', 'completado' => 'Completado'];
+// "Supervisor" es la etiqueta de cara al usuario del paso interno 'aprueba' (la persona
+// designada en el campo "Aprueba informe" de la ficha del trabajador). El paso 'coordinador'
+// quedó retirado del circuito: ya no tiene pestaña propia, pero conserva su etiqueta para los
+// informes históricos que sí lo firmaron.
+$paso_labels = ['aprueba' => 'Supervisor', 'rrhh' => 'RRHH', 'coordinador' => 'Coordinador', 'trabajador' => 'Trabajador', 'direccion' => 'Dirección', 'completado' => 'Completado'];
 
 $firma_routes = [
+    'aprueba'     => route('informe-imputaciones.firmar-aprueba', $project->slug),
     'rrhh'        => route('informe-imputaciones.validar', $project->slug),
-    'coordinador' => route('informe-imputaciones.firmar-coordinador', $project->slug),
     'trabajador'  => route('informe-imputaciones.firmar-trabajador', $project->slug),
     'direccion'   => route('informe-imputaciones.firmar-direccion', $project->slug),
 ];
 
+// Solo los pasos cuyo permiso es de PÁGINA (depende del rol de quien mira). 'aprueba' y
+// 'trabajador' no están aquí porque su permiso depende de la fila, y se resuelven abajo.
 $puede_firmar_paso = [
     'rrhh'        => $puede_firmar_rrhh,
-    'coordinador' => $puede_firmar_coordinador,
     'direccion'   => $puede_firmar_direccion,
 ];
 
 $conteos = ['todos' => $filas->count()];
-foreach (['rrhh','coordinador','trabajador','direccion','completado'] as $p) {
+foreach (['aprueba','rrhh','trabajador','direccion','completado'] as $p) {
     $conteos[$p] = $filas->where('paso', $p)->count();
 }
 
@@ -85,6 +90,7 @@ foreach (['rrhh','coordinador','trabajador','direccion','completado'] as $p) {
 .ap-paso-badge { display:none; align-items:center; gap:6px; padding:3px 9px 3px 7px; border-radius:20px; font-size:11px; font-weight:700; white-space:nowrap; }
 .ap-list.showing-todos .ap-paso-badge { display:inline-flex; }
 .ap-paso-badge .dot { width:5px; height:5px; border-radius:50%; background:currentColor; }
+.ap-paso-badge.s-aprueba { background:#dbeafe; color:#1d4ed8; }
 .ap-paso-badge.s-rrhh { background:#ffedd5; color:#9a3412; }
 .ap-paso-badge.s-coordinador { background:#fbf0dd; color:#b8790f; }
 .ap-paso-badge.s-trabajador { background:#ede7fb; color:#6b48c7; }
@@ -157,14 +163,14 @@ function filtrarRol(rol) {
 
 <div class="ap-chevrons" id="ap-tabs" data-default="{{ $default_tab }}">
     <button type="button" class="ap-chev {{ $default_tab === 'todos' ? 'active' : '' }}" data-step="todos">Todos <span class="n">{{ $conteos['todos'] }}</span></button>
+    <button type="button" class="ap-chev {{ $default_tab === 'aprueba' ? 'active' : '' }}" data-step="aprueba">Supervisor <span class="n">{{ $conteos['aprueba'] }}</span></button>
     <button type="button" class="ap-chev {{ $default_tab === 'rrhh' ? 'active' : '' }}" data-step="rrhh">RRHH <span class="n">{{ $conteos['rrhh'] }}</span></button>
-    <button type="button" class="ap-chev {{ $default_tab === 'coordinador' ? 'active' : '' }}" data-step="coordinador">Coordinador <span class="n">{{ $conteos['coordinador'] }}</span></button>
     <button type="button" class="ap-chev {{ $default_tab === 'trabajador' ? 'active' : '' }}" data-step="trabajador">Trabajador <span class="n">{{ $conteos['trabajador'] }}</span></button>
     <button type="button" class="ap-chev {{ $default_tab === 'direccion' ? 'active' : '' }}" data-step="direccion">Dirección <span class="n">{{ $conteos['direccion'] }}</span></button>
     <button type="button" class="ap-chev done {{ $default_tab === 'completado' ? 'active' : '' }}" data-step="completado">Completados <span class="n">{{ $conteos['completado'] }}</span></button>
 </div>
 
-@if(!$viewer_tiene_firma && ($puede_firmar_rrhh || $puede_firmar_coordinador || $puede_firmar_direccion))
+@if(!$viewer_tiene_firma && ($puede_firmar_rrhh || $puede_firmar_direccion || $filas->contains('puede_firmar_aprueba', true)))
 <div class="ap-hint" style="background:#FBF0DD;color:#B8790F;padding:10px 14px;border-radius:8px;margin-bottom:14px;">
     No tienes firma manuscrita registrada en tu perfil — no podrás firmar hasta añadirla.
 </div>
@@ -174,14 +180,16 @@ function filtrarRol(rol) {
 @forelse($filas as $fila)
     @php
         $puedeFirmarEste = match($fila->paso) {
-            'rrhh', 'coordinador', 'direccion' => ($puede_firmar_paso[$fila->paso] ?? false) && $viewer_tiene_firma,
+            'rrhh', 'direccion' => ($puede_firmar_paso[$fila->paso] ?? false) && $viewer_tiene_firma,
+            'aprueba'    => $fila->puede_firmar_aprueba && $viewer_tiene_firma,
             'trabajador' => $fila->es_mi_informe && $fila->tiene_firma,
             default => false,
         };
         $motivoNoPuede = match(true) {
             $fila->paso === 'completado' => null,
-            in_array($fila->paso, ['rrhh','coordinador','direccion']) && !($puede_firmar_paso[$fila->paso] ?? false) => 'No tienes permiso para firmar como ' . $paso_labels[$fila->paso] . '.',
-            in_array($fila->paso, ['rrhh','coordinador','direccion']) && !$viewer_tiene_firma => 'Debes registrar tu firma en tu perfil.',
+            in_array($fila->paso, ['rrhh','direccion']) && !($puede_firmar_paso[$fila->paso] ?? false) => 'No tienes permiso para firmar como ' . $paso_labels[$fila->paso] . '.',
+            $fila->paso === 'aprueba' && !$fila->puede_firmar_aprueba => 'Solo el supervisor asignado en la ficha de ' . $fila->nombre . ' puede firmar este paso.',
+            in_array($fila->paso, ['rrhh','direccion','aprueba']) && !$viewer_tiene_firma => 'Debes registrar tu firma en tu perfil.',
             $fila->paso === 'trabajador' && !$fila->es_mi_informe => 'Solo ' . $fila->nombre . ' puede firmar su propio informe.',
             $fila->paso === 'trabajador' && !$fila->tiene_firma => $fila->nombre . ' no tiene firma registrada en su perfil.',
             default => null,
