@@ -292,6 +292,10 @@ class FichaController extends Controller
         $data['updatedat']  = now();
         $data['updateuser'] = $this->currentUserId();
 
+        if ($err = \App\Services\AutoreferenciaGuard::error($project, $projectTable, $data, $ids->all())) {
+            abort(422, $err);
+        }
+
         $afectados = DB::table($fullTable)->whereIn('id', $ids)->update($data);
 
         return response()->json(['ok' => true, 'afectados' => $afectados, 'ids_recibidos' => $ids->count()]);
@@ -341,6 +345,11 @@ class FichaController extends Controller
         abort_if($registro?->blocked ?? false, 403, 'Este registro está bloqueado y no puede editarse.');
         $this->validateRequired($request, $projectTable);
         $data = $this->filterData($request, $projectTable);
+
+        if ($err = \App\Services\AutoreferenciaGuard::error($project, $projectTable, $data, [$id])) {
+            return back()->withErrors([\App\Services\AutoreferenciaGuard::campos($project, $projectTable)[0] => $err])->withInput();
+        }
+
         $data['updateuser'] = $this->currentUserId() ?? DB::table($projectTable->getFullTableName())->where('id', $id)->value('updateuser');
         $data['updatedat']  = now();
         if ($projectTable->nombre_formula) {
@@ -564,6 +573,12 @@ class FichaController extends Controller
                 $query->whereIn('id_rol', $rolIds);
             }
 
+            // Campo autorreferenciado (el "ref:" apunta a esta misma tabla): nunca se ofrece el
+            // propio registro. Ver AutoreferenciaGuard, que rechaza lo mismo al guardar.
+            if ($registro && $fullRef === $projectTable->getFullTableName()) {
+                $query->where('id', '!=', $registro->id);
+            }
+
             // Si es control_user como desplegable y el rol tiene visibilidad restringida
             if ($visibleIds !== null && $field->name === 'control_user' && $field->type === 'desplegable' && $fullRef === $usuariosTable) {
                 $query->whereIn('id', $visibleIds);
@@ -779,6 +794,10 @@ class FichaController extends Controller
 
         $registro = DB::table($projectTable->getFullTableName())->where('id', $id)->first();
         abort_if($registro?->blocked ?? false, 403, 'Este registro está bloqueado y no puede editarse.');
+
+        if ($err = \App\Services\AutoreferenciaGuard::error($project, $projectTable, [$fieldName => $request->input('value')], [$id])) {
+            return response()->json(['error' => $err], 422);
+        }
 
         $updateData = [
             $fieldName   => $request->input('value'),
