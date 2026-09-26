@@ -145,7 +145,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/', [ProjectController::class, 'index'])->name('proyectos');
 
     // Rutas dentro de un proyecto (con verificación de acceso)
-    Route::prefix('{project:slug}')->middleware('project.access')->group(function () {
+    // 'menu.access' aplica el permiso "Puede ver" del rol a TODAS las rutas de cada pantalla,
+    // derivándolo del menú lateral, para que no dependa de que cada controlador se acuerde de
+    // comprobarlo. Ver EnforceMenuTableAccess y el comando opland:auditar-acceso.
+    Route::prefix('{project:slug}')->middleware(['project.access', 'menu.access'])->group(function () {
 
         // Rutas exclusivas de VacationMarbella (dashboard, tareas, fichajes, pyg, liquidacion, novaciones, km, horario, calendario, informe-imputaciones)
         Route::middleware('vm.only')->group(function () {

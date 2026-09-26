@@ -27,6 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'mb.only'            => \App\Http\Middleware\EnsureMbProject::class,
             'nf.only'            => \App\Http\Middleware\EnsureNfProject::class,
             'table.access'       => \App\Http\Middleware\CheckTableAccess::class,
+            'menu.access'        => \App\Http\Middleware\EnforceMenuTableAccess::class,
         ]);
         $middleware->appendToGroup('web', \App\Http\Middleware\ForcePasswordChange::class);
     })
