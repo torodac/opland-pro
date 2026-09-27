@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schedule;
 use Minishlink\WebPush\WebPush;
 use Minishlink\WebPush\Subscription;
@@ -55,14 +56,20 @@ Schedule::call(function () {
 
     if ($abiertos->isEmpty()) return;
 
-    $auth = [
-        'VAPID' => [
-            'subject'    => env('VAPID_SUBJECT'),
-            'publicKey'  => env('VAPID_PUBLIC_KEY'),
-            'privateKey' => env('VAPID_PRIVATE_KEY'),
-        ],
-    ];
-    $webPush = new WebPush($auth);
+    // De config, NO de env(): env() devuelve null en cuanto la configuracion esta cacheada,
+    // porque entonces el .env ya no se carga. Eso tumbo estas dos tareas del 20 al 24 de
+    // septiembre de 2026 sin que nadie se enterara (ver 3.108 en DOC_TECNICO.md).
+    $vapid = config('services.webpush');
+    if (empty($vapid['subject']) || empty($vapid['public_key']) || empty($vapid['private_key'])) {
+        Log::error('vm:cierre-fichajes: faltan las claves VAPID (services.webpush).');
+        return;
+    }
+
+    $webPush = new WebPush(['VAPID' => [
+        'subject'    => $vapid['subject'],
+        'publicKey'  => $vapid['public_key'],
+        'privateKey' => $vapid['private_key'],
+    ]]);
 
     foreach ($abiertos as $fichaje) {
         // hora_fin = hora_inicio + horas diarias del contrato (horas_semana / 5)
@@ -146,6 +153,64 @@ Schedule::call(function () {
         }
     }
 })->dailyAt('08:00')->name('vm:cierre-fichajes')->withoutOverlapping();
+
+Schedule::call(function () {
+    $today = now()->toDateString();
+
+    $subs = DB::table('health_push_subscriptions')->get(['admin_user_id', 'endpoint', 'p256dh', 'auth']);
+    if ($subs->isEmpty()) return;
+
+    // De config, NO de env(): env() devuelve null en cuanto la configuracion esta cacheada,
+    // porque entonces el .env ya no se carga. Eso tumbo estas dos tareas del 20 al 24 de
+    // septiembre de 2026 sin que nadie se enterara (ver 3.108 en DOC_TECNICO.md).
+    $vapid = config('services.webpush');
+    if (empty($vapid['subject']) || empty($vapid['public_key']) || empty($vapid['private_key'])) {
+        Log::error('health:recordatorio: faltan las claves VAPID (services.webpush).');
+        return;
+    }
+
+    $webPush = new WebPush(['VAPID' => [
+        'subject'    => $vapid['subject'],
+        'publicKey'  => $vapid['public_key'],
+        'privateKey' => $vapid['private_key'],
+    ]]);
+
+    foreach ($subs->groupBy('admin_user_id') as $userId => $userSubs) {
+        $log = DB::table('health_daily_logs')
+            ->where('admin_user_id', $userId)
+            ->where('log_date', $today)
+            ->first();
+
+        $completo = $log
+            && !empty($log->weight_kg)
+            && !empty($log->breakfast)
+            && !empty($log->lunch)
+            && !empty($log->dinner);
+
+        if ($completo) continue;
+
+        foreach ($userSubs as $sub) {
+            $webPush->queueNotification(
+                Subscription::create([
+                    'endpoint' => $sub->endpoint,
+                    'keys'     => ['p256dh' => $sub->p256dh, 'auth' => $sub->auth],
+                ]),
+                json_encode([
+                    'title' => 'Health — recuerda completar tu diario',
+                    'body'  => 'Aún tienes campos sin rellenar. Tómate un momento para registrar el día.',
+                    'url'   => '/pwa/health/',
+                ])
+            );
+        }
+    }
+
+    foreach ($webPush->flush() as $report) {
+        if (!$report->isSuccess() && in_array($report->getResponse()?->getStatusCode(), [404, 410])) {
+            DB::table('health_push_subscriptions')->where('endpoint', $report->getRequest()->getUri()->__toString())->delete();
+        }
+    }
+})->dailyAt('23:00')->name('health:recordatorio')->withoutOverlapping();
+
 
 // Sincroniza vm_reservas_importes (incluida "Comisión canal") para reservas con
 // checkout reciente -- antes no se ejecutaba nunca de forma automática.
