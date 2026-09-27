@@ -4,6 +4,7 @@ use App\Http\Controllers\ApiController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Vm\VacationmarbellaPwaController;
 use App\Http\Controllers\HealthController;
+use App\Http\Controllers\EngController;
 
 Route::prefix('vm')->group(function () {
     Route::post('login',                        [VacationmarbellaPwaController::class, 'login']);
@@ -57,4 +58,25 @@ Route::prefix('health')->group(function () {
     Route::get('log/{date?}',       [HealthController::class, 'getLog']);
     Route::put('log/{date}',        [HealthController::class, 'upsertLog']);
     Route::get('weight/history',    [HealthController::class, 'weightHistory']);
+    Route::post('push/subscribe', [HealthController::class, 'pushSubscribe']);
+    Route::get('muscle-groups',      [HealthController::class, 'muscleGroups']);
+    Route::get('exercise-log',       [HealthController::class, 'exerciseLog']);
+    Route::post('exercise-log',      [HealthController::class, 'toggleExercise']);
+    Route::delete('exercise-log',    [HealthController::class, 'removeExercise']);
+
+});
+
+// ── English flashcards PWA ────────────────────────────────────────────────────
+
+Route::prefix('eng')->group(function () {
+    Route::post('login',                    [EngController::class, 'login']);
+    Route::post('logout',                   [EngController::class, 'logout']);
+    Route::get('libraries',                 [EngController::class, 'libraries']);
+    Route::post('libraries/{id}/share',     [EngController::class, 'shareLibrary']);
+    Route::get('card',                      [EngController::class, 'card']);
+    Route::get('list',                      [EngController::class, 'wordList']);
+    Route::post('answer/{vocabId}',         [EngController::class, 'answer']);
+    Route::get('stats',                     [EngController::class, 'stats']);
+    Route::delete('progress',               [EngController::class, 'resetProgress']);
+    Route::put('vocabulary/{id}',          [EngController::class, 'updateVocab']);
 });
