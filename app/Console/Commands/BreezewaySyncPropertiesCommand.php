@@ -27,8 +27,8 @@ class BreezewaySyncPropertiesCommand extends Command
 
     public function handle(): void
     {
-        $this->clientId     = (string) env('BREEZEWAY_CLIENT_ID');
-        $this->clientSecret = (string) env('BREEZEWAY_CLIENT_SECRET');
+        $this->clientId     = (string) config('services.breezeway.client_id');
+        $this->clientSecret = (string) config('services.breezeway.client_secret');
 
         $token = $this->authenticate();
         if (!$token) {

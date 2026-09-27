@@ -27,11 +27,19 @@ class VmNotificarTurno extends Command
 
         if ($horarios->isEmpty()) return;
 
+        // Sin claves configuradas, WebPush lanza un "[VAPID] You must provide a subject..." que
+        // desde el planificador solo se ve como "exit code 1" y no dice nada. Mejor decirlo.
+        $vapid = config('services.webpush');
+        if (empty($vapid['subject']) || empty($vapid['public_key']) || empty($vapid['private_key'])) {
+            $this->error('Faltan las claves VAPID (services.webpush): no se envía ninguna notificación.');
+            return;
+        }
+
         $auth = [
             'VAPID' => [
-                'subject'    => env('VAPID_SUBJECT'),
-                'publicKey'  => env('VAPID_PUBLIC_KEY'),
-                'privateKey' => env('VAPID_PRIVATE_KEY'),
+                'subject'    => $vapid['subject'],
+                'publicKey'  => $vapid['public_key'],
+                'privateKey' => $vapid['private_key'],
             ],
         ];
 

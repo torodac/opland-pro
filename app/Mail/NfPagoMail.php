@@ -17,7 +17,7 @@ class NfPagoMail extends Mailable
     public function build()
     {
         return $this->mailer('nf')
-            ->from(env('MAIL_NF_FROM_ADDRESS', 'naturefitness@opland.es'), 'Nature Fitness')
+            ->from(config('services.correo.nf_from'), 'Nature Fitness')
             ->subject('Confirmación Automática de Pago')
             ->view('emails.nf.pago');
     }

@@ -557,7 +557,7 @@ class VacationmarbellaPwaController extends Controller
 
     public function vapidPublicKey()
     {
-        return response()->json(['key' => env('VAPID_PUBLIC_KEY')]);
+        return response()->json(['key' => config('services.webpush.public_key')]);
     }
 
     public function me(Request $request)

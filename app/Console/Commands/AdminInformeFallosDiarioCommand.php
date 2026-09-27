@@ -36,7 +36,7 @@ class AdminInformeFallosDiarioCommand extends Command
 
         $hallazgos = $this->traducir($lineas);
 
-        $destino = env('MAIL_INFORME_FALLOS_TO', 'trodriguez@opland.es');
+        $destino = config('services.correo.informe_fallos_to');
         Mail::to($destino)->send(new InformeFallosDiarioMail($fecha, $hallazgos));
 
         $this->info("Enviado informe de fallos del {$fecha}: " . count($hallazgos) . ' hallazgo(s) a partir de ' . count($lineas) . ' línea(s).');

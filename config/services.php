@@ -48,4 +48,25 @@ return [
         'client_secret' => env('POWERBI_CLIENT_SECRET'),
     ],
 
+    // Notificaciones push de la PWA. Estas claves se leían con env() directamente desde el
+    // comando y el controlador, y eso deja de funcionar en cuanto se cachea la configuración:
+    // env() devuelve null porque el .env ya no se carga. Pasó en producción entre el 20 y el 24
+    // de septiembre de 2026 (ver 3.108 en DOC_TECNICO.md).
+    'webpush' => [
+        'subject'     => env('VAPID_SUBJECT'),
+        'public_key'  => env('VAPID_PUBLIC_KEY'),
+        'private_key' => env('VAPID_PRIVATE_KEY'),
+    ],
+
+    'breezeway' => [
+        'client_id'     => env('BREEZEWAY_CLIENT_ID'),
+        'client_secret' => env('BREEZEWAY_CLIENT_SECRET'),
+    ],
+
+    // Destinatarios y remitentes que también se leían con env() fuera de config.
+    'correo' => [
+        'informe_fallos_to' => env('MAIL_INFORME_FALLOS_TO', 'trodriguez@opland.es'),
+        'nf_from'           => env('MAIL_NF_FROM_ADDRESS', 'naturefitness@opland.es'),
+    ],
+
 ];
