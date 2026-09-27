@@ -58,7 +58,9 @@ class VacationmarbellaPwaController extends Controller
 
         DB::table('vm_pwa_tokens')->insert([
             'token'         => $token,
-            'user_id'       => $user?->id,
+            // id_usuario apunta a vm_usuarios; admin_user_id, a admin_users. Antes la primera
+            // se llamaba user_id, que en el resto de la base de datos significa admin_users.
+            'id_usuario'    => $user?->id,
             'admin_user_id' => $esAdmin ? $authUser->id : null,
             'app'           => 'vm',
             'device'        => substr($request->header('User-Agent', ''), 0, 255),
@@ -578,8 +580,8 @@ class VacationmarbellaPwaController extends Controller
             ? DB::table('admin_user_roles')->where('user_id', $row->admin_user_id)->where('role', 'admin')->exists()
             : false;
 
-        if ($row->user_id) {
-            $user = DB::table('vm_usuarios')->find($row->user_id);
+        if ($row->id_usuario) {
+            $user = DB::table('vm_usuarios')->find($row->id_usuario);
         } else {
             $authU = DB::table('admin_users')->find($row->admin_user_id);
             $user  = $authU ? (object)['id' => null, 'nombre' => $authU->name ?? $authU->email, 'mail' => $authU->email, 'id_rol' => null] : null;
@@ -1392,9 +1394,9 @@ class VacationmarbellaPwaController extends Controller
 
         DB::table('vm_pwa_tokens')->where('id', $row->id)->update(['last_seen_at' => now()]);
 
-        if ($row->user_id) {
+        if ($row->id_usuario) {
             $user = DB::table('vm_usuarios')
-                ->where('id', $row->user_id)
+                ->where('id', $row->id_usuario)
                 ->where('deleted', 0)
                 ->first();
 
