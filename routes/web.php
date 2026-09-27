@@ -375,9 +375,9 @@ Route::middleware('auth')->group(function () {
             Route::post('cuotas/generar', [\App\Http\Controllers\Mb\GenerarCuotasController::class, 'store'])->where('project', 'mb')->name('mb.cuotas.generar');
             Route::get('cuotas/informe', [ListadoController::class, 'cuotasInformePdf'])->where('project', 'mb')->name('mb.cuotas.informe');
 
-            Route::post('viviendas/{vivienda}/entregas-cuenta', [\App\Http\Controllers\Mb\EntregasCuentaController::class, 'store'])->where(['project' => 'mb', 'vivienda' => '[0-9]+'])->name('mb.entregas-cuenta.store');
-            Route::post('entregas-cuenta/{entrega}/aplicar', [\App\Http\Controllers\Mb\EntregasCuentaController::class, 'aplicar'])->where(['project' => 'mb', 'entrega' => '[0-9]+'])->name('mb.entregas-cuenta.aplicar');
-            Route::get('entregas-cuenta/{entrega}/pendientes', [\App\Http\Controllers\Mb\EntregasCuentaController::class, 'pendientes'])->where(['project' => 'mb', 'entrega' => '[0-9]+'])->name('mb.entregas-cuenta.pendientes');
+            Route::post('viviendas/{vivienda}/entregas-cuenta', [\App\Http\Controllers\Mb\EntregasCuentaController::class, 'store'])->where(['project' => 'mb', 'vivienda' => '[0-9]+'])->middleware('table.access:entregas_cuenta')->name('mb.entregas-cuenta.store');
+            Route::post('entregas-cuenta/{entrega}/aplicar', [\App\Http\Controllers\Mb\EntregasCuentaController::class, 'aplicar'])->where(['project' => 'mb', 'entrega' => '[0-9]+'])->middleware('table.access:entregas_cuenta')->name('mb.entregas-cuenta.aplicar');
+            Route::get('entregas-cuenta/{entrega}/pendientes', [\App\Http\Controllers\Mb\EntregasCuentaController::class, 'pendientes'])->where(['project' => 'mb', 'entrega' => '[0-9]+'])->middleware('table.access:entregas_cuenta')->name('mb.entregas-cuenta.pendientes');
 
             Route::post('viviendas/ticket', [\App\Http\Controllers\Mb\TicketController::class, 'confirmar'])->where('project', 'mb')->name('mb.viviendas.ticket.confirmar');
             Route::get('viviendas/ticket/{ticket}', [\App\Http\Controllers\Mb\TicketController::class, 'imprimir'])->where(['project' => 'mb', 'ticket' => '[0-9]+'])->name('mb.viviendas.ticket.imprimir');
@@ -390,13 +390,13 @@ Route::middleware('auth')->group(function () {
             Route::delete('asamblea/reparto/hoja', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'anularHoja'])->where('project', 'mb')->name('mb.asamblea.reparto.hoja.anular');
             Route::get('asamblea/reparto/historico', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'historico'])->where('project', 'mb')->name('mb.asamblea.reparto.historico');
 
-            Route::get('asamblea/recuento/estado', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'estadoRefresh'])->where('project', 'mb')->name('mb.asamblea.recuento.estado');
-            Route::get('asamblea/recuento/export', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'exportarListado'])->where('project', 'mb')->name('mb.asamblea.recuento.export');
-            Route::post('asamblea/recuento/voto', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'registrarVoto'])->where('project', 'mb')->name('mb.asamblea.recuento.voto');
+            Route::get('asamblea/recuento/estado', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'estadoRefresh'])->where('project', 'mb')->middleware('table.access:asamblea_recuento_default')->name('mb.asamblea.recuento.estado');
+            Route::get('asamblea/recuento/export', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'exportarListado'])->where('project', 'mb')->middleware('table.access:asamblea_recuento_default')->name('mb.asamblea.recuento.export');
+            Route::post('asamblea/recuento/voto', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'registrarVoto'])->where('project', 'mb')->middleware('table.access:asamblea_recuento_default')->name('mb.asamblea.recuento.voto');
 
             Route::get('asamblea_reparto', [\App\Http\Controllers\Mb\AsambleaRepartoController::class, 'backoffice'])->where('project', 'mb')->name('mb.asamblea_reparto');
             Route::get('asamblea_recuento', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'backoffice'])->where('project', 'mb')->name('mb.asamblea_recuento');
-            Route::delete('asamblea/recuento/voto', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'eliminarVoto'])->where('project', 'mb')->name('mb.asamblea.recuento.voto.delete');
+            Route::delete('asamblea/recuento/voto', [\App\Http\Controllers\Mb\AsambleaRecuentoController::class, 'eliminarVoto'])->where('project', 'mb')->middleware('table.access:asamblea_recuento_default')->name('mb.asamblea.recuento.voto.delete');
 
             Route::get('asamblea_generador', [\App\Http\Controllers\Mb\AsambleaGeneradorController::class, 'index'])->where('project', 'mb')->name('mb.asamblea_generador');
             Route::get('asamblea_generador/pdf', [\App\Http\Controllers\Mb\AsambleaGeneradorController::class, 'descargarPdf'])->where('project', 'mb')->name('mb.asamblea_generador.pdf');
@@ -436,7 +436,11 @@ Route::middleware('auth')->group(function () {
 
         // Excel export: disponible para todos
         Route::get('{table}/export', [ExcelController::class, 'export'])->name('excel.export');
-        Route::post('propiedades/sync-icnea', [PropiedadesController::class, 'syncIcnea'])->name('propiedades.sync-icnea');
+        // Lanza una sincronización completa con Icnea y no comprobaba nada: cualquier usuario
+        // autenticado de cualquier proyecto podía dispararla. Queda atada al permiso de la tabla
+        // a la que pertenece la acción, el mismo que decide si se ve el botón.
+        Route::post('propiedades/sync-icnea', [PropiedadesController::class, 'syncIcnea'])
+            ->middleware('table.access:propiedades')->name('propiedades.sync-icnea');
 
         // Excel import: solo admin del proyecto
         Route::middleware('role.project-admin')->group(function () {
