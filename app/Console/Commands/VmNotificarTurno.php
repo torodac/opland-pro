@@ -46,9 +46,13 @@ class VmNotificarTurno extends Command
         $webPush = new WebPush($auth);
 
         foreach ($horarios as $horario) {
-            $suscripciones = DB::table('vm_push_subscriptions')
-                ->where('id_usuario', $horario->id_usuario)
-                ->get();
+            // Solo a usuarios activos: al dar de baja a alguien, su suscripción se quedaba y se
+            // le seguían enviando avisos al móvil. En septiembre de 2026 había 7 así, de 24.
+            $suscripciones = DB::table('vm_push_subscriptions as s')
+                ->join('vm_usuarios as u', 'u.id', '=', 's.id_usuario')
+                ->where('s.id_usuario', $horario->id_usuario)
+                ->where('u.deleted', 0)
+                ->get(['s.id', 's.endpoint', 's.p256dh', 's.auth']);
 
             foreach ($suscripciones as $sub) {
                 $subscription = Subscription::create([
