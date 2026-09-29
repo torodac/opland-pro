@@ -17,12 +17,15 @@ class InformeFallosDiarioMail extends Mailable
     public function __construct(
         public readonly string $fecha,
         public readonly array $hallazgos,
-        public readonly array $esquema = ['sin_declarar' => 0, 'tablas_afectadas' => 0, 'campos_rotos' => []],
+        public readonly array $esquema = ['sin_declarar' => 0, 'tablas_afectadas' => 0,
+                                          'campos_rotos' => [], 'tipos_graves' => [], 'tipos_leves' => []],
     ) {}
 
     public function envelope(): Envelope
     {
-        $n = count($this->hallazgos) + count($this->esquema['campos_rotos'] ?? []);
+        $n = count($this->hallazgos)
+           + count($this->esquema['campos_rotos'] ?? [])
+           + count($this->esquema['tipos_graves'] ?? []);
         $texto = $n === 1 ? '1 cosa que revisar' : "{$n} cosas que revisar";
 
         return new Envelope(

@@ -38,6 +38,32 @@
             </div>
         @endif
 
+        @if(!empty($esquema['tipos_graves']))
+            <div class="hallazgo" style="border-left-color:#dc2626">
+                <h2 style="color:#991b1b">{{ count($esquema['tipos_graves']) }} campo(s) de texto sobre una columna que no es de texto</h2>
+                <p>
+                    Salen en el listado, así que entran en la búsqueda global: buscar cualquier cosa
+                    en esa pantalla devuelve un error y no se ve nada. Hay que corregir el tipo.
+                </p>
+                <p style="font-family:monospace;font-size:12px;color:#991b1b;margin-top:8px">
+                    @foreach($esquema['tipos_graves'] as $c){{ $c }}@if(!$loop->last)<br>@endif @endforeach
+                </p>
+            </div>
+        @endif
+
+        @if(!empty($esquema['tipos_leves']))
+            <div class="hallazgo" style="border-left-color:#9ca3af">
+                <h2 style="color:#4b5563">{{ count($esquema['tipos_leves']) }} campo(s) con el tipo mal declarado</h2>
+                <p>
+                    De momento no rompen nada porque no salen en el listado, pero el campo se edita
+                    con el control equivocado y romperían la búsqueda en cuanto alguien los publique.
+                </p>
+                <p style="font-family:monospace;font-size:12px;color:#6b7280;margin-top:8px">
+                    @foreach($esquema['tipos_leves'] as $c){{ $c }}@if(!$loop->last)<br>@endif @endforeach
+                </p>
+            </div>
+        @endif
+
         @if(($esquema['sin_declarar'] ?? 0) > 0)
             <div class="hallazgo" style="border-left-color:#9ca3af">
                 <h2 style="color:#4b5563">{{ $esquema['sin_declarar'] }} columna(s) sin declarar en {{ $esquema['tablas_afectadas'] }} tabla(s)</h2>

@@ -34,8 +34,8 @@ class AdminInformeFallosDiarioCommand extends Command
         // rompen el guardado de esa ficha, así que el informe sale aunque el log esté limpio.
         $esquema = \App\Services\EsquemaDesajustes::resumenGlobal();
 
-        if (empty($lineas) && empty($esquema['campos_rotos'])) {
-            $this->info("Sin errores/warnings el {$fecha} y sin campos rotos.");
+        if (empty($lineas) && empty($esquema['campos_rotos']) && empty($esquema['tipos_graves'])) {
+            $this->info("Sin errores/warnings el {$fecha} y sin descuadres graves de esquema.");
             return self::SUCCESS;
         }
 
@@ -46,7 +46,8 @@ class AdminInformeFallosDiarioCommand extends Command
 
         $this->info("Enviado informe del {$fecha}: " . count($hallazgos) . ' hallazgo(s) a partir de '
             . count($lineas) . ' línea(s); ' . count($esquema['campos_rotos']) . ' campo(s) roto(s), '
-            . $esquema['sin_declarar'] . ' columna(s) sin declarar.');
+            . count($esquema['tipos_graves']) . ' tipo(s) grave(s), ' . count($esquema['tipos_leves'])
+            . ' leve(s), ' . $esquema['sin_declarar'] . ' columna(s) sin declarar.');
 
         return self::SUCCESS;
     }

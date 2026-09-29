@@ -37,6 +37,29 @@
         </div>
     @endif
 
+    @if(!empty($tiposMal))
+        <div class="mb-4 px-4 py-3 bg-orange-50 border border-orange-200 rounded-lg text-sm">
+            <p class="font-semibold text-orange-900 mb-1">
+                {{ count($tiposMal) }} campo(s) con el tipo declarado distinto al de su columna
+            </p>
+            <p class="text-orange-800 mb-2">
+                El tipo no cambia la columna, pero sí cómo se edita el campo. Y si es de texto sobre
+                una columna que no lo es, rompe la búsqueda de este listado en cuanto salga en él.
+            </p>
+            <ul class="text-orange-900 font-mono text-xs space-y-0.5">
+                @foreach($tiposMal as $d)
+                    <li>
+                        {{ $d['name'] }} — declarado <strong>{{ $d['declarado'] }}</strong>,
+                        columna <strong>{{ $d['real'] }}</strong>
+                        @if($d['grave'])
+                            <span class="ml-1 px-1.5 py-0.5 bg-red-600 text-white rounded text-[10px] font-sans">rompe la búsqueda</span>
+                        @endif
+                    </li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
     @if(!empty($sinDeclarar))
         <form method="POST" action="{{ route('config.projects.tables.fields.declarar', [$project, $table]) }}"
               class="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm">

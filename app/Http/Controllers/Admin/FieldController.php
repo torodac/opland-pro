@@ -21,9 +21,11 @@ class FieldController extends Controller
         // columna no existe (esos rompen el guardado). Ver App\Services\EsquemaDesajustes.
         $sinDeclarar  = \App\Services\EsquemaDesajustes::columnasSinDeclarar($project, $table);
         $sinColumna   = \App\Services\EsquemaDesajustes::camposSinColumna($table);
+        $tiposMal     = \App\Services\EsquemaDesajustes::tiposDesajustados($table);
 
         return view('config.fields.index', compact(
-            'project', 'table', 'fields', 'relatedTables', 'allProjects', 'sinDeclarar', 'sinColumna'
+            'project', 'table', 'fields', 'relatedTables', 'allProjects',
+            'sinDeclarar', 'sinColumna', 'tiposMal'
         ));
     }
 
