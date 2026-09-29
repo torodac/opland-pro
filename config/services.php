@@ -38,7 +38,13 @@ return [
 
     'anthropic' => [
         'api_key' => env('ANTHROPIC_API_KEY'),
-        'model'   => env('ANTHROPIC_MODEL', 'claude-opus-4-8'),
+        'model'   => env('ANTHROPIC_MODEL', 'claude-opus-5-5'),
+        // Modelo aparte para leer documentos (facturas). Es una tarea mecanica -- transcribir
+        // importes de un PDF -- donde Haiku acierta lo mismo que Opus siendo el doble de rapido
+        // y ~5,5 veces mas barato (medido sobre tres facturas: normal, con dos tipos de IVA y
+        // en formato extranjero). Si algun dia se detecta que falla con facturas dificiles,
+        // se sube a claude-sonnet-5-5 cambiando solo esta linea.
+        'model_documentos' => env('ANTHROPIC_MODEL_DOCUMENTOS', 'claude-haiku-4-5'),
     ],
 
     'powerbi' => [

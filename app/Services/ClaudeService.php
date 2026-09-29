@@ -8,11 +8,14 @@ class ClaudeService
 {
     private Client $client;
     private string $model;
+    private string $modelDocumentos;
 
     public function __construct()
     {
         $this->client = new Client(apiKey: config('services.anthropic.api_key'));
-        $this->model  = config('services.anthropic.model', 'claude-opus-4-8');
+        $this->model  = config('services.anthropic.model', 'claude-opus-5-5');
+        // Leer una factura no necesita el mismo modelo que razonar: ver config/services.php.
+        $this->modelDocumentos = config('services.anthropic.model_documentos', $this->model);
     }
 
     public function interpretarDocumento(
@@ -24,7 +27,7 @@ class ClaudeService
         $contentType = str_starts_with($mediaType, 'image/') ? 'image' : 'document';
 
         $message = $this->client->messages->create(
-            model: $this->model,
+            model: $this->modelDocumentos,
             maxTokens: $maxTokens,
             messages: [
                 [
