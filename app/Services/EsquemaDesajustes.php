@@ -84,6 +84,68 @@ class EsquemaDesajustes
         return $salida;
     }
 
+    // Qué tipos de columna de PostgreSQL acepta cada tipo de campo. Deliberadamente permisivo:
+    // solo interesa cazar los desajustes que hacen daño (un campo de texto sobre una columna
+    // numérica rompe la búsqueda global; un peso declarado como texto se edita a mano libre),
+    // no discutir si un string cabe en un text.
+    private const TIPOS_COMPATIBLES = [
+        'string'       => ['character varying', 'text', 'character'],
+        'text'         => ['character varying', 'text', 'character'],
+        'email'        => ['character varying', 'text'],
+        'telefono'     => ['character varying', 'text'],
+        'password'     => ['character varying', 'text'],
+        'file'         => ['character varying', 'text'],
+        'select'       => ['character varying', 'text'],
+        'int'          => ['integer', 'bigint', 'smallint'],
+        'decimal'      => ['numeric', 'double precision', 'real', 'integer', 'bigint'],
+        'tinyint'      => ['boolean', 'smallint', 'integer'],
+        'smallint'     => ['boolean', 'smallint', 'integer'],
+        'fecha'        => ['date', 'timestamp without time zone', 'timestamp with time zone'],
+        'timestamp'    => ['timestamp without time zone', 'timestamp with time zone', 'date'],
+        'time'         => ['time without time zone', 'time with time zone'],
+        'desplegable'  => ['bigint', 'integer', 'smallint'],
+        'id'           => ['bigint', 'integer'],
+        'multiusuario' => ['json', 'jsonb', 'text', 'character varying'],
+        'multitabla'   => ['json', 'jsonb', 'text', 'character varying'],
+    ];
+
+    // Campos cuyo tipo declarado no encaja con el de su columna. No rompen el guardado, pero sí
+    // cosas menos visibles: la búsqueda global solo mira el tipo DECLARADO, así que un campo de
+    // texto sobre una columna numérica hace que unaccent() reciba un número y la consulta entera
+    // falle (pasó el 29/09/2026 buscando en /admin/table_fields).
+    public static function tiposDesajustados(ProjectTable $table): array
+    {
+        $full = $table->getFullTableName();
+        if (!Schema::hasTable($full)) return [];
+
+        $reales = [];
+        foreach (DB::select('select column_name, data_type from information_schema.columns
+                              where table_schema = current_schema() and table_name = ?', [$full]) as $c) {
+            $reales[$c->column_name] = $c->data_type;
+        }
+
+        $salida = [];
+        foreach ($table->fields()->get(['name', 'label', 'type', 'in_list']) as $f) {
+            $real = $reales[$f->name] ?? null;
+            if ($real === null) continue;                       // ya sale como campo sin columna
+
+            $aceptados = self::TIPOS_COMPATIBLES[$f->type] ?? null;
+            if ($aceptados === null || in_array($real, $aceptados, true)) continue;
+
+            $salida[] = [
+                'name'     => $f->name,
+                'label'    => $f->label,
+                'declarado'=> $f->type,
+                'real'     => $real,
+                // El caso que de verdad rompe algo: texto declarado sobre columna no textual y
+                // además visible en el listado, porque entonces entra en la búsqueda global.
+                'grave'    => (bool) $f->in_list && in_array($f->type, ['string', 'text', 'email', 'telefono'], true),
+            ];
+        }
+
+        return $salida;
+    }
+
     // Campos declarados cuya columna no existe: el formulario los pinta y el guardado falla.
     public static function camposSinColumna(ProjectTable $table): array
     {
@@ -104,6 +166,7 @@ class EsquemaDesajustes
     {
         $proyectos = Project::pluck('slug', 'id');
         $sinDeclarar = 0; $rotos = []; $tablasAfectadas = 0;
+        $tiposGraves = []; $tiposLeves = [];
 
         $tablas = ProjectTable::where('active', true)->where('is_virtual', false)->get();
         foreach ($tablas as $t) {
@@ -117,12 +180,20 @@ class EsquemaDesajustes
             foreach (self::camposSinColumna($t) as $f) {
                 $rotos[] = $slug . '_' . $t->name . '.' . $f->name;
             }
+
+            foreach (self::tiposDesajustados($t) as $d) {
+                $linea = $slug . '_' . $t->name . '.' . $d['name']
+                       . ' (declarado ' . $d['declarado'] . ', real ' . $d['real'] . ')';
+                if ($d['grave']) $tiposGraves[] = $linea; else $tiposLeves[] = $linea;
+            }
         }
 
         return [
             'sin_declarar'     => $sinDeclarar,
             'tablas_afectadas' => $tablasAfectadas,
             'campos_rotos'     => $rotos,
+            'tipos_graves'     => $tiposGraves,
+            'tipos_leves'      => $tiposLeves,
         ];
     }
 
