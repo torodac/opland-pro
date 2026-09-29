@@ -97,6 +97,15 @@
         </a>
         @endif
 
+        {{-- Subir facturas arrastrando (solo opland_fta_soportadas): abre la zona de abajo --}}
+        @if($projectTable->name === 'fta_soportadas' && $project->slug === 'opland')
+        <button type="button" id="fta-toggle"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+            <i class="fa-solid fa-cloud-arrow-up text-orange-400"></i>
+            Subir facturas
+        </button>
+        @endif
+
         {{-- Generar pagos del mes (solo nf_pagos): modal pidiendo el mes --}}
         @if($projectTable->name === 'pagos' && $project->slug === 'nf')
         <button type="button" onclick="document.getElementById('gp-modal').classList.remove('hidden')"
@@ -161,6 +170,108 @@
             </div>
         </div>
     </x-slot>
+
+    {{-- Zona de arrastre de facturas recibidas (solo opland_fta_soportadas). Cada fichero crea
+         su registro con el documento adjunto y lanza la extracción de datos con Claude en
+         segundo plano; la fila aparece al instante y se rellena sola en unos segundos. --}}
+    @if($projectTable->name === 'fta_soportadas' && $project->slug === 'opland')
+    <div id="fta-panel" class="hidden mb-4">
+        <div id="fta-zona"
+             class="border-2 border-dashed border-gray-300 rounded-xl px-5 py-8 text-center cursor-pointer transition-colors bg-white">
+            <i class="fa-solid fa-cloud-arrow-up text-3xl text-gray-400"></i>
+            <p class="mt-2.5 mb-1 text-sm font-medium text-gray-700">Suelta aquí tus facturas</p>
+            <p class="m-0 text-xs text-gray-400">o haz clic para seleccionarlas — PDF, PNG, JPG · una fila por fichero</p>
+            <input type="file" id="fta-input" multiple accept=".pdf,.png,.jpg,.jpeg,.webp" class="hidden">
+        </div>
+        <div id="fta-lista" class="mt-3 flex flex-col gap-2"></div>
+    </div>
+
+    <script>
+    (function () {
+        var toggle = document.getElementById('fta-toggle');
+        var panel  = document.getElementById('fta-panel');
+        var zona   = document.getElementById('fta-zona');
+        var input  = document.getElementById('fta-input');
+        var lista  = document.getElementById('fta-lista');
+        if (!toggle || !zona) return;
+
+        var csrf      = @json(csrf_token());
+        var uploadUrl = @json(route('listado.upload-doc', [$project->slug, $projectTable->name]));
+        var fichaBase = @json(url($project->slug . '/' . $projectTable->name));
+        var subiendo  = 0;
+
+        toggle.addEventListener('click', function () {
+            panel.classList.toggle('hidden');
+            if (!panel.classList.contains('hidden')) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+
+        zona.addEventListener('click', function () { input.click(); });
+        ['dragenter', 'dragover'].forEach(function (ev) {
+            zona.addEventListener(ev, function (e) {
+                e.preventDefault();
+                zona.classList.add('border-orange-400', 'bg-orange-50');
+            });
+        });
+        ['dragleave', 'drop'].forEach(function (ev) {
+            zona.addEventListener(ev, function (e) {
+                e.preventDefault();
+                zona.classList.remove('border-orange-400', 'bg-orange-50');
+            });
+        });
+        zona.addEventListener('drop', function (e) { subir(e.dataTransfer.files); });
+        input.addEventListener('change', function () { subir(input.files); input.value = ''; });
+
+        function subir(files) {
+            Array.from(files).forEach(subirUno);
+        }
+
+        function subirUno(file) {
+            var fila = document.createElement('div');
+            fila.className = 'flex items-center gap-3 px-3.5 py-2.5 border border-gray-200 rounded-lg bg-white text-sm';
+            fila.innerHTML =
+                '<i class="fa-regular fa-file-lines text-gray-400"></i>' +
+                '<span class="flex-1 text-gray-700 truncate"></span>' +
+                '<span class="estado text-gray-400 whitespace-nowrap">Subiendo…</span>';
+            fila.querySelector('span').textContent = file.name;   // textContent: el nombre no se interpreta como HTML
+            lista.prepend(fila);
+            var estado = fila.querySelector('.estado');
+
+            var fd = new FormData();
+            fd.append('file', file);
+            subiendo++;
+
+            fetch(uploadUrl, {
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                body: fd,
+            })
+            .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+            .then(function (res) {
+                if (!res.ok || !res.data.ok) throw new Error(res.data.message || 'Error');
+                estado.textContent = 'Creada · interpretando…';
+                estado.className   = 'estado text-green-600 whitespace-nowrap';
+                var a = document.createElement('a');
+                a.href = fichaBase + '/' + res.data.id;
+                a.textContent = 'Ver ficha';
+                a.className = 'text-orange-500 font-medium whitespace-nowrap hover:underline';
+                fila.appendChild(a);
+            })
+            .catch(function (e) {
+                estado.textContent = e.message === 'Error' ? 'Error al subir' : e.message;
+                estado.className   = 'estado text-red-600 whitespace-nowrap';
+            })
+            .finally(function () {
+                if (--subiendo === 0) {
+                    var aviso = document.createElement('p');
+                    aviso.className = 'text-xs text-gray-400 mt-1';
+                    aviso.textContent = 'Recarga la página en unos segundos para ver los datos ya extraídos.';
+                    lista.appendChild(aviso);
+                }
+            });
+        }
+    })();
+    </script>
+    @endif
 
     @php
         $camposFiltrables = $campos->filter(fn($c) => in_array($c->type, ['select','tinyint','smallint','fecha','id','desplegable']));

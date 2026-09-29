@@ -3,11 +3,18 @@
 namespace App\Jobs;
 
 use App\Services\ClaudeService;
+use App\Services\ExtraccionDocumentos;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
+// Lee un documento subido y rellena con Claude los campos del registro.
+//
+// Qué campos se extraen y a qué columnas van lo declara ExtraccionDocumentos, una tabla a la vez:
+// antes estaba aquí dentro, con los campos de vmf_facturas escritos a fuego, y por eso solo
+// servía para esa tabla.
 class InterpretarFacturaJob implements ShouldQueue
 {
     use Queueable;
@@ -23,11 +30,20 @@ class InterpretarFacturaJob implements ShouldQueue
 
     public function handle(): void
     {
+        $def = ExtraccionDocumentos::definicion($this->fullTable);
+        if (!$def) {
+            Log::warning("InterpretarFacturaJob: {$this->fullTable} no tiene extracción declarada.");
+            return;
+        }
+
         $registro = DB::table($this->fullTable)->find($this->id);
         if (!$registro) return;
 
         $absolutePath = Storage::disk('public')->path($this->storagePath);
-        if (!file_exists($absolutePath)) return;
+        if (!file_exists($absolutePath)) {
+            Log::warning("InterpretarFacturaJob: no existe el fichero {$this->storagePath}.");
+            return;
+        }
 
         $ext       = strtolower(pathinfo($absolutePath, PATHINFO_EXTENSION));
         $mediaType = match ($ext) {
@@ -40,42 +56,20 @@ class InterpretarFacturaJob implements ShouldQueue
 
         $base64 = base64_encode(file_get_contents($absolutePath));
 
-        $prompt = <<<PROMPT
-Analiza este documento de factura y extrae los siguientes datos. Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional, sin markdown, sin explicaciones.
-
-Campos a extraer:
-- "proveedor": nombre del emisor de la factura (empresa o persona que emite)
-- "factura": número o referencia de la factura
-- "nombre": concepto genérico que describe el servicio o producto (máx. 80 caracteres, en español)
-- "importe_bruto": base imponible total (número decimal, sin símbolo €)
-- "iva": importe total de IVA (suma de todos los tramos de IVA, número decimal)
-- "neto": importe total a pagar o pagado (número decimal)
-- "importe_otros": cualquier otro importe que no sea base imponible ni IVA (retenciones, recargos, descuentos, etc.). Si no hay, pon 0.
-
-Si un campo no aparece en el documento, devuelve null para ese campo.
-
-Ejemplo de respuesta esperada:
-{"proveedor":"Empresa S.L.","factura":"F-2024-001","nombre":"Servicios de limpieza","importe_bruto":1000.00,"iva":210.00,"neto":1210.00,"importe_otros":0}
-PROMPT;
-
         $claude = new ClaudeService();
-        $raw    = $claude->interpretarDocumento($base64, $mediaType, $prompt, 512);
+        $raw    = $claude->interpretarDocumento(
+            $base64, $mediaType, ExtraccionDocumentos::prompt($this->fullTable), 1024
+        );
 
-        // Intentar parsear el JSON de la respuesta
+        // La respuesta en bruto se guarda siempre, salga bien o mal el parseo: es lo único que
+        // permite entender después por qué un importe salió raro.
+        $update = [$def['columna_respuesta'] => $raw, 'updatedat' => now()];
+
         $json = $this->extractJson($raw);
-        if (!$json) return;
-
-        $update = ['interpretacion' => $raw, 'updatedat' => now()];
-
-        foreach (['proveedor', 'factura', 'importe_bruto', 'iva', 'neto', 'importe_otros'] as $campo) {
-            if (isset($json[$campo]) && $json[$campo] !== null) {
-                $update[$campo] = $json[$campo];
-            }
-        }
-
-        // El concepto va al campo nombre
-        if (!empty($json['nombre'])) {
-            $update['nombre'] = mb_substr($json['nombre'], 0, 255);
+        if ($json) {
+            $update = array_merge($update, ExtraccionDocumentos::mapear($this->fullTable, $json));
+        } else {
+            Log::warning("InterpretarFacturaJob: respuesta no parseable para {$this->fullTable}#{$this->id}.");
         }
 
         DB::table($this->fullTable)->where('id', $this->id)->update($update);
@@ -83,7 +77,7 @@ PROMPT;
 
     private function extractJson(string $text): ?array
     {
-        // Buscar el primer bloque JSON en la respuesta
+        // Busca el primer bloque JSON de la respuesta.
         $start = strpos($text, '{');
         $end   = strrpos($text, '}');
         if ($start === false || $end === false) return null;

@@ -995,23 +995,29 @@ class FichaController extends Controller
 
         $userId = $this->currentUserId();
 
+        // Solo se escriben las columnas que la tabla tiene de verdad. Antes se daban por
+        // supuestas 'control_user' y 'documento', que son de vmf_facturas: en una tabla sin
+        // 'control_user' (opland_fta_soportadas, por ejemplo) el INSERT fallaba entero.
         $data = [
-            'nombre'      => $originalName,
-            'control_user'=> $userId,
-            'createuser'  => $userId,
-            'updateuser'  => $userId,
-            'createdat'   => now(),
-            'updatedat'   => now(),
-            'deleted'     => 0,
+            'nombre'    => $originalName,
+            'createdat' => now(),
+            'updatedat' => now(),
         ];
+        foreach (['control_user' => $userId, 'createuser' => $userId, 'updateuser' => $userId, 'deleted' => 0] as $col => $valor) {
+            if (Schema::hasColumn($fullTable, $col)) $data[$col] = $valor;
+        }
 
-        if (Schema::hasColumn($fullTable, 'documento')) {
-            $data['documento'] = $path;
+        // La columna del fichero no se llama igual en todas las tablas.
+        foreach (['documento', 'file_documento'] as $col) {
+            if (Schema::hasColumn($fullTable, $col)) { $data[$col] = $path; break; }
         }
 
         $id = DB::table($fullTable)->insertGetId($data);
 
-        if (Schema::hasColumn($fullTable, 'interpretacion')) {
+        // La extracción con Claude se lanza si esta tabla la tiene declarada y existe la columna
+        // donde guardar la respuesta (ver App\Services\ExtraccionDocumentos).
+        $def = \App\Services\ExtraccionDocumentos::definicion($fullTable);
+        if ($def && Schema::hasColumn($fullTable, $def['columna_respuesta'])) {
             \App\Jobs\InterpretarFacturaJob::dispatch($fullTable, $id, $path);
         }
 
