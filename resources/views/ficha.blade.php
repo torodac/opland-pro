@@ -2,6 +2,29 @@
 
     <x-slot name="actions">
         @if($registro)
+            {{-- Envío a la asesoría (opland). Aquí está el reenvío: el listado solo deja enviar
+                 lo que está pendiente, para que el menú de la fila no se llene de excepciones. --}}
+            @php
+                $esFacturaOpland = $project->slug === 'opland'
+                    && in_array($projectTable->name, ['facturas', 'fta_soportadas'])
+                    && \Illuminate\Support\Facades\Schema::hasColumn($projectTable->getFullTableName(), 'enviado_asesoria_at');
+                $envioAt = $esFacturaOpland ? ($registro->enviado_asesoria_at ?? null) : null;
+            @endphp
+            @if($esFacturaOpland && auth()->user()?->canEditTable($project, $projectTable->name))
+            <form method="POST" action="{{ route('opland.asesoria.una', [$project->slug, $projectTable->name, $registro->id]) }}"
+                  class="mr-1"
+                  onsubmit="return confirm('{{ $envioAt ? 'Ya se envió el ' . \Carbon\Carbon::parse($envioAt)->format('d/m/Y') . '. ¿Volver a enviarla?' : '¿Enviar esta factura a la asesoría?' }}')">
+                @csrf
+                <button type="submit"
+                        title="{{ $envioAt ? 'Enviada el ' . \Carbon\Carbon::parse($envioAt)->format('d/m/Y H:i') : 'Pendiente de enviar' }}"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 border text-sm font-medium rounded-lg transition-colors
+                               {{ $envioAt ? 'border-gray-200 text-gray-500 hover:bg-gray-50' : 'border-orange-200 text-orange-600 hover:bg-orange-50' }}">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    {{ $envioAt ? 'Reenviar a asesoría' : 'Enviar a asesoría' }}
+                </button>
+            </form>
+            @endif
+
             {{-- Navegación prev/next --}}
             <div class="flex items-center gap-1">
                 @if($projectTable->name === 'fichaje')

@@ -986,9 +986,29 @@
                                     </td>
                                 @endforeach
 
-                                <td class="px-2 py-3 text-right" onclick="event.stopPropagation()" x-data="{ open: false }">
+                                <td class="px-2 py-3 text-right whitespace-nowrap" onclick="event.stopPropagation()" x-data="{ open: false }">
+                                    {{-- Envío a la asesoría (opland): en la fila, sin desplegar el menú.
+                                         Las ya enviadas quedan en gris con la fecha en el título; reenviar
+                                         se hace desde la ficha, para no llenar el menú de excepciones. --}}
+                                    @if($canEdit && $project->slug === 'opland' && in_array($projectTable->name, ['facturas', 'fta_soportadas']) && ($colEnvio ?? false))
+                                        @if(empty($registro->enviado_asesoria_at))
+                                            <form method="POST" action="{{ route('opland.asesoria.una', [$project->slug, $projectTable->name, $registro->id]) }}"
+                                                  class="inline" onsubmit="return confirm('¿Enviar esta factura a la asesoría?')">
+                                                @csrf
+                                                <button type="submit" title="Enviar a la asesoría"
+                                                        class="p-1 rounded text-orange-400 hover:text-orange-600 hover:bg-orange-50 align-middle">
+                                                    <i class="fa-solid fa-paper-plane text-[13px]"></i>
+                                                </button>
+                                            </form>
+                                        @else
+                                            <span title="Enviada a la asesoría el {{ \Carbon\Carbon::parse($registro->enviado_asesoria_at)->format('d/m/Y') }}"
+                                                  class="inline-block p-1 text-gray-200 align-middle cursor-default">
+                                                <i class="fa-solid fa-paper-plane text-[13px]"></i>
+                                            </span>
+                                        @endif
+                                    @endif
                                     <button @click="open = !open" @click.outside="open = false"
-                                            class="p-1 rounded text-gray-300 hover:text-gray-600 hover:bg-gray-100">
+                                            class="p-1 rounded text-gray-300 hover:text-gray-600 hover:bg-gray-100 align-middle">
                                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                                             <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
                                         </svg>
@@ -1025,20 +1045,6 @@
                                             @csrf
                                             <button class="w-full flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50">
                                                 Enviar por email
-                                            </button>
-                                        </form>
-                                        @endif
-
-                                        {{-- Enviar esta factura a la asesoría (opland). Vale tanto para una
-                                             suelta como para reenviar una que ya se mandó. --}}
-                                        @if($canEdit && $project->slug === 'opland' && in_array($projectTable->name, ['facturas', 'fta_soportadas']) && ($colEnvio ?? false))
-                                        @php $yaEnviada = !empty($registro->enviado_asesoria_at); @endphp
-                                        <form method="POST" action="{{ route('opland.asesoria.una', [$project->slug, $projectTable->name, $registro->id]) }}"
-                                              onsubmit="return confirm('{{ $yaEnviada ? 'Ya se envió el ' . \Carbon\Carbon::parse($registro->enviado_asesoria_at)->format('d/m/Y') . '. ¿Reenviarla?' : '¿Enviar esta factura a la asesoría?' }}')">
-                                            @csrf
-                                            <button class="w-full flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50">
-                                                <i class="fa-solid fa-paper-plane text-orange-400 w-4"></i>
-                                                {{ $yaEnviada ? 'Reenviar a asesoría' : 'Enviar a asesoría' }}
                                             </button>
                                         </form>
                                         @endif
