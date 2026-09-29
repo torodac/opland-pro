@@ -449,7 +449,13 @@ class ListadoController extends Controller
                 foreach ($projectTable->listFields as $field) {
                     if (in_array($field->type, ['string', 'text', 'email', 'telefono'])) {
                         if ($esPg) {
-                            $sub->orWhereRaw('unaccent("' . $field->name . '") ilike unaccent(?)', ["%{$q}%"]);
+                            // ::text antes de unaccent(), que solo acepta texto. El tipo que se
+                            // consulta aquí es el DECLARADO, y no siempre coincide con el de la
+                            // columna: 'order' está declarado como string y es integer, así que
+                            // buscar en /admin/table_fields reventaba con "unaccent(integer) does
+                            // not exist". Con el casteo, un tipo mal declarado deja de romper el
+                            // buscador -- como mucho busca dentro de un número.
+                            $sub->orWhereRaw('unaccent("' . $field->name . '"::text) ilike unaccent(?)', ["%{$q}%"]);
                         } else {
                             $sub->orWhere($field->name, 'like', "%{$q}%");
                         }
