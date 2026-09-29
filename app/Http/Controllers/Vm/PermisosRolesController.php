@@ -31,13 +31,14 @@ class PermisosRolesController extends Controller
             ->where('deleted', 0)
             ->orderBy('id')
             ->get(['id', 'nombre', 'ver', 'editar'])
-            ->map(function ($r) use ($usuariosPorRol) {
+            ->map(function ($r) use ($usuariosPorRol, $project) {
                 $ver    = json_decode($r->ver    ?? '[]', true) ?: [];
                 $editar = json_decode($r->editar ?? '[]', true) ?: [];
 
                 return (object) [
                     'id'         => (int) $r->id,
                     'nombre'     => $r->nombre,
+                    'url'        => route('ficha', [$project->slug, 'roles', $r->id]),
                     'ver'        => $ver,
                     'editar'     => $editar,
                     've_todo'    => empty($ver),      // lista vacía = sin restricción
@@ -46,27 +47,31 @@ class PermisosRolesController extends Controller
                 ];
             });
 
-        // ── Filas: las entradas del menú, en el orden en que se pintan ──────
-        $items = DB::table('admin_menu_items as m')
-            ->leftJoin('admin_project_tables as t', 't.id', '=', 'm.project_table_id')
-            ->where('m.project_id', $project->id)
-            ->orderByRaw("coalesce(nullif(m.modulo, ''), 'zzz')")
-            ->orderBy('m.order')
-            ->get(['m.id', 'm.label', 'm.modulo', 'm.url', 't.name as tabla', 't.is_virtual']);
+        // ── Filas: las mismas entradas del sidebar y en su mismo orden ──────
+        // Se reutiliza la relación que usa el sidebar y se le aplica la misma reordenación por
+        // modulo_order (ver components/app-layout.blade.php). Reconstruir aquí el orden a mano
+        // sería empezar a divergir a la primera vez que alguien reordene los módulos.
+        $moduloOrder = array_flip(array_map('strval', $project->modulo_order ?? []));
+
+        $items = $project->menuItems
+            ->values()
+            ->sortBy(fn($i) => $moduloOrder[(string) $i->modulo] ?? 9999)   // sort estable
+            ->values();
 
         $filas = [];
         foreach ($items as $it) {
             $celdas = [];
+            $tabla  = $it->projectTable?->name;
 
             foreach ($roles as $rol) {
-                if ($it->tabla === null) {
+                if ($tabla === null) {
                     // Sin tabla no hay permiso que comprobar: el ítem se pinta para todos.
                     $celdas[$rol->id] = 'sin_permiso';
                     continue;
                 }
 
-                $ve    = $rol->ve_todo    || in_array($it->tabla, $rol->ver, true);
-                $edita = $rol->edita_todo || in_array($it->tabla, $rol->editar, true);
+                $ve    = $rol->ve_todo    || in_array($tabla, $rol->ver, true);
+                $edita = $rol->edita_todo || in_array($tabla, $rol->editar, true);
 
                 $celdas[$rol->id] = match (true) {
                     $ve && $edita  => 'editar',
@@ -81,8 +86,12 @@ class PermisosRolesController extends Controller
             $filas[] = (object) [
                 'label'      => $it->label,
                 'modulo'     => $it->modulo ?: '—',
-                'tabla'      => $it->tabla,
-                'is_virtual' => (bool) $it->is_virtual,
+                'tabla'      => $tabla,
+                'is_virtual' => (bool) ($it->projectTable?->is_virtual),
+                // Las tablas marcadas "solo admin" no se pintan en el sidebar ni siquiera al
+                // administrador, pero sus permisos existen igual, así que la matriz las incluye
+                // y las señala en vez de ocultarlas.
+                'admin_only' => (bool) ($it->projectTable?->admin_only),
                 'celdas'     => $celdas,
             ];
         }

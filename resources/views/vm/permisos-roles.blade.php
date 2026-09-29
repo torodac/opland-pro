@@ -52,6 +52,8 @@
   table.pr tbody tr:hover td.pr-item{ background:var(--surface-2); }
 
   .pr-rol{ font-weight:600; color:var(--text); white-space:nowrap; }
+  .pr-rol-link{ color:inherit; text-decoration:none; }
+  .pr-rol-link:hover{ color:var(--ver); text-decoration:underline; }
   .pr-rol-id{ color:var(--muted); font-weight:400; }
   .pr-usuarios{ margin-top:4px; font-size:10.5px; line-height:1.35; color:var(--muted);
     font-weight:400; max-width:130px; white-space:normal; }
@@ -63,6 +65,8 @@
 
   .pr-label{ font-weight:500; }
   .pr-tabla{ display:block; font-size:10.5px; color:var(--muted); font-family:ui-monospace,monospace; }
+  .pr-solo-admin{ margin-left:5px; padding:0 4px; border-radius:3px; font-family:inherit;
+    background:var(--surface-2); color:var(--muted); font-size:9.5px; }
 
   .i-ver    { color:var(--ver); }
   .i-editar { color:var(--editar); }
@@ -88,7 +92,11 @@
           <th class="pr-item">Entrada del menú</th>
           @foreach($roles as $rol)
             <th>
-              <div class="pr-rol"><span class="pr-rol-id">{{ $rol->id }}</span> {{ $rol->nombre }}</div>
+              <div class="pr-rol">
+                <span class="pr-rol-id">{{ $rol->id }}</span>
+                {{-- Se abre en pestaña nueva para no perder la posición del scroll en la matriz --}}
+                <a href="{{ $rol->url }}" target="_blank" rel="noopener" class="pr-rol-link">{{ $rol->nombre }}</a>
+              </div>
               @if($rol->ve_todo || $rol->edita_todo)
                 <span class="pr-todo">
                   {{ $rol->ve_todo && $rol->edita_todo ? 've y edita todo' : ($rol->ve_todo ? 've todo' : 'edita todo') }}
@@ -119,6 +127,7 @@
               <span class="pr-label">{{ $fila->label }}</span>
               <span class="pr-tabla">
                 {{ $fila->tabla ?? 'sin tabla' }}@if($fila->is_virtual) · virtual @endif
+                @if($fila->admin_only)<span class="pr-solo-admin">no sale en el menú</span>@endif
               </span>
             </td>
             @foreach($roles as $rol)
