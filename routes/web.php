@@ -119,6 +119,10 @@ Route::middleware('auth')->group(function () {
             Route::get('projects/{project}/{table}',
                 [App\Http\Controllers\Admin\FieldController::class, 'index'])
                 ->name('projects.tables.fields.index')->scopeBindings();
+            // Alta en bloque de columnas que ya existen en la tabla pero no estaban declaradas.
+            Route::post('projects/{project}/tables/{table}/fields/declarar',
+                [App\Http\Controllers\Admin\FieldController::class, 'declararColumnas'])
+                ->name('projects.tables.fields.declarar')->scopeBindings();
             Route::patch('projects/{project}/tables/{table}/fields/reorder',
                 [App\Http\Controllers\Admin\FieldController::class, 'reorder'])
                 ->name('projects.tables.fields.reorder')->scopeBindings();

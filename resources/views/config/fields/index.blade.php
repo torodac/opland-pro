@@ -19,6 +19,68 @@
     @endif
 
 
+    {{-- Descuadres entre la tabla física y la configuración. Ver App\Services\EsquemaDesajustes --}}
+    @if(!empty($sinColumna))
+        <div class="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm">
+            <p class="font-semibold text-red-800 mb-1">
+                {{ count($sinColumna) }} campo(s) declarado(s) sin columna en la tabla
+            </p>
+            <p class="text-red-700 mb-2">
+                Salen en la ficha pero no tienen dónde guardarse: al guardar este registro dará error.
+                Hay que eliminarlos, o crear la columna con el mismo nombre.
+            </p>
+            <ul class="text-red-700 font-mono text-xs space-y-0.5">
+                @foreach($sinColumna as $f)
+                    <li>{{ $f->name }} <span class="text-red-400">— {{ $f->label }}</span></li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
+    @if(!empty($sinDeclarar))
+        <form method="POST" action="{{ route('config.projects.tables.fields.declarar', [$project, $table]) }}"
+              class="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm">
+            @csrf
+            <p class="font-semibold text-amber-900 mb-1">
+                {{ count($sinDeclarar) }} columna(s) de la tabla sin declarar
+            </p>
+            <p class="text-amber-800 mb-3">
+                Existen en la base de datos pero la configuración no las conoce, así que no se pueden
+                ver ni editar. Márcalas para darlas de alta — <strong>no se crea ninguna columna</strong>,
+                solo se declara lo que ya está. Nacen ocultas: publicarlas es marcar luego "En form." o
+                "En lista".
+            </p>
+            <div class="space-y-1.5 mb-3">
+                @foreach($sinDeclarar as $c)
+                    <label class="flex items-center gap-2.5 flex-wrap">
+                        <input type="checkbox" name="columnas[]" value="{{ $c['name'] }}"
+                               class="w-4 h-4 accent-amber-600" checked>
+                        <span class="font-mono text-xs text-amber-900 w-52 truncate">{{ $c['name'] }}</span>
+                        <input type="text" name="labels[{{ $c['name'] }}]" value="{{ $c['label'] }}"
+                               class="px-2 py-1 border border-amber-300 rounded text-xs w-44" placeholder="Etiqueta">
+                        <select name="tipos[{{ $c['name'] }}]" class="px-2 py-1 border border-amber-300 rounded text-xs">
+                            @foreach(array_keys(\App\Models\TableField::$typeMap) as $t)
+                                @continue(in_array($t, ['id', 'multitabla']))
+                                <option value="{{ $t }}" @selected($t === $c['tipo'])>{{ $t }}</option>
+                            @endforeach
+                        </select>
+                        <span class="text-xs text-amber-600">{{ $c['tipo_bd'] }}</span>
+                        @if($c['extras'])
+                            <span class="text-xs font-mono text-amber-700">{{ $c['extras'] }}</span>
+                        @endif
+                        @if($c['con_datos'])
+                            <span class="text-[11px] px-1.5 py-0.5 bg-amber-200 text-amber-900 rounded">con datos</span>
+                        @endif
+                    </label>
+                @endforeach
+            </div>
+            <button type="submit"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded-lg">
+                Declarar seleccionadas
+            </button>
+        </form>
+    @endif
+
     {{-- Barra ajustes de tabla --}}
     @php $patchTableUrl = route('config.projects.tables.patch', [$project, $table]); @endphp
     <div class="mb-4 flex items-center gap-4 px-5 py-3.5 bg-white rounded-xl border border-gray-200 text-sm text-gray-600 flex-wrap"
@@ -267,7 +329,11 @@
                                         Editar avanzado
                                     </a>
                                     <form method="POST" action="{{ route('config.projects.tables.fields.destroy', [$project, $table, $field]) }}"
-                                          onsubmit="return confirm('¿Eliminar campo «{{ addslashes($field->label) }}»?')">
+                                          onsubmit="return confirm('¿Eliminar el campo «{{ addslashes($field->label) }}»?
+
+Se borrará también la columna «{{ addslashes($field->name) }}» de la tabla y los datos que contenga. No se puede deshacer.
+
+Para solo ocultarlo, desmarca «En lista» y «En form.».')">
                                         @csrf @method('DELETE')
                                         <button type="submit"
                                                 class="w-full flex items-center gap-2 px-3 py-2 text-red-500 hover:bg-red-50">

@@ -17,7 +17,64 @@ class FieldController extends Controller
         $relatedTables = $table->relatedTables();
         $allProjects   = auth()->user()?->isAdmin() ? Project::orderBy('name')->get() : collect();
 
-        return view('config.fields.index', compact('project', 'table', 'fields', 'relatedTables', 'allProjects'));
+        // Columnas que existen en la tabla pero que nadie declaró, y campos declarados cuya
+        // columna no existe (esos rompen el guardado). Ver App\Services\EsquemaDesajustes.
+        $sinDeclarar  = \App\Services\EsquemaDesajustes::columnasSinDeclarar($project, $table);
+        $sinColumna   = \App\Services\EsquemaDesajustes::camposSinColumna($table);
+
+        return view('config.fields.index', compact(
+            'project', 'table', 'fields', 'relatedTables', 'allProjects', 'sinDeclarar', 'sinColumna'
+        ));
+    }
+
+    // Da de alta como campos un conjunto de columnas que YA existen en la tabla. No toca el
+    // esquema: solo crea las filas de configuración que faltaban. Es la vía segura frente a
+    // "Nuevo campo", donde un nombre mal tecleado no coincide con ninguna columna y acaba
+    // creando una nueva (ver el selector de la pantalla de campos).
+    public function declararColumnas(Request $request, Project $project, ProjectTable $table)
+    {
+        $data = $request->validate([
+            'columnas'            => 'required|array|min:1',
+            'columnas.*'          => 'required|string|max:63',
+            'labels'              => 'array',
+            'tipos'               => 'array',
+            'extras'              => 'array',
+        ]);
+
+        $fisicas   = Schema::getColumnListing($table->getFullTableName());
+        $yaDeclarados = $table->fields()->pluck('name')->all();
+        $orden     = ($table->fields()->where('order', '<', 900)->max('order') ?? 0);
+        $creados   = 0;
+
+        foreach ($data['columnas'] as $col) {
+            // Dos guardas: la columna tiene que existir de verdad y no puede estar ya declarada.
+            // Sin la primera, esto sería otra vía para crear columnas por accidente.
+            if (!in_array($col, $fisicas, true) || in_array($col, $yaDeclarados, true)) continue;
+
+            $tipo = $data['tipos'][$col] ?? 'string';
+            if (!array_key_exists($tipo, TableField::$typeMap)) $tipo = 'string';
+
+            $table->fields()->create([
+                'name'     => $col,
+                'label'    => trim($data['labels'][$col] ?? $col) ?: $col,
+                'type'     => $tipo,
+                'order'    => ++$orden,
+                'required' => false,
+                // Nacen ocultas en los dos sitios: declarar una columna solo significa que la
+                // configuración la conoce, no que deba salir por pantalla. Publicarla es una
+                // decisión aparte, con sus casillas. Mismo criterio que la pasada automática.
+                'in_list'  => false,
+                'in_form'  => false,
+                'extras'   => $this->normalizeExtras($tipo, $data['extras'][$col] ?? null),
+            ]);
+            $creados++;
+        }
+
+        return redirect()
+            ->route('config.projects.tables.fields.index', [$project, $table])
+            ->with('success', $creados === 1
+                ? 'Campo declarado, oculto de momento. Marca "En form." o "En lista" para publicarlo.'
+                : "{$creados} campos declarados, ocultos de momento. Marca \"En form.\" o \"En lista\" para publicarlos.");
     }
 
     public function create(Project $project, ProjectTable $table)

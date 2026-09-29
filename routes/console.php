@@ -214,6 +214,15 @@ Schedule::call(function () {
 
 // Sincroniza vm_reservas_importes (incluida "Comisión canal") para reservas con
 // checkout reciente -- antes no se ejecutaba nunca de forma automática.
+// Declara como campos ocultos las columnas que hayan aparecido en cualquier tabla (una
+// migración nueva, una columna añadida a mano). Nacen ocultas en formulario y listado, así que
+// nunca cambian lo que ve un usuario: solo evitan que haya datos guardados que la configuración
+// ignora. Publicarlas sigue siendo una decisión manual.
+Schedule::command('opland:declarar-columnas', ['--apply'])
+    ->dailyAt('05:30')
+    ->name('opland:declarar-columnas')
+    ->withoutOverlapping();
+
 Schedule::command('icnea:sync-importes', ['--meses' => 6])
     ->dailyAt('06:00')
     ->withoutOverlapping();
