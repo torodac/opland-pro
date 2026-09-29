@@ -29,17 +29,24 @@ class AdminInformeFallosDiarioCommand extends Command
         }
 
         $lineas = $this->leerLineasDelDia($path, $fecha);
-        if (empty($lineas)) {
-            $this->info("Sin errores/warnings el {$fecha}.");
+
+        // Descuadres entre las tablas y su configuración. Los campos declarados sin columna
+        // rompen el guardado de esa ficha, así que el informe sale aunque el log esté limpio.
+        $esquema = \App\Services\EsquemaDesajustes::resumenGlobal();
+
+        if (empty($lineas) && empty($esquema['campos_rotos'])) {
+            $this->info("Sin errores/warnings el {$fecha} y sin campos rotos.");
             return self::SUCCESS;
         }
 
-        $hallazgos = $this->traducir($lineas);
+        $hallazgos = $lineas ? $this->traducir($lineas) : [];
 
         $destino = config('services.correo.informe_fallos_to');
-        Mail::to($destino)->send(new InformeFallosDiarioMail($fecha, $hallazgos));
+        Mail::to($destino)->send(new InformeFallosDiarioMail($fecha, $hallazgos, $esquema));
 
-        $this->info("Enviado informe de fallos del {$fecha}: " . count($hallazgos) . ' hallazgo(s) a partir de ' . count($lineas) . ' línea(s).');
+        $this->info("Enviado informe del {$fecha}: " . count($hallazgos) . ' hallazgo(s) a partir de '
+            . count($lineas) . ' línea(s); ' . count($esquema['campos_rotos']) . ' campo(s) roto(s), '
+            . $esquema['sin_declarar'] . ' columna(s) sin declarar.');
 
         return self::SUCCESS;
     }

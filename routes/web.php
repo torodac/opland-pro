@@ -303,6 +303,15 @@ Route::middleware('auth')->group(function () {
         }); // fin vmf.only
 
         Route::middleware('opland.only')->group(function () {
+
+            // Envío de facturas a la asesoría (emitidas y recibidas).
+            Route::post('asesoria/{tabla}/enviar-pendientes',
+                [\App\Http\Controllers\Opland\EnvioAsesoriaController::class, 'pendientes'])
+                ->name('opland.asesoria.pendientes');
+            Route::post('asesoria/{tabla}/enviar/{id}',
+                [\App\Http\Controllers\Opland\EnvioAsesoriaController::class, 'una'])
+                ->where('id', '[0-9]+')->name('opland.asesoria.una');
+
             Route::get('conciliacion', [\App\Http\Controllers\Opland\ConciliacionController::class, 'index'])->name('opland.conciliacion');
             Route::post('conciliacion/vincular', [\App\Http\Controllers\Opland\ConciliacionController::class, 'vincular'])->name('opland.conciliacion.vincular');
             Route::post('conciliacion/desvincular', [\App\Http\Controllers\Opland\ConciliacionController::class, 'desvincular'])->name('opland.conciliacion.desvincular');

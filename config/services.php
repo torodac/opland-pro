@@ -70,6 +70,11 @@ return [
     ],
 
     // Destinatarios y remitentes que también se leían con env() fuera de config.
+    // Asesoría fiscal a la que se envían las facturas de opland, emitidas y recibidas.
+    'asesoria' => [
+        'email' => env('ASESORIA_EMAIL', 'santiago@srltaxlegal.com'),
+    ],
+
     'correo' => [
         'informe_fallos_to' => env('MAIL_INFORME_FALLOS_TO', 'trodriguez@opland.es'),
         'nf_from'           => env('MAIL_NF_FROM_ADDRESS', 'naturefitness@opland.es'),

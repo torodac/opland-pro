@@ -97,6 +97,29 @@
         </a>
         @endif
 
+        {{-- Enviar a la asesoría las facturas pendientes (opland: emitidas y recibidas) --}}
+        @if($project->slug === 'opland' && in_array($projectTable->name, ['facturas', 'fta_soportadas']) && $canEdit)
+        @php
+            $colEnvio  = \Illuminate\Support\Facades\Schema::hasColumn($projectTable->getFullTableName(), 'enviado_asesoria_at');
+            $pendientes = \App\Http\Controllers\Opland\EnvioAsesoriaController::cuentaPendientes($projectTable->getFullTableName());
+        @endphp
+        @if($colEnvio)
+        <form method="POST" action="{{ route('opland.asesoria.pendientes', [$project->slug, $projectTable->name]) }}"
+              onsubmit="return confirm('¿Enviar {{ $pendientes }} factura(s) a la asesoría en un solo correo?')">
+            @csrf
+            <button type="submit" @disabled($pendientes === 0)
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 border text-sm font-medium rounded-lg transition-colors
+                           {{ $pendientes ? 'border-gray-200 text-gray-600 hover:bg-gray-50' : 'border-gray-100 text-gray-300 cursor-default' }}">
+                <i class="fa-solid fa-paper-plane {{ $pendientes ? 'text-orange-400' : 'text-gray-300' }}"></i>
+                Enviar a asesoría
+                @if($pendientes)
+                    <span class="ml-0.5 px-1.5 py-0.5 bg-orange-100 text-orange-700 text-[11px] font-bold rounded-full">{{ $pendientes }}</span>
+                @endif
+            </button>
+        </form>
+        @endif
+        @endif
+
         {{-- Subir facturas arrastrando (solo opland_fta_soportadas): abre la zona de abajo --}}
         @if($projectTable->name === 'fta_soportadas' && $project->slug === 'opland')
         <button type="button" id="fta-toggle"
@@ -1005,6 +1028,21 @@
                                             </button>
                                         </form>
                                         @endif
+
+                                        {{-- Enviar esta factura a la asesoría (opland). Vale tanto para una
+                                             suelta como para reenviar una que ya se mandó. --}}
+                                        @if($canEdit && $project->slug === 'opland' && in_array($projectTable->name, ['facturas', 'fta_soportadas']) && ($colEnvio ?? false))
+                                        @php $yaEnviada = !empty($registro->enviado_asesoria_at); @endphp
+                                        <form method="POST" action="{{ route('opland.asesoria.una', [$project->slug, $projectTable->name, $registro->id]) }}"
+                                              onsubmit="return confirm('{{ $yaEnviada ? 'Ya se envió el ' . \Carbon\Carbon::parse($registro->enviado_asesoria_at)->format('d/m/Y') . '. ¿Reenviarla?' : '¿Enviar esta factura a la asesoría?' }}')">
+                                            @csrf
+                                            <button class="w-full flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50">
+                                                <i class="fa-solid fa-paper-plane text-orange-400 w-4"></i>
+                                                {{ $yaEnviada ? 'Reenviar a asesoría' : 'Enviar a asesoría' }}
+                                            </button>
+                                        </form>
+                                        @endif
+
                                         @if($canEdit)
                                         @if($tieneHidden)
                                         <form method="POST" action="{{ route('ficha.archive', [$project->slug, $projectTable->name, $registro->id]) }}">

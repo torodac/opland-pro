@@ -25,6 +25,30 @@
             </div>
         @endforeach
 
+        @if(!empty($esquema['campos_rotos']))
+            <div class="hallazgo" style="border-left-color:#dc2626">
+                <h2 style="color:#991b1b">{{ count($esquema['campos_rotos']) }} campo(s) configurado(s) sin columna en su tabla</h2>
+                <p>
+                    Salen en la ficha pero no tienen dónde guardarse: al guardar uno de esos registros,
+                    da error y no se guarda nada. Hay que quitar el campo o crear la columna.
+                </p>
+                <p style="font-family:monospace;font-size:12px;color:#991b1b;margin-top:8px">
+                    @foreach($esquema['campos_rotos'] as $c){{ $c }}@if(!$loop->last)<br>@endif @endforeach
+                </p>
+            </div>
+        @endif
+
+        @if(($esquema['sin_declarar'] ?? 0) > 0)
+            <div class="hallazgo" style="border-left-color:#9ca3af">
+                <h2 style="color:#4b5563">{{ $esquema['sin_declarar'] }} columna(s) sin declarar en {{ $esquema['tablas_afectadas'] }} tabla(s)</h2>
+                <p>
+                    Informativo: existen en la base de datos y guardan datos, pero la configuración
+                    todavía no las conoce. La pasada de las 05:30 las declara ocultas; si aquí sigue
+                    saliendo un número alto, es que esa pasada no se está ejecutando.
+                </p>
+            </div>
+        @endif
+
         <p class="footer">Opland PRO — admin:informe-fallos-diario</p>
     </div>
 </body>
