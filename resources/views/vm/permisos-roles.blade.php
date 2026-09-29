@@ -41,7 +41,8 @@
 
   /* Cabecera y primera columna fijas: con 41 filas y 13 roles, sin esto se pierde el hilo. */
   table.pr thead th{ position:sticky; top:0; z-index:3; background:var(--surface-2);
-    border-bottom:1px solid var(--grid); padding:7px 8px; vertical-align:bottom; }
+    border-bottom:1px solid var(--grid); padding:7px 8px; vertical-align:bottom;
+    text-align:center; }
   table.pr th.pr-item, table.pr td.pr-item{ position:sticky; left:0; z-index:2;
     background:var(--surface); border-right:1px solid var(--grid);
     text-align:left; min-width:230px; max-width:230px; }
@@ -55,9 +56,12 @@
   .pr-rol-link{ color:inherit; text-decoration:none; }
   .pr-rol-link:hover{ color:var(--ver); text-decoration:underline; }
   .pr-rol-id{ color:var(--muted); font-weight:400; }
-  .pr-usuarios{ margin-top:4px; font-size:10.5px; line-height:1.35; color:var(--muted);
-    font-weight:400; max-width:130px; white-space:normal; }
-  .pr-sin-usuarios{ font-style:italic; }
+  .pr-usuarios{ display:inline-flex; align-items:center; gap:4px; margin-top:5px;
+    padding:1px 6px; border-radius:99px; background:var(--surface);
+    border:1px solid var(--grid); font-size:10.5px; font-weight:600; color:var(--text-soft);
+    cursor:help; white-space:nowrap; }
+  .pr-usuarios i{ font-size:9px; color:var(--muted); }
+  .pr-sin-usuarios{ opacity:.55; font-weight:400; }
   .pr-todo{ display:block; margin-top:3px; font-size:10px; color:var(--alerta); font-weight:700; }
 
   .pr-modulo td{ background:var(--surface-2); font-weight:700; font-size:11px;
@@ -102,13 +106,17 @@
                   {{ $rol->ve_todo && $rol->edita_todo ? 've y edita todo' : ($rol->ve_todo ? 've todo' : 'edita todo') }}
                 </span>
               @endif
-              <div class="pr-usuarios">
-                @if($rol->usuarios)
-                  {{ implode(', ', $rol->usuarios) }}
-                @else
-                  <span class="pr-sin-usuarios">sin usuarios</span>
-                @endif
-              </div>
+              {{-- Los nombres van al tooltip: en pantalla solo el recuento, porque trece
+                   columnas con sus listas de empleados se comían media pantalla de alto. --}}
+              @if($rol->usuarios)
+                <span class="pr-usuarios" title="{{ implode(', ', $rol->usuarios) }}">
+                  <i class="fa-regular fa-user"></i>{{ count($rol->usuarios) }}
+                </span>
+              @else
+                <span class="pr-usuarios pr-sin-usuarios" title="Ningún usuario tiene este rol">
+                  <i class="fa-regular fa-user"></i>0
+                </span>
+              @endif
             </th>
           @endforeach
         </tr>
