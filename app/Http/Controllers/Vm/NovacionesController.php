@@ -557,7 +557,15 @@ class NovacionesController extends Controller
         }
 
         $data = json_decode($raw, true);
-        return $data['services_get_reservation_response']['reservations'] ?? null;
+        $resp = $data['services_get_reservation_response'] ?? null;
+        if (!is_array($resp)) {
+            return null;
+        }
+
+        // Icnea dejó de anidar la reserva bajo 'reservations' en algún momento antes del
+        // 2026-08-20: ahora los campos (detail, channel_commission...) vienen directamente en el
+        // primer nivel. Se aceptan las dos formas para no depender de cuál sirva hoy.
+        return $resp['reservations'] ?? $resp;
     }
 
     public function saveComisionBancos(Request $request, Project $project)

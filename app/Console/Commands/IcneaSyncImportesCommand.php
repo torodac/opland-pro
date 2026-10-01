@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Http\Controllers\Vm\NovacionesController;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class IcneaSyncImportesCommand extends Command
 {
@@ -142,6 +143,25 @@ class IcneaSyncImportesCommand extends Command
 
         $this->info("Completado — procesadas: {$procesadas}, insertadas: {$insertadas}, actualizadas: {$actualizadas}, marcadas obsoletas: {$borradas}, errores: {$errores}");
 
+        // Este comando estuvo seis semanas sin importar nada y nadie se enteró: Icnea cambió la
+        // forma de la respuesta, fetchReservation() devolvía null para TODAS las reservas, el
+        // bucle avisaba por pantalla y seguía, y la salida del cron va a /dev/null. Terminaba
+        // "con éxito" con cero líneas. Ahora, cuando la cosecha es anormalmente mala, se deja un
+        // ERROR en el log: de ahí lo recoge Sentry y el informe diario de fallos.
+        // La señal es cuántas reservas devolvieron respuesta utilizable, NO cuántas líneas se
+        // escribieron: en una ejecución normal con todo al día, insertadas y actualizadas son
+        // cero legítimamente y eso no es ningún problema.
+        $total  = count($reservas);
+        $fallos = $total > 0 ? $errores / $total : 0;
+
+        if ($total > 0 && $fallos > 0.5) {
+            $motivo = $errores === $total
+                ? "no obtuvo detalle de NINGUNA de las {$total} reservas"
+                : "falló en {$errores} de {$total} reservas";
+
+            Log::error("icnea:sync-importes: {$motivo}. Probable cambio en la API de Icnea o credenciales caducadas; la planilla de liquidación se quedará sin comisiones de canal.");
+        }
+
         // Misma comprobacion que "Sincronizar" en Novaciones: si una propiedad+mes ya tiene una
         // novacion documentada y los totales recalculados ya no cuadran, se abre (si no existia)
         // una tarea "Revisión Novación" para que Contabilidad la revise -- antes esto solo pasaba
@@ -178,6 +198,14 @@ class IcneaSyncImportesCommand extends Command
         }
 
         $data = json_decode($raw, true);
-        return $data['services_get_reservation_response']['reservations'] ?? null;
+        $resp = $data['services_get_reservation_response'] ?? null;
+        if (!is_array($resp)) {
+            return null;
+        }
+
+        // Icnea dejó de anidar la reserva bajo 'reservations' en algún momento antes del
+        // 2026-08-20: ahora los campos (detail, channel_commission...) vienen directamente en el
+        // primer nivel. Se aceptan las dos formas para no depender de cuál sirva hoy.
+        return $resp['reservations'] ?? $resp;
     }
 }
