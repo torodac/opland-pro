@@ -30,6 +30,13 @@ class IcneaSyncProCommand extends Command
 
         $lodgings = $this->fetchCatalog();
 
+        // El catálogo es una única llamada: si vuelve vacío no hay nada que sincronizar, y eso
+        // nunca es normal con 65 propiedades dadas de alta.
+        \App\Services\SaludIntegraciones::comprobar(
+            'icnea:sync-pro', 1, empty($lodgings) ? 0 : 1,
+            'Los datos de las propiedades (dirección, coordenadas, código) dejan de actualizarse desde Icnea.'
+        );
+
         if (empty($lodgings)) {
             $this->error('No se recibieron datos de Icnea.');
             Log::error('IcneaSyncPro: respuesta vacía del Catalog');

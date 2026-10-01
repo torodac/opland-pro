@@ -34,6 +34,9 @@ class BreezewaySyncTasksCommand extends Command
 
         $token = $this->authenticate();
         if (!$token) {
+            // Solo en consola el fallo moría aquí sin salir del servidor.
+            \Illuminate\Support\Facades\Log::error('breezeway:sync-tasks: no se pudo autenticar contra Breezeway. '
+                . 'Mientras no se arregle, no entra ninguna tarea nueva ni se actualizan las existentes.');
             $this->error('No se pudo autenticar contra Breezeway.');
             return;
         }
@@ -352,6 +355,11 @@ class BreezewaySyncTasksCommand extends Command
         ]);
 
         $this->info("Resultado: {$creadas} creadas, {$actualizadas} actualizadas, {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$descartadas} descartadas, {$ocultadas} ocultadas, {$errores} errores de propiedad.");
+        \App\Services\SaludIntegraciones::comprobar(
+            'breezeway:sync-tasks', count($propiedades), count($propiedades) - $errores,
+            'Las tareas de limpieza y mantenimiento dejan de llegar, y con ellas sus imputaciones de tiempo.'
+        );
+
         Log::info("BreezewaySyncTasks: {$creadas} creadas, {$actualizadas} actualizadas, {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$descartadas} descartadas, {$ocultadas} ocultadas, {$errores} errores.");
     }
 

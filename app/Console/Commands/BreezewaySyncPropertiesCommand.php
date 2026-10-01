@@ -32,6 +32,10 @@ class BreezewaySyncPropertiesCommand extends Command
 
         $token = $this->authenticate();
         if (!$token) {
+            // Antes esto solo se escribía en consola, que el cron descarta: el proceso moría
+            // en silencio y nadie se enteraba.
+            \Illuminate\Support\Facades\Log::error('breezeway:sync-properties: no se pudo autenticar contra Breezeway. '
+                . 'Revisar las credenciales en services.breezeway.');
             $this->error('No se pudo autenticar contra Breezeway.');
             return;
         }
@@ -39,6 +43,11 @@ class BreezewaySyncPropertiesCommand extends Command
         $propiedadesBreezeway = $this->fetchAllProperties($token);
         $activas = array_filter($propiedadesBreezeway, fn($p) => ($p['status'] ?? '') === 'active');
         $this->info(count($activas) . ' propiedades activas recibidas de Breezeway.');
+
+        \App\Services\SaludIntegraciones::comprobar(
+            'breezeway:sync-properties', 1, empty($activas) ? 0 : 1,
+            'El emparejamiento de propiedades entre Breezeway y Opland deja de actualizarse.'
+        );
 
         $porLodgingId = DB::table('vm_propiedades')
             ->where('deleted', 0)

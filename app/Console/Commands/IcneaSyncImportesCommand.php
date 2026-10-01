@@ -155,19 +155,10 @@ class IcneaSyncImportesCommand extends Command
         // bucle avisaba por pantalla y seguía, y la salida del cron va a /dev/null. Terminaba
         // "con éxito" con cero líneas. Ahora, cuando la cosecha es anormalmente mala, se deja un
         // ERROR en el log: de ahí lo recoge Sentry y el informe diario de fallos.
-        // La señal es cuántas reservas devolvieron respuesta utilizable, NO cuántas líneas se
-        // escribieron: en una ejecución normal con todo al día, insertadas y actualizadas son
-        // cero legítimamente y eso no es ningún problema.
-        $total  = count($reservas);
-        $fallos = $total > 0 ? $errores / $total : 0;
-
-        if ($total > 0 && $fallos > 0.5) {
-            $motivo = $errores === $total
-                ? "no obtuvo detalle de NINGUNA de las {$total} reservas"
-                : "falló en {$errores} de {$total} reservas";
-
-            Log::error("icnea:sync-importes: {$motivo}. Probable cambio en la API de Icnea o credenciales caducadas; la planilla de liquidación se quedará sin comisiones de canal.");
-        }
+        \App\Services\SaludIntegraciones::comprobar(
+            'icnea:sync-importes', count($reservas), count($reservas) - $errores,
+            'La planilla de liquidación se quedará sin las comisiones de canal de las reservas afectadas.'
+        );
 
         // Misma comprobacion que "Sincronizar" en Novaciones: si una propiedad+mes ya tiene una
         // novacion documentada y los totales recalculados ya no cuadran, se abre (si no existia)

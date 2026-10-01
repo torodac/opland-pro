@@ -23,6 +23,11 @@ class IcneaSyncReservationsCommand extends Command
         $this->ownerId = (string) config('services.icnea.owner_id');
     }
 
+    // Cuántas llamadas al servicio devolvieron respuesta utilizable. Sirve para distinguir
+    // "hoy no había reservas" de "el servicio no nos contesta", que es lo que se nos escapó.
+    private int $llamadas = 0;
+    private int $llamadasOk = 0;
+
     public function handle(): void
     {
         $desde = $this->option('desde') ?? now()->subDays(30)->format('Y-m-d');
@@ -89,6 +94,11 @@ class IcneaSyncReservationsCommand extends Command
 
         $this->info('Sincronización completada.');
         Log::info("IcneaSyncReservations: {$totalInserted} procesadas, {$desde} → {$hasta}");
+
+        \App\Services\SaludIntegraciones::comprobar(
+            'icnea:sync-reservations', $this->llamadas, $this->llamadasOk,
+            'Ninguna reserva creada o modificada en Icnea está llegando a Opland.'
+        );
     }
 
     private function fetchReservations(string $lodgingId, string $desde, string $hasta): array
@@ -101,6 +111,8 @@ class IcneaSyncReservationsCommand extends Command
             'end_date'   => $hasta,
             'include'    => 'all',
         ]);
+
+        $this->llamadas++;
 
         $ch = curl_init($url);
         curl_setopt_array($ch, [
@@ -133,6 +145,8 @@ class IcneaSyncReservationsCommand extends Command
             Log::warning("IcneaSyncReservations error ({$lodgingId}): " . $data['services_get_reservations_response']['error']);
             return [];
         }
+
+        $this->llamadasOk++;
 
         return $data['services_get_reservations_response']['reservations'] ?? [];
     }
