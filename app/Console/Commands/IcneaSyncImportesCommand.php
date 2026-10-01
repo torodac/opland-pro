@@ -13,12 +13,19 @@ class IcneaSyncImportesCommand extends Command
                                 {--meses=6 : Número de meses hacia atrás (además del actual) para filtrar por checkout}';
     protected $description = 'Sincroniza vm_reservas_importes (detail[] + channel_commission) para reservas con checkout en los últimos N meses, igual que el botón Sincronizar de Novaciones';
 
-    private string $apiKey  = 'v$c$t$321$m$r$b';
-    private string $ownerId = '1540';
+    private string $apiKey;
+    private string $ownerId;
 
     // Líneas que gestiona la propia Novaciones a mano y que Icnea nunca devuelve --
     // nunca se marcan como obsoletas aunque no aparezcan en la respuesta de la API.
     private array $textosProtegidos = ['Management Fee', 'Comisión Bancos'];
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->apiKey  = (string) config('services.icnea.api_key');
+        $this->ownerId = (string) config('services.icnea.owner_id');
+    }
 
     public function handle(): void
     {

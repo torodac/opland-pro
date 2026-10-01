@@ -12,9 +12,17 @@ class IcneaSyncProCommand extends Command
     protected $signature   = 'icnea:sync-pro';
     protected $description = 'Sincroniza campos icnea_* en opland_pro.vm_propiedades';
 
-    private string $usr  = '1540';
-    private string $pwd  = 'v$c$t$321$m$r$b';
-    private string $lang = 'es';
+    private string $usr;
+    private string $pwd;
+    private string $lang;
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->usr  = (string) config('services.icnea.usr');
+        $this->pwd  = (string) config('services.icnea.pwd');
+        $this->lang = (string) config('services.icnea.lang');
+    }
 
     public function handle(): void
     {

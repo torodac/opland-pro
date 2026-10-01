@@ -13,8 +13,15 @@ class IcneaSyncReservationsCommand extends Command
                                 {--hasta= : Fecha fin yyyy-MM-dd (defecto: hoy+365 días)}';
     protected $description = 'Sincroniza vm_reservas desde Icnea GET Reservations';
 
-    private string $apiKey  = 'v$c$t$321$m$r$b';
-    private string $ownerId = '1540';
+    private string $apiKey;
+    private string $ownerId;
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->apiKey  = (string) config('services.icnea.api_key');
+        $this->ownerId = (string) config('services.icnea.owner_id');
+    }
 
     public function handle(): void
     {

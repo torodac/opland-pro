@@ -69,12 +69,25 @@ return [
         'client_secret' => env('BREEZEWAY_CLIENT_SECRET'),
     ],
 
-    // Destinatarios y remitentes que también se leían con env() fuera de config.
+    // Icnea. Dos juegos distintos de credenciales porque son dos interfaces:
+    //   - api_key + owner_id → servicios REST (reservas y sus importes)
+    //   - usr + pwd          → servicio SOAP del catálogo de alojamientos
+    // Estaban escritas a mano en cuatro ficheros del repositorio; rotarlas obligaba a
+    // desplegar código. Ver 3.119 en DOC_TECNICO.md.
+    'icnea' => [
+        'api_key'  => env('ICNEA_API_KEY'),
+        'owner_id' => env('ICNEA_OWNER_ID'),
+        'usr'      => env('ICNEA_USR'),
+        'pwd'      => env('ICNEA_PWD'),
+        'lang'     => env('ICNEA_LANG', 'es'),
+    ],
+
     // Asesoría fiscal a la que se envían las facturas de opland, emitidas y recibidas.
     'asesoria' => [
         'email' => env('ASESORIA_EMAIL', 'santiago@srltaxlegal.com'),
     ],
 
+    // Destinatarios y remitentes que también se leían con env() fuera de config.
     'correo' => [
         'informe_fallos_to' => env('MAIL_INFORME_FALLOS_TO', 'trodriguez@opland.es'),
         'nf_from'           => env('MAIL_NF_FROM_ADDRESS', 'naturefitness@opland.es'),

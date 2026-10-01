@@ -274,8 +274,8 @@ class NovacionesController extends Controller
             ->whereNotIn('booking_status', ['cancelled'])
             ->get(['id', 'booking_id']);
 
-        $apiKey           = 'v$c$t$321$m$r$b';
-        $ownerId          = '1540';
+        $apiKey           = (string) config('services.icnea.api_key');
+        $ownerId          = (string) config('services.icnea.owner_id');
         $textosProtegidos = ['Management Fee', 'Comisión Bancos'];
 
         $procesadas = 0;
