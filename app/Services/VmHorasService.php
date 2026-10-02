@@ -64,6 +64,23 @@ class VmHorasService
         return (int) date('N', strtotime($fecha)) >= 6; // 6=sábado, 7=domingo (ISO-8601)
     }
 
+    /**
+     * "Desc. Fest.": un festivo que cae justo en el día de descanso asignado, y por tanto se
+     * recupera. Es SOLO del personal de turnos (vm_departamentos.visible_horarios): para quien
+     * tiene jornada fija de lunes a viernes, su descanso ya es el fin de semana y un festivo en
+     * sábado o domingo no le quita nada -- criterio acordado con el cliente el 2026-09-19, el
+     * mismo que aplican el bono de calcularHeDia() y la cola de festivos a compensar.
+     *
+     * Existe como función porque la condición estaba escrita a mano en tres pantallas y a las tres
+     * se les había olvidado el turno: el 15/08/2026 (Asunción, sábado) salía como "Desc. Fest." en
+     * el informe mensual de los 10 empleados sin turno, tapando el "Festivo" que les tocaba. Los
+     * importes estaban bien -- el cálculo sí preguntaba por el turno --, era solo la etiqueta.
+     */
+    public static function esDescFestivo(bool $isFestivo, bool $isDescansoEf, bool $esTurno): bool
+    {
+        return $isFestivo && $isDescansoEf && $esTurno;
+    }
+
     // Minutos esperados de un día de jornada completa según el contrato: horas_semana repartidas
     // entre los días/turnos que trabaja a la semana (vm_contratos.dias_semana, 5 por defecto para
     // la jornada partida habitual). Caso real que motivó el campo: Mykola Krupa, contrato de

@@ -152,7 +152,7 @@ class FichajeController extends Controller
                 $isFestTrab     = $isFestivo && (bool) $f;
                 // Rotatorio es un atributo del horario (festivo que coincide con el descanso
                 // asignado), no de si hubo fichaje ese día — ver InformeImputacionesController.
-                $isRotatorio    = $isFestivo && $isDescansoEf;
+                $isRotatorio    = VmHorasService::esDescFestivo($isFestivo, $isDescansoEf, $esTurno);
                 $trabajaFestivo  = $entrada && $isFestivo;
                 $trabajaDescanso = $entrada && $isDescansoEf && !$isFestivo;
 
@@ -529,7 +529,7 @@ class FichajeController extends Controller
             !empty($fichaje->hora_inicio),
             $isFestivo,
             $isFestivo && !empty($fichaje->hora_inicio), // festivo trabajado = festivo + hay fichaje
-            $isFestivo && $isDescansoEf,                 // rotatorio = festivo que cae en el descanso
+            VmHorasService::esDescFestivo($isFestivo, $isDescansoEf, $esTurno), // festivo en el descanso
             $isDescansoEf,
             $ausenciaDia,
             $esTurno

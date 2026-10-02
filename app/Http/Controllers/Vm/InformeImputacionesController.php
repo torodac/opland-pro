@@ -965,7 +965,7 @@ class InformeImputacionesController extends Controller
             // ese día es festivo Y coincide con el descanso asignado (independiente de si hay
             // fichaje: es un atributo del horario, no de si se trabajó o no).
             $isFestTrab  = $isFestivo && (bool) $f;
-            $isRotatorio = $isFestivo && $isDescansoEf;
+            $isRotatorio = VmHorasService::esDescFestivo($isFestivo, $isDescansoEf, $esTurno);
 
             $heMin = VmHorasService::calcularHeDia(
                 $tfMin, $pMin, $tipoObj?->nombre ?? null, $contratoDia,
