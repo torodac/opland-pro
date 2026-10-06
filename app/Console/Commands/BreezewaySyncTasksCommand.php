@@ -102,6 +102,7 @@ class BreezewaySyncTasksCommand extends Command
         $creadas = 0;
         $actualizadas = 0;
         $omitidas = 0;
+        $bloqueadas = 0;
         $imputacionesCreadas = 0;
         $imputacionesActualizadas = 0;
         $fotosDescargadas = 0;
@@ -205,7 +206,17 @@ class BreezewaySyncTasksCommand extends Command
                     $data['Tipo'] = $tipo;
                 }
 
-                $existente = DB::table($tableName)->where('breezeway_task_id', $task['id'])->first(['id']);
+                $existente = DB::table($tableName)->where('breezeway_task_id', $task['id'])->first(['id', 'blocked']);
+
+                // Una tarea bloqueada no se toca: ni sus datos ni sus imputaciones. Es la unica
+                // forma de congelar a mano lo que la sincronizacion reescribe cada hora -- por
+                // ejemplo, despues de corregir quien hizo de verdad una limpieza, para que la
+                // siguiente pasada no vuelva a imponer la lista de asignados de Breezeway.
+                if ($existente && ($existente->blocked ?? 0)) {
+                    $bloqueadas++;
+                    continue;
+                }
+
                 if ($existente) {
                     DB::table($tableName)->where('id', $existente->id)->update($data);
                     $tareaId = $existente->id;
@@ -358,13 +369,13 @@ class BreezewaySyncTasksCommand extends Command
             'errores'     => $errores,
         ]);
 
-        $this->info("Resultado: {$creadas} creadas, {$actualizadas} actualizadas, {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$descartadas} descartadas, {$ocultadas} ocultadas, {$errores} errores de propiedad.");
+        $this->info("Resultado: {$creadas} creadas, {$actualizadas} actualizadas, {$bloqueadas} bloqueadas (sin tocar), {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$descartadas} descartadas, {$ocultadas} ocultadas, {$errores} errores de propiedad.");
         \App\Services\SaludIntegraciones::comprobar(
             'breezeway:sync-tasks', count($propiedades), count($propiedades) - $errores,
             'Las tareas de limpieza y mantenimiento dejan de llegar, y con ellas sus imputaciones de tiempo.'
         );
 
-        Log::info("BreezewaySyncTasks: {$creadas} creadas, {$actualizadas} actualizadas, {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$descartadas} descartadas, {$ocultadas} ocultadas, {$errores} errores.");
+        Log::info("BreezewaySyncTasks: {$creadas} creadas, {$actualizadas} actualizadas, {$bloqueadas} bloqueadas (sin tocar), {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$descartadas} descartadas, {$ocultadas} ocultadas, {$errores} errores.");
     }
 
     // Tareas que quedaron con control_user vacío por asignados sin mapear en su momento (marcadas en
