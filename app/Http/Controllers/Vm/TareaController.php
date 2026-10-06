@@ -163,7 +163,7 @@ class TareaController extends Controller
                 ->where('tipo', $tipo)
                 ->where('id_tarea', $id)
                 ->where(fn($q) => $q->where('deleted', 0)->orWhereNull('deleted'))
-                ->orderBy('fecha')
+                ->orderByDesc('fecha')
                 ->get(['id', 'comentario', 'fecha'])
             : collect();
 

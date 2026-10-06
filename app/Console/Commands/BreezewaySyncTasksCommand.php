@@ -226,13 +226,14 @@ class BreezewaySyncTasksCommand extends Command
                     $creadas++;
                 }
 
-                // Fotos: solo de tareas de mantenimiento (housekeeping queda fuera, decisión
-                // explícita). Breezeway las trae ya en el propio listado de tareas (no hace
-                // falta una llamada aparte por tarea). Se descargan solo las que no se hayan
-                // importado ya (dedupe por breezeway_photo_id) -- idempotente entre syncs.
-                if ($tableName === 'vm_tareas_mantenimiento') {
-                    $fotosDescargadas += $this->descargarFotosTarea($task['photos'] ?? [], $tableName, $tareaId);
-                }
+                // Fotos de las dos tablas. Housekeeping estuvo fuera a propósito hasta el
+                // 2026-10-06, y entra ahora porque la pantalla de devolución de fianzas se
+                // decide mirando las fotos de la limpieza DE SALIDA: son las que ven el estado
+                // en que el huésped deja la casa, y sin ellas no hay nada que mirar.
+                // Breezeway las trae ya en el propio listado de tareas (no hace falta una
+                // llamada aparte por tarea). Se descargan solo las que no se hayan importado ya
+                // (dedupe por breezeway_photo_id) -- idempotente entre syncs.
+                $fotosDescargadas += $this->descargarFotosTarea($task['photos'] ?? [], $tableName, $tareaId);
 
                 // Imputaciones: solo si Breezeway ya trae tiempo total registrado. Null (no
                 // total_time en absoluto) distinto de 0 (total_time real pero redondea a menos

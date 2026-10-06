@@ -164,6 +164,18 @@ Route::middleware('auth')->group(function () {
         Route::get('informe-operativo', [InformeOperativoController::class, 'index'])->name('informe-operativo');
         Route::get('informe-rrhh', [InformeRrhhController::class, 'index'])->name('informe-rrhh');
         Route::get('jerarquias', [JerarquiasController::class, 'index'])->name('jerarquias');
+
+        // Devolución de fianzas. El acceso de lectura lo da menu.access desde la entrada del
+        // menú (tabla virtual dev_fianzas_default); las dos acciones comprueban además permiso
+        // de edición en el propio controlador, porque deciden sobre dinero.
+        Route::get('dev-fianzas', [\App\Http\Controllers\Vm\DevFianzasController::class, 'index'])
+            ->name('vm.dev-fianzas');
+        Route::get('dev-fianzas/{id}', [\App\Http\Controllers\Vm\DevFianzasController::class, 'show'])
+            ->where('id', '[0-9]+')->name('vm.dev-fianza');
+        Route::post('dev-fianzas/{id}/conforme', [\App\Http\Controllers\Vm\DevFianzasController::class, 'conforme'])
+            ->where('id', '[0-9]+')->name('vm.dev-fianza.conforme');
+        Route::post('dev-fianzas/{id}/retener', [\App\Http\Controllers\Vm\DevFianzasController::class, 'retener'])
+            ->where('id', '[0-9]+')->name('vm.dev-fianza.retener');
         Route::get('permisos-roles', [\App\Http\Controllers\Vm\PermisosRolesController::class, 'index'])
             ->name('permisos-roles');
 
