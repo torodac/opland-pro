@@ -87,12 +87,8 @@ class BreezewaySyncTasksCommand extends Command
             ]);
         }
 
-        // Una propiedad bloqueada se deja fuera igual que una borrada u oculta: si alguien la
-        // bloquea desde su ficha, es que no quiere que se toque, y traerle tareas de Breezeway
-        // -- con sus imputaciones, que acaban en el informe mensual -- es tocarla.
         $propiedades = DB::table('vm_propiedades')
             ->where('deleted', 0)
-            ->where(fn($q) => $q->whereNull('blocked')->orWhere('blocked', 0))
             ->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))
             ->whereNotNull('breezeway_home_id')
             ->get(['id', 'nombre', 'breezeway_home_id']);
