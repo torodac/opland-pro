@@ -57,10 +57,12 @@
       <p class="df-val">{{ $reserva->nombre ?: '—' }}</p>
     </div>
     <div class="df-cell">
-      <p class="df-lbl">Fianza</p>
-      <p class="df-val">{{ $fmt($reserva->fianza) }}</p>
+      <p class="df-lbl">Propiedad</p>
+      <p class="df-val">{{ $reserva->propiedad ?: '—' }}</p>
     </div>
 
+    {{-- Segunda fila: primero la evidencia (comentarios y fotos) y luego el dinero, que es el
+         orden en que se mira para decidir. --}}
     <div class="df-cell">
       <p class="df-lbl">Comentarios</p>
       <p class="df-val">{{ $comentarios->count() }}</p>
@@ -70,12 +72,12 @@
       <p class="df-val">{{ $fotos->count() }}</p>
     </div>
     <div class="df-cell">
-      <p class="df-lbl">Retención</p>
-      <p class="df-val">{{ $reserva->fianza_retencion !== null ? $fmt($reserva->fianza_retencion) : '—' }}</p>
+      <p class="df-lbl">Fianza</p>
+      <p class="df-val">{{ $fmt($reserva->fianza) }}</p>
     </div>
     <div class="df-cell">
-      <p class="df-lbl">Propiedad</p>
-      <p class="df-val">{{ $reserva->propiedad ?: '—' }}</p>
+      <p class="df-lbl">Retención</p>
+      <p class="df-val">{{ $reserva->fianza_retencion !== null ? $fmt($reserva->fianza_retencion) : '—' }}</p>
     </div>
 
     @if(!$pendiente)
