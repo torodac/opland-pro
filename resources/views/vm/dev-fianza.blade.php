@@ -21,10 +21,16 @@
 .df-lbl{font-size:11px;color:#888;margin:0 0 3px}
 .df-val{font-size:13px;font-weight:500;margin:0}
 .df-modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:60}
+#df-lightbox{background:rgba(0,0,0,.82)}
 .df-modal.open{display:flex}
 .df-modal-box{background:#fff;border-radius:12px;padding:1.25rem;width:min(460px,92vw)}
 .dark .df-modal-box{background:#1a1a1a}
 .df-btn{font-size:13px;padding:6px 14px;border-radius:6px;cursor:pointer;border:0.5px solid rgba(0,0,0,.15);background:#fff}
+.df-nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:0;
+        background:rgba(255,255,255,.15);color:#fff;font-size:30px;line-height:1;cursor:pointer;
+        display:flex;align-items:center;justify-content:center;padding:0 0 4px}
+.df-nav:hover{background:rgba(255,255,255,.3)}
+.df-nav[disabled]{opacity:.2;cursor:default}
 </style>
 
 <div style="padding:0 0 3rem;">
@@ -119,26 +125,49 @@
     @if($comentarios->count())<span style="color:#bbb;font-weight:400">{{ $comentarios->count() }}</span>@endif
   </div>
 
-  @if($comentarios->count())
-    <div style="display:flex;flex-direction:column;gap:10px">
-      @foreach($comentarios as $com)
-        <div style="border-left:2px solid #e5e5e5;padding:2px 0 2px 10px">
-          <div style="font-size:11px;color:#aaa;margin-bottom:2px;display:flex;gap:6px;flex-wrap:wrap">
-            <a href="{{ route('vm.tarea', [$project->slug, 'limpieza', $com->tarea_id]) }}"
-               style="color:#185FA5;text-decoration:none">{{ $com->tarea_nombre }}</a>
-            <span>·</span>
-            <span>{{ $com->fecha ? \Carbon\Carbon::parse($com->fecha)->translatedFormat('D j M · H:i') : '' }}</span>
+  {{-- Agrupado por tarea: el nombre se ve siempre, tenga comentarios o no, porque saber qué
+       limpieza se hizo (y poder abrirla) ya es información aunque nadie haya escrito nada. --}}
+  @if($tareas->isNotEmpty())
+    <div style="display:flex;flex-direction:column;gap:14px">
+      @foreach($tareas as $t)
+        @php $suyos = $comentarios->where('tarea_id', $t->id); @endphp
+        <div>
+          <div style="font-size:12px;margin-bottom:5px;display:flex;gap:6px;flex-wrap:wrap;align-items:baseline">
+            <a href="{{ route('vm.tarea', [$project->slug, 'limpieza', $t->id]) }}"
+               target="_blank" rel="noopener"
+               style="color:#185FA5;text-decoration:none;font-weight:500">
+              {{ $t->nombre }}
+              <i class="ti ti-external-link" style="font-size:11px;opacity:.7"></i>
+            </a>
+            @if($t->fecha_planificada)
+              <span style="color:#aaa;font-size:11px">{{ \Carbon\Carbon::parse($t->fecha_planificada)->format('d/m/Y') }}</span>
+            @endif
+            @if($t->estado)
+              <span style="color:#aaa;font-size:11px">· {{ $t->estado }}</span>
+            @endif
+            <span style="color:#ccc;font-size:11px">· {{ $suyos->count() }} {{ $suyos->count() === 1 ? 'comentario' : 'comentarios' }}</span>
           </div>
-          <div style="font-size:13px;white-space:pre-line">{{ $com->comentario }}</div>
+
+          @if($suyos->count())
+            <div style="display:flex;flex-direction:column;gap:8px">
+              @foreach($suyos as $com)
+                <div style="border-left:2px solid #e5e5e5;padding:2px 0 2px 10px">
+                  <div style="font-size:11px;color:#aaa;margin-bottom:2px">
+                    {{ $com->fecha ? \Carbon\Carbon::parse($com->fecha)->translatedFormat('D j M · H:i') : '' }}
+                  </div>
+                  <div style="font-size:13px;white-space:pre-line">{{ $com->comentario }}</div>
+                </div>
+              @endforeach
+            </div>
+          @else
+            <p style="font-size:13px;color:#999;margin:0 0 0 12px">Sin comentarios.</p>
+          @endif
         </div>
       @endforeach
     </div>
   @else
     <p style="font-size:13px;color:#999;margin:0">
-      Sin comentarios.
-      @if($tareas->isEmpty())
-        Esta reserva no tiene ninguna limpieza de salida asociada.
-      @endif
+      Esta reserva no tiene ninguna limpieza de salida asociada.
     </p>
   @endif
 </div>
@@ -155,7 +184,7 @@
       @foreach($fotos as $foto)
         @php $url = asset('storage/' . $foto->file_foto); @endphp
         <div style="border-radius:8px;overflow:hidden;border:0.5px solid rgba(0,0,0,.08);cursor:zoom-in"
-             onclick="ampliar('{{ $url }}')" title="{{ $foto->tarea_nombre }}">
+             onclick="ampliar({{ $loop->index }})" title="{{ $foto->tarea_nombre }}">
           <img src="{{ $url }}" alt="Foto de la limpieza" loading="lazy"
                style="width:100%;aspect-ratio:1;object-fit:cover;display:block">
         </div>
@@ -168,9 +197,23 @@
 
 </div>
 
-{{-- Lightbox --}}
-<div id="df-lightbox" class="df-modal" onclick="this.classList.remove('open')">
-  <img id="df-lightbox-img" src="" alt="" style="max-width:92vw;max-height:88vh;border-radius:8px">
+{{-- Visor. Se navega con las flechas, con el teclado y con la rueda; se cierra pulsando fuera
+     de la imagen o con Escape. Los controles paran la propagación para que pulsarlos no cuente
+     como "pulsar fuera" y cierre el visor. --}}
+<div id="df-lightbox" class="df-modal" onclick="cerrarVisor()">
+  <button type="button" id="df-prev" onclick="event.stopPropagation(); mover(-1)"
+          title="Anterior (←)" class="df-nav" style="left:16px">‹</button>
+
+  <div onclick="event.stopPropagation()" style="display:flex;flex-direction:column;align-items:center;gap:8px">
+    <img id="df-lightbox-img" src="" alt="" style="max-width:82vw;max-height:82vh;border-radius:8px">
+    <div style="color:#fff;font-size:12px;text-align:center;text-shadow:0 1px 3px rgba(0,0,0,.6)">
+      <span id="df-contador"></span>
+      <span id="df-tarea" style="opacity:.75"></span>
+    </div>
+  </div>
+
+  <button type="button" id="df-next" onclick="event.stopPropagation(); mover(1)"
+          title="Siguiente (→)" class="df-nav" style="right:16px">›</button>
 </div>
 
 {{-- Modal de retención --}}
@@ -201,10 +244,46 @@
 const CSRF_DF = '{{ csrf_token() }}';
 const BASE_DF = '{{ url($project->slug . "/dev-fianzas/" . $reserva->id) }}';
 
-function ampliar(url) {
-    document.getElementById('df-lightbox-img').src = url;
+const DF_FOTOS = @json($fotos->map(fn($f) => [
+    'url'   => asset('storage/' . $f->file_foto),
+    'tarea' => $f->tarea_nombre,
+])->values());
+
+let dfIdx = 0;
+
+function pintarVisor() {
+    const f = DF_FOTOS[dfIdx];
+    if (!f) return;
+    document.getElementById('df-lightbox-img').src = f.url;
+    document.getElementById('df-contador').textContent = (dfIdx + 1) + ' / ' + DF_FOTOS.length;
+    document.getElementById('df-tarea').textContent = f.tarea ? ' · ' + f.tarea : '';
+    // Sin ciclo: con una sola foto las dos flechas quedan desactivadas y se ve que no hay más.
+    document.getElementById('df-prev').disabled = dfIdx === 0;
+    document.getElementById('df-next').disabled = dfIdx === DF_FOTOS.length - 1;
+}
+
+function ampliar(i) {
+    dfIdx = i;
+    pintarVisor();
     document.getElementById('df-lightbox').classList.add('open');
 }
+
+function mover(paso) {
+    const siguiente = dfIdx + paso;
+    if (siguiente < 0 || siguiente >= DF_FOTOS.length) return;
+    dfIdx = siguiente;
+    pintarVisor();
+}
+
+function cerrarVisor() { document.getElementById('df-lightbox').classList.remove('open'); }
+
+document.addEventListener('keydown', function (e) {
+    const abierto = document.getElementById('df-lightbox')?.classList.contains('open');
+    if (!abierto) return;
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); mover(-1); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); mover(1); }
+    if (e.key === 'Escape')     { cerrarVisor(); }
+});
 async function conforme() {
     if (!confirm('¿Aprobar la devolución completa de la fianza?')) return;
 
