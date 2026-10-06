@@ -226,6 +226,7 @@ Route::middleware('auth')->group(function () {
             Route::get('usuarios_form/{id}', [VmUsuarioController::class, 'show'])->where(['project' => 'vm', 'id' => '[0-9]+'])->name('vm.usuario_form');
             Route::get('usuarios/{id}/ficha', fn(\App\Models\Project $project, $id) => redirect()->route('ficha', [$project->slug, 'vm_usuarios', $id]))->where('project', 'vm')->name('vm.usuario.ficha');
             Route::patch('vm_usuarios/{id}/ficha', [VmUsuarioController::class, 'update'])->where('project', 'vm')->name('vm.usuario.update');
+            Route::patch('vm_usuarios/{id}/supervisados', [VmUsuarioController::class, 'updateSupervisados'])->where('project', 'vm')->name('vm.usuario.supervisados');
             Route::post('vm_usuarios/{id}/contratos', [VmUsuarioController::class, 'storeContrato'])->where('project', 'vm')->name('vm.contrato.store');
             Route::patch('vm_usuarios/{id}/contratos/{contratoId}', [VmUsuarioController::class, 'updateContrato'])->where('project', 'vm')->name('vm.contrato.update');
             Route::post('vm_usuarios/{id}/bonus', [VmUsuarioController::class, 'storeBonus'])->where('project', 'vm')->name('vm.bonus.store');
