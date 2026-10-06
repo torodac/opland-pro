@@ -93,6 +93,10 @@
 
   @if($pendiente && $puedeEditar)
     <div style="display:flex;gap:8px;margin-top:12px">
+      <button type="button" class="df-btn" onclick="conforme()"
+              style="border-color:#B7E0C4;background:#F1FAF4;color:#1B7F3B">
+        Conforme
+      </button>
       <button type="button" class="df-btn" onclick="abrirRetener()"
               style="border-color:#E3C9A3;background:#FDF8F1;color:#9A5B00">
         Retener
@@ -201,6 +205,18 @@ function ampliar(url) {
     document.getElementById('df-lightbox-img').src = url;
     document.getElementById('df-lightbox').classList.add('open');
 }
+async function conforme() {
+    if (!confirm('¿Aprobar la devolución completa de la fianza?')) return;
+
+    const r = await fetch(BASE_DF + '/conforme', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_DF, 'Accept': 'application/json' },
+    });
+    const j = await r.json().catch(() => ({}));
+    if (j.error) { alert(j.error); return; }
+    location.href = '{{ route('vm.dev-fianzas', $project->slug) }}';
+}
+
 function abrirRetener()  { document.getElementById('df-retener').classList.add('open'); }
 function cerrarRetener() { document.getElementById('df-retener').classList.remove('open'); }
 

@@ -179,6 +179,10 @@ class DevFianzasController extends Controller
             ->leftJoin('vm_propiedades as p', 'p.id', '=', 'r.id_propiedades')
             ->leftJoin('admin_users as au', 'au.id', '=', 'r.fianza_usuario')
             ->where(fn($x) => $x->where('r.deleted', 0)->orWhereNull('r.deleted'))
+            // Las canceladas no tienen nada que decidir: no hubo estancia, ni limpieza de salida,
+            // ni fianza. Y de hecho Icnea devuelve pending_deposit vacío para ellas, así que
+            // tampoco se les pregunta nunca (icnea:sync-importes ya las excluye).
+            ->where('r.booking_status', '<>', 'cancelled')
             ->where('r.check_out_date', '>', self::ANTES_DE)
             ->whereRaw('r.check_out_date < CURRENT_DATE')
             ->selectRaw("
