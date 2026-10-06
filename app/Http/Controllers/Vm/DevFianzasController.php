@@ -28,6 +28,11 @@ class DevFianzasController extends Controller
     // id_reservas, así que no habría forma fiable de atarlas a la reserva.
     private const TIPOS_SALIDA = ['Checkout', 'Limpieza salida'];
 
+    // Una limpieza descartada no se hizo, así que no dice nada del estado en que quedó la casa:
+    // ni ella ni sus comentarios ni sus fotos cuentan aquí. "Cancelada" es otro valor posible del
+    // campo, pero hoy no hay ninguna tarea con él.
+    private const ESTADOS_EXCLUIDOS = ['Descartada'];
+
     public const ESTADO_APROBADA = 'Aprobada devolución';
     public const ESTADO_RETENER  = 'Aplicar retención';
 
@@ -173,7 +178,8 @@ class DevFianzasController extends Controller
      */
     private function baseQuery()
     {
-        $tipos = "'" . implode("','", self::TIPOS_SALIDA) . "'";
+        $tipos     = "'" . implode("','", self::TIPOS_SALIDA) . "'";
+        $excluidos = "'" . implode("','", self::ESTADOS_EXCLUIDOS) . "'";
 
         return DB::table('vm_reservas as r')
             ->leftJoin('vm_propiedades as p', 'p.id', '=', 'r.id_propiedades')
@@ -195,11 +201,13 @@ class DevFianzasController extends Controller
                    JOIN vm_tareas_limpieza t ON t.id = c.id_tarea
                   WHERE c.tipo = 'limpieza' AND COALESCE(c.deleted, 0) = 0
                     AND t.id_reservas = r.id AND t.\"Tipo\" IN ({$tipos})
+                    AND COALESCE(t.estado, '') NOT IN ({$excluidos})
                     AND COALESCE(t.deleted, 0) = 0) AS n_comentarios,
                 (SELECT count(*) FROM vm_fotos f
                    JOIN vm_tareas_limpieza t ON t.id = f.id_tareas_limpieza
                   WHERE COALESCE(f.deleted, 0) = 0
                     AND t.id_reservas = r.id AND t.\"Tipo\" IN ({$tipos})
+                    AND COALESCE(t.estado, '') NOT IN ({$excluidos})
                     AND COALESCE(t.deleted, 0) = 0) AS n_fotos
             ");
     }
@@ -210,6 +218,7 @@ class DevFianzasController extends Controller
         return DB::table('vm_tareas_limpieza')
             ->where('id_reservas', $reservaId)
             ->whereIn('Tipo', self::TIPOS_SALIDA)
+            ->whereNotIn(DB::raw("COALESCE(estado, '')"), self::ESTADOS_EXCLUIDOS)
             ->where(fn($x) => $x->where('deleted', 0)->orWhereNull('deleted'))
             ->orderBy('fecha_planificada')
             ->get(['id', 'nombre', 'fecha_planificada', 'estado', 'breezeway_task_id']);
