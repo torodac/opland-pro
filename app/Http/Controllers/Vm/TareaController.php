@@ -156,7 +156,19 @@ class TareaController extends Controller
         $tablaLabel = ['limpieza' => 'tareas_limpieza', 'mantenimiento' => 'tareas_mantenimiento', 'piscina' => 'tareas_piscinas'];
         $canEdit    = auth()->user()->canEditTable($project, $tableName);
 
+        // Comentarios traídos de Breezeway (breezeway:sync-comentarios, 22:00). Solo existen
+        // para limpieza y mantenimiento: las de piscina no salen de Breezeway.
+        $comentarios = in_array($tipo, ['limpieza', 'mantenimiento'], true)
+            ? DB::table('vm_tareas_comentarios')
+                ->where('tipo', $tipo)
+                ->where('id_tarea', $id)
+                ->where(fn($q) => $q->where('deleted', 0)->orWhereNull('deleted'))
+                ->orderBy('fecha')
+                ->get(['id', 'comentario', 'fecha'])
+            : collect();
+
         return view('vm.tarea', compact(
+            'comentarios',
             'project', 'tipo', 'tarea', 'propiedad', 'fotos',
             'usuarios', 'usuariosDisponibles', 'usuariosConImputaciones',
             'imputaciones', 'totalImputado',

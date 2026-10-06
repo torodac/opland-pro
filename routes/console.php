@@ -36,6 +36,13 @@ Schedule::command('breezeway:sync-properties')->dailyAt('07:15')->withoutOverlap
 Schedule::command('breezeway:sync-tasks')->hourlyAt(0)->between('08:00', '20:00')->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/breezeway-sync-tasks.log'));
 
+// Comentarios de las tareas del día, una sola pasada a las 22:00 -- dos horas después de la
+// última de sync-tasks, para que el token no choque con ella (el endpoint de autenticación de
+// Breezeway devuelve 429 si se le piden varios seguidos). Van aparte porque son una llamada por
+// tarea: dentro del sync horario serían unas 2.000 llamadas diarias de más.
+Schedule::command('breezeway:sync-comentarios')->dailyAt('22:00')->withoutOverlapping()
+    ->appendOutputTo(storage_path('logs/breezeway-sync-comentarios.log'));
+
 // Revisa storage/logs/laravel.log en busca de ERROR/WARNING del día anterior (de cualquier
 // comando -- todos pasan por el mismo canal de log) y envía un correo si encuentra alguno. A las
 // 07:45, después de icnea:sync-importes (06:00), vm:generar-tarea-informes-rrhh (06:30),

@@ -241,7 +241,22 @@ $csrf         = csrf_token();
       <div class="field-val {{ !$tarea->fecha_planificada ? 'empty' : '' }}" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
         <span>{{ $tarea->fecha_planificada ? \Carbon\Carbon::parse($tarea->fecha_planificada)->translatedFormat('j \d\e F Y') : 'Sin fecha' }}</span>
         @if ($tarea->breezeway_task_id ?? null)
-        <span style="font-size:11px;color:#9ca3af;font-variant-numeric:tabular-nums;white-space:nowrap">Breezeway #{{ $tarea->breezeway_task_id }}</span>
+        @php
+            // El departamento va en la ruta de Breezeway, y su nombre no es el nuestro:
+            // limpieza -> housekeeping, mantenimiento -> maintenance.
+            $bzwDepto = $tipo === 'limpieza' ? 'housekeeping' : 'maintenance';
+            $bzwUrl   = "https://app.breezeway.io/tasks/{$bzwDepto}?flyout=task_edit&taskId={$tarea->breezeway_task_id}";
+        @endphp
+        <span style="display:flex;align-items:center;gap:4px;white-space:nowrap">
+          <span style="font-size:11px;color:#9ca3af;font-variant-numeric:tabular-nums">Breezeway #{{ $tarea->breezeway_task_id }}</span>
+          <button type="button" id="bzw-copiar"
+                  data-url="{{ $bzwUrl }}"
+                  title="Copiar el enlace a esta tarea en Breezeway"
+                  style="background:none;border:0;padding:2px;cursor:pointer;display:inline-flex;align-items:center;line-height:0;opacity:.75">
+            <img src="{{ asset('img/breezeway.svg') }}" alt="Breezeway" style="width:15px;height:15px;display:block">
+          </button>
+          <span id="bzw-copiado" style="font-size:11px;color:#16a34a;display:none">Copiado</span>
+        </span>
         @endif
       </div>
     </div>
@@ -383,6 +398,39 @@ $csrf         = csrf_token();
 .foto-name{font-size:10px;color:#777;text-align:center;padding:3px 4px 4px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}
 </style>
+<div class="section-card">
+  <div class="sec-header">
+    <div class="sec-title"><i class="ti ti-message-2"></i>Comentarios</div>
+    @if ($comentarios->count())
+      <span style="font-size:11px;color:#bbb">{{ $comentarios->count() }}</span>
+    @endif
+  </div>
+
+  @if ($comentarios->count())
+    <div style="display:flex;flex-direction:column;gap:8px">
+      {{-- $com, no $c: la vista ya usa $c para la paleta de colores ($c['tx'] en Fotos) y el
+           foreach la pisaba, rompiendo los bloques de más abajo. --}}
+      @foreach ($comentarios as $com)
+        <div style="border-left:2px solid #e5e5e5;padding:2px 0 2px 10px">
+          <div style="font-size:11px;color:#aaa;margin-bottom:2px">
+            {{ $com->fecha ? \Illuminate\Support\Carbon::parse($com->fecha)->translatedFormat('D j M · H:i') : '' }}
+          </div>
+          <div style="font-size:13px;white-space:pre-line">{{ $com->comentario }}</div>
+        </div>
+      @endforeach
+    </div>
+  @else
+    <div style="font-size:13px;color:#999">
+      Sin comentarios.
+    </div>
+  @endif
+
+  <div style="font-size:11px;color:#bbb;margin-top:10px">
+    Se escriben en Breezeway y se importan cada noche; aquí no se pueden editar. Breezeway no
+    informa de quién escribe cada uno.
+  </div>
+</div>
+
 <div class="section-card">
   <div class="sec-header">
     <div class="sec-title"><i class="ti ti-camera"></i>Fotos</div>
@@ -696,6 +744,39 @@ async function fotoRenombrarGuardar() {
   } catch(e) { alert('Error al renombrar.'); }
   btn.disabled = false; btn.textContent = 'Guardar';
 }
+
+// ── Copiar el enlace de la tarea en Breezeway ────────────────────────────────
+// navigator.clipboard necesita contexto seguro; en producción lo hay, pero si fallara se cae
+// al textarea + execCommand para no dejar el botón sin hacer nada.
+document.addEventListener('DOMContentLoaded', function () {
+    const btn = document.getElementById('bzw-copiar');
+    if (!btn) return;
+
+    btn.addEventListener('click', async function () {
+        const url = btn.dataset.url;
+        let ok = false;
+        try {
+            await navigator.clipboard.writeText(url);
+            ok = true;
+        } catch (e) {
+            const ta = document.createElement('textarea');
+            ta.value = url;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+            ta.remove();
+        }
+        const aviso = document.getElementById('bzw-copiado');
+        if (aviso) {
+            aviso.textContent = ok ? 'Copiado' : 'No se pudo copiar';
+            aviso.style.color = ok ? '#16a34a' : '#dc2626';
+            aviso.style.display = 'inline';
+            setTimeout(() => { aviso.style.display = 'none'; }, 1800);
+        }
+    });
+});
 </script>
 
 </div>{{-- /max-width --}}

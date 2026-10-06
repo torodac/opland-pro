@@ -10,7 +10,9 @@ use Illuminate\Support\Facades\Log;
 class IcneaSyncImportesCommand extends Command
 {
     protected $signature   = 'icnea:sync-importes
-                                {--meses=6 : Número de meses hacia atrás (además del actual) para filtrar por checkout}';
+                                {--meses=6 : Número de meses hacia atrás (además del actual) para filtrar por checkout}
+                                {--fianzas-desde= : Guarda la fianza de las reservas con checkout desde esta fecha (por defecto, hoy)}
+                                {--fianzas-hasta= : ...y hasta esta otra (por defecto, hoy)}';
     protected $description = 'Sincroniza vm_reservas_importes (detail[] + channel_commission) para reservas con checkout en los últimos N meses, igual que el botón Sincronizar de Novaciones';
 
     private string $apiKey;
@@ -33,12 +35,23 @@ class IcneaSyncImportesCommand extends Command
         $desde = now()->subMonths($meses)->startOfMonth()->toDateString();
         $hasta = now()->endOfMonth()->toDateString();
 
+        // La fianza (pending_deposit) viene en la MISMA respuesta que ya se pide para los
+        // importes, así que no cuesta ninguna llamada extra. Lo que sí se acota es a quién se le
+        // escribe: solo a las reservas que salen hoy. La ventana de los importes son 6 meses, y
+        // reescribir la fianza de todo ese histórico en cada pasada sería machacar lo guardado
+        // con lo que Icnea diga hoy -- si algún día empieza a limpiar el campo al devolverla,
+        // perderíamos las fianzas pasadas sin enterarnos. Para la carga inicial se pasa el rango
+        // a mano con --fianzas-desde / --fianzas-hasta.
+        $fianzaDesde = (string) ($this->option('fianzas-desde') ?: now()->toDateString());
+        $fianzaHasta = (string) ($this->option('fianzas-hasta') ?: now()->toDateString());
+
         $this->info("Sincronizando importes para reservas con checkout {$desde} → {$hasta}");
+        $this->info("Fianzas: solo reservas con checkout {$fianzaDesde} → {$fianzaHasta}");
 
         $reservas = DB::table('vm_reservas')
             ->whereBetween('check_out_date', [$desde, $hasta])
             ->whereNotIn('booking_status', ['cancelled'])
-            ->get(['id', 'booking_id', 'guest_name', 'id_propiedades', 'check_out_date']);
+            ->get(['id', 'booking_id', 'guest_name', 'id_propiedades', 'check_out_date', 'fianza']);
 
         $this->info(count($reservas) . ' reservas a procesar.');
 
@@ -47,6 +60,7 @@ class IcneaSyncImportesCommand extends Command
         $actualizadas = 0;
         $borradas = 0;
         $errores = 0;
+        $fianzas = 0;
         // (id_propiedades, year, month) unicos vistos, para comprobar al final si alguna
         // novacion ya documentada ha dejado de cuadrar tras esta reconciliacion -- misma
         // comprobacion que dispara el boton "Sincronizar" de Novaciones.
@@ -64,6 +78,20 @@ class IcneaSyncImportesCommand extends Command
                 $this->warn("  [{$reserva->booking_id}] No se pudo obtener detalle.");
                 $errores++;
                 continue;
+            }
+
+            // Fianza: se escribe tal cual viene, el 0 incluido, porque "no hay fianza" es un dato
+            // igual de válido que un importe. Solo se toca la fila si el valor cambia, para no
+            // mover el updatedat de media tabla en cada pasada.
+            if ($reserva->check_out_date >= $fianzaDesde && $reserva->check_out_date <= $fianzaHasta
+                && array_key_exists('pending_deposit', $response)) {
+                $nueva  = (float) str_replace(',', '.', (string) $response['pending_deposit']);
+                $actual = $reserva->fianza === null ? null : (float) $reserva->fianza;
+                if ($actual === null || abs($actual - $nueva) >= 0.005) {
+                    DB::table('vm_reservas')->where('id', $reserva->id)
+                        ->update(['fianza' => $nueva, 'updatedat' => now()]);
+                    $fianzas++;
+                }
             }
 
             // Construir líneas: detail[] (traduciendo el catalán) + channel_commission como línea extra.
@@ -148,7 +176,7 @@ class IcneaSyncImportesCommand extends Command
             $this->line("  [{$reserva->booking_id}] {$reserva->guest_name}: " . count($lineas) . ' líneas' . ($cc ? " · CC: {$cc}" : ''));
         }
 
-        $this->info("Completado — procesadas: {$procesadas}, insertadas: {$insertadas}, actualizadas: {$actualizadas}, marcadas obsoletas: {$borradas}, errores: {$errores}");
+        $this->info("Completado — procesadas: {$procesadas}, insertadas: {$insertadas}, actualizadas: {$actualizadas}, marcadas obsoletas: {$borradas}, fianzas: {$fianzas}, errores: {$errores}");
 
         // Este comando estuvo seis semanas sin importar nada y nadie se enteró: Icnea cambió la
         // forma de la respuesta, fetchReservation() devolvía null para TODAS las reservas, el
