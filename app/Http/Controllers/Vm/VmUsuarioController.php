@@ -42,36 +42,13 @@ class VmUsuarioController extends Controller
 
         $ids = array_values(array_unique(array_map('intval', $data['supervisados'])));
 
-        if (in_array($id, $ids, true)) {
-            return response()->json(['error' => 'Una persona no puede supervisarse a sí misma: sería firmar su propio informe.'], 422);
-        }
-
-        $candidatos = DB::table('vm_usuarios')->where('deleted', 0)->whereIn('id', $ids ?: [0])
-            ->get(['id', 'nombre', 'id_rol'])->keyBy('id');
-
-        foreach ($ids as $uid) {
-            $u = $candidatos->get($uid);
-            if (!$u) {
-                return response()->json(['error' => "El usuario #{$uid} no existe o está borrado."], 422);
-            }
-            if (in_array((int) $u->id_rol, self::ROLES_NO_SUPERVISABLES, true)) {
-                return response()->json(['error' => "{$u->nombre} no puede ser supervisado: su rol firma un paso global del circuito."], 422);
-            }
-        }
-
-        // Unicidad: el filtro de opciones hace improbable el error, pero no lo impide -- un POST
-        // directo se lo salta. Y la consecuencia sería silenciosa: con dos responsables, el
-        // informe lo firmaría quien saliera primero en la consulta.
-        foreach (DB::table('vm_usuarios')->where('deleted', 0)->where('id', '!=', $id)
-                   ->whereNotNull('supervisados')->get(['id', 'nombre', 'supervisados']) as $otro) {
-            $suyos = array_map('intval', json_decode($otro->supervisados, true) ?: []);
-            $choque = array_intersect($ids, $suyos);
-            if ($choque) {
-                $nombres = $candidatos->only($choque)->pluck('nombre')->implode(', ');
-                return response()->json([
-                    'error' => "Ya está en la lista de {$otro->nombre}: {$nombres}. Quítalo de ahí primero.",
-                ], 422);
-            }
+        // Las reglas (existencia, roles permitidos, no uno mismo, exclusividad) viven en
+        // MultiusuarioGuard y salen de la configuración del campo, para que esta pantalla y la
+        // ficha genérica del no-code validen exactamente lo mismo. Tenerlas aquí dejaba la
+        // segunda puerta sin vigilar.
+        $projectTable = $project->tables()->where('name', 'usuarios')->firstOrFail();
+        if ($err = \App\Services\MultiusuarioGuard::error($project, $projectTable, ['supervisados' => $ids], [$id])) {
+            return response()->json(['error' => $err], 422);
         }
 
         DB::table('vm_usuarios')->where('id', $id)->update([
@@ -274,8 +251,18 @@ class VmUsuarioController extends Controller
             ->values()
             ->all();
 
+        // El propio campo, para pintarlo en la vista de edición con el mismo componente que
+        // la ficha genérica (partials.field) en lugar de reimplementarlo.
+        $campoSupervisados = $project->tables()->where('name', 'usuarios')->first()
+            ?->fields->firstWhere('name', 'supervisados');
+
+        $supervisadosNombres = $supervisadosSel
+            ? DB::table('vm_usuarios')->whereIn('id', $supervisadosSel)
+                ->orderBy('nombre')->pluck('nombre')->all()
+            : [];
+
         return view('vm.usuario', compact(
-            'supervisadosSel','supervisadosOpciones',
+            'supervisadosSel','supervisadosOpciones','campoSupervisados','supervisadosNombres',
             'project','usuario','contratos','ausencias','nominas',
             'bonus','ausenciasPorTipo','roles','departamentos','cargos','horarios','fichajes','tiposAusencia','festivos','descFestivos',
             'pushInactivo','diasHe','imputacionesPorFecha','fichadosPorFecha','ajustesHe',

@@ -169,6 +169,19 @@ td{padding:8px;font-size:13px;}
       <p style="font-size:13px;font-weight:500;margin:0;">{{ $val ?: '—' }}</p>
     </div>
     @endforeach
+
+    {{-- Supervisa a: ocupa el grid entero porque la lista crece, y es una relación con otras
+         personas, no un dato de esta ficha como los de arriba. --}}
+    <div style="grid-column:1/-1;background:rgba(0,0,0,.03);border-radius:8px;padding:.8rem;">
+      <p style="font-size:11px;color:#888;margin:0 0 3px;display:flex;align-items:center;gap:5px;">
+        Supervisa a
+        <span class="app-tooltip" style="pointer-events:auto;vertical-align:middle">
+          <i class="ti ti-info-circle" style="font-size:13px;opacity:.7;"></i>
+          <span class="app-tooltip-box">Este usuario firmará el informe mensual de las personas aquí seleccionadas.</span>
+        </span>
+      </p>
+      <p style="font-size:13px;font-weight:500;margin:0;">{{ $supervisadosNombres ? implode(' · ', $supervisadosNombres) : '—' }}</p>
+    </div>
   </div>
   {{-- MODO EDICIÓN --}}
   <div id="datos-edit" style="display:none;background:#fff;border:0.5px solid rgba(0,0,0,.1);border-radius:12px;padding:1rem 1.25rem;margin-bottom:12px;">
@@ -195,6 +208,25 @@ td{padding:8px;font-size:13px;}
           @foreach($roles as $r)<option value="{{ $r->id }}" {{ ($usuario->id_rol ?? null)==$r->id?'selected':'' }}>{{ $r->nombre }}</option>@endforeach
         </select>
       </div>
+      @if($campoSupervisados)
+      <div class="form-row" style="grid-column:1/-1;">
+        <label class="form-label" style="display:flex;align-items:center;gap:5px;">
+          Supervisa a
+          <span class="app-tooltip" style="pointer-events:auto;vertical-align:middle">
+            <i class="ti ti-info-circle" style="font-size:13px;opacity:.7;"></i>
+            <span class="app-tooltip-box">Este usuario firmará el informe mensual de las personas aquí seleccionadas.</span>
+          </span>
+        </label>
+        @include('partials.field', [
+            'campo'           => $campoSupervisados,
+            'valor'           => $supervisadosSel,
+            'projectUsuarios' => $supervisadosOpciones,
+        ])
+        <p style="font-size:11px;opacity:.55;margin:4px 0 0;">
+          Solo aparecen las personas que no supervisa nadie más. Para mover a alguien, quítalo primero de la lista de su responsable actual.
+        </p>
+      </div>
+      @endif
       <div class="form-row"><label class="form-label">Acceso</label>
         <select id="u-acceso">
           @foreach(['APP y web','Solo APP','Solo web','Sin acceso'] as $op)
@@ -203,36 +235,6 @@ td{padding:8px;font-size:13px;}
         </select>
       </div>
     </div>
-  </div>
-
-  {{-- Supervisa a: la lista de personas cuyo informe mensual firma este usuario. Encima de
-       Contratos a propósito: es lo que define su papel respecto a otros, no un dato suyo. --}}
-  <div class="section-card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <p class="sec-title" style="margin:0;">
-        <i class="ti ti-user-check" style="font-size:16px;"></i>Supervisa a
-        <span class="app-tooltip" style="pointer-events:auto;vertical-align:middle">
-          <i class="ti ti-info-circle" style="font-size:14px;opacity:.55;"></i>
-          <span class="app-tooltip-box">Este usuario firmará el informe mensual de las personas aquí seleccionadas.</span>
-        </span>
-      </p>
-      <button class="btn" id="sv-guardar" onclick="guardarSupervisados()" style="display:none;">
-        <i class="ti ti-check" style="font-size:13px;vertical-align:-2px;"></i> Guardar
-      </button>
-    </div>
-
-    <div id="sv-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
-
-    <select id="sv-add" onchange="svAdd(this.value)" style="max-width:320px;">
-      <option value="">— Añadir persona —</option>
-      @foreach($supervisadosOpciones as $op)
-        <option value="{{ $op['id'] }}">{{ $op['label'] }}</option>
-      @endforeach
-    </select>
-
-    <p style="font-size:12px;opacity:.6;margin:8px 0 0;">
-      Solo aparecen las personas que no supervisa nadie más. Para mover a alguien, quítalo primero de la lista de su responsable actual.
-    </p>
   </div>
 
   {{-- Contratos --}}
@@ -656,44 +658,19 @@ async function ajax(url, method, data) {
 }
 
 // ── Supervisa a ───────────────────────────────────────────────────────────────
-const SV_OPCIONES = @json($supervisadosOpciones);
-let svSel = @json($supervisadosSel);
-
-function svLabel(id) {
-    const o = SV_OPCIONES.find(u => u.id === id);
-    return o ? o.label : ('#' + id);
+// El componente de partials.field deja un <input type="hidden" name="supervisados[]">
+// por cada seleccionado, asi que la lista se lee del DOM en vez de duplicar su estado.
+function leerSupervisados() {
+    return Array.from(document.querySelectorAll('input[name="supervisados[]"]'))
+                .map(i => parseInt(i.value, 10))
+                .filter(n => !isNaN(n));
 }
-function svPintar() {
-    const cont = document.getElementById('sv-chips');
-    cont.innerHTML = svSel.length
-        ? svSel.map(id => `<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;background:#fff3e0;color:#9a4b00;border-radius:6px;font-size:12px;">
-               ${svLabel(id)}
-               <button type="button" onclick="svQuitar(${id})" style="background:none;border:0;cursor:pointer;color:#c47a3a;line-height:1;padding:0;">&times;</button>
-             </span>`).join('')
-        : '<span style="font-size:13px;opacity:.55;">No supervisa a nadie.</span>';
-
-    // El <option> de quien ya está en la lista se oculta, para no poder añadirlo dos veces
-    document.querySelectorAll('#sv-add option').forEach(op => {
-        if (op.value) op.hidden = svSel.includes(parseInt(op.value, 10));
-    });
-    document.getElementById('sv-guardar').style.display = svSucio() ? 'flex' : 'none';
-}
-const SV_INICIAL = JSON.stringify(@json($supervisadosSel));
-function svSucio() { return JSON.stringify(svSel) !== SV_INICIAL; }
-function svAdd(v) {
-    const id = parseInt(v, 10);
-    if (id && !svSel.includes(id)) svSel.push(id);
-    document.getElementById('sv-add').value = '';
-    svPintar();
-}
-function svQuitar(id) { svSel = svSel.filter(n => n !== id); svPintar(); }
 
 async function guardarSupervisados() {
-    const r = await ajax(BASE + '/supervisados', 'PATCH', { supervisados: svSel });
-    if (r && r.error) { alert(r.error); return; }
-    location.reload();
+    const r = await ajax(BASE + '/supervisados', 'PATCH', { supervisados: leerSupervisados() });
+    if (r && r.error) { alert(r.error); return false; }
+    return true;
 }
-document.addEventListener('DOMContentLoaded', svPintar);
 
 function enterEditMode() {
     document.getElementById('datos-view').style.display = 'none';
@@ -707,7 +684,12 @@ function cancelEditMode() {
     document.getElementById('btn-view-mode').style.display = 'flex';
     document.getElementById('btn-edit-mode').style.display = 'none';
 }
-function guardarUsuario() {
+async function guardarUsuario() {
+    // "Supervisa a" primero: es lo unico que puede rechazarse (ya esta en otra lista, rol no
+    // permitido...). Si falla, se avisa y no se guarda nada mas, para que el mensaje se vea
+    // con el formulario todavia abierto en lugar de perderse en el recargado.
+    if (!await guardarSupervisados()) return;
+
     ajax(BASE + '/ficha', 'PATCH', {
         nombre:       document.getElementById('u-nombre').value,
         dni:          document.getElementById('u-dni').value,

@@ -295,6 +295,9 @@ class FichaController extends Controller
         if ($err = \App\Services\AutoreferenciaGuard::error($project, $projectTable, $data, $ids->all())) {
             abort(422, $err);
         }
+        if ($err = \App\Services\MultiusuarioGuard::error($project, $projectTable, $data, $ids->all())) {
+            abort(422, $err);
+        }
 
         $afectados = DB::table($fullTable)->whereIn('id', $ids)->update($data);
 
@@ -348,6 +351,10 @@ class FichaController extends Controller
 
         if ($err = \App\Services\AutoreferenciaGuard::error($project, $projectTable, $data, [$id])) {
             return back()->withErrors([\App\Services\AutoreferenciaGuard::campos($project, $projectTable)[0] => $err])->withInput();
+        }
+        if ($err = \App\Services\MultiusuarioGuard::error($project, $projectTable, $data, [$id])) {
+            $primero = \App\Services\MultiusuarioGuard::campos($projectTable)->first();
+            return back()->withErrors([$primero->name => $err])->withInput();
         }
 
         $data['updateuser'] = $this->currentUserId() ?? DB::table($projectTable->getFullTableName())->where('id', $id)->value('updateuser');
@@ -678,13 +685,13 @@ class FichaController extends Controller
         // Filtrar por roles si algún campo multiusuario tiene extras "roles:X,Y"
         $allowedRolIds = null;
         if ($projectTable) {
-            $rolesExtras = $projectTable->fields
+            $rolesDeclarados = $projectTable->fields
                 ->where('type', 'multiusuario')
-                ->map(fn($f) => $f->extras)
-                ->filter(fn($e) => str_starts_with((string) $e, 'roles:'))
+                ->map(fn($f) => \App\Services\MultiusuarioGuard::rolesPermitidos($f))
+                ->filter()
                 ->first();
-            if ($rolesExtras) {
-                $allowedRolIds = array_map('intval', explode(',', substr($rolesExtras, 6)));
+            if ($rolesDeclarados) {
+                $allowedRolIds = $rolesDeclarados;
             }
         }
 
@@ -796,6 +803,9 @@ class FichaController extends Controller
         abort_if($registro?->blocked ?? false, 403, 'Este registro está bloqueado y no puede editarse.');
 
         if ($err = \App\Services\AutoreferenciaGuard::error($project, $projectTable, [$fieldName => $request->input('value')], [$id])) {
+            return response()->json(['error' => $err], 422);
+        }
+        if ($err = \App\Services\MultiusuarioGuard::error($project, $projectTable, [$fieldName => $request->input('value')], [$id])) {
             return response()->json(['error' => $err], 422);
         }
 

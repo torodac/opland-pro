@@ -92,14 +92,13 @@ class ListadoController extends Controller
         }
 
         // Filtrar por roles si algún campo multiusuario tiene extras "roles:X,Y"
-        $rolesExtras = $projectTable->fields
+        $rolesDeclarados = $projectTable->fields
             ->where('type', 'multiusuario')
-            ->map(fn($f) => $f->extras)
-            ->filter(fn($e) => str_starts_with((string) $e, 'roles:'))
+            ->map(fn($f) => \App\Services\MultiusuarioGuard::rolesPermitidos($f))
+            ->filter()
             ->first();
-        if ($rolesExtras) {
-            $allowedRolIds = array_map('intval', explode(',', substr($rolesExtras, 6)));
-            $allUsuarios   = $allUsuarios->filter(fn($u) => in_array((int) ($u->id_rol ?? 0), $allowedRolIds));
+        if ($rolesDeclarados) {
+            $allUsuarios = $allUsuarios->filter(fn($u) => in_array((int) ($u->id_rol ?? 0), $rolesDeclarados));
         }
 
         // Lista filtrada para el formulario: solo el propio usuario si el rol está restringido
