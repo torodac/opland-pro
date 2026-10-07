@@ -9,6 +9,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use App\Services\CircuitoFirmas;
+use App\Services\PanelInformes;
 use App\Services\RoleHierarchy;
 use App\Services\VmHorasService;
 use App\Services\VmJerarquiaAprobacion;
@@ -154,10 +155,11 @@ class InformeImputacionesController extends Controller
                 : collect();
         }
 
-        // Fuera de este panel: Santi Ramón-Llin (id 1, ficha de Dirección general que no pasa
-        // por el flujo de aprobación) y el rol "Proveedor limpieza" (6, externo, no informe
-        // mensual propio). Pedido explícitamente, no es un criterio genérico de vm_usuarios.
-        $usuarios = $usuarios->reject(fn($u) => (int) $u->id === 1 || (int) $u->id_rol === 6)->values();
+        // Quién entra en el panel: ver App\Services\PanelInformes, compartido con el panel del
+        // informe de kilómetros. Filtra por contrato que cubra el mes (antes no se miraba, y quien
+        // entraba más tarde salía hacia atrás en todos los meses con el informe vacío) y aplica
+        // las exclusiones pedidas expresamente.
+        $usuarios = PanelInformes::filtrar($usuarios, $year, $month);
 
         // Pills de filtro por rol (limpiadora=1, mantenimiento=4, sscc=resto).
         $rolFiltro = in_array($request->input('rol'), ['limpiadora', 'mantenimiento', 'sscc'], true) ? $request->input('rol') : null;

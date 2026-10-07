@@ -369,7 +369,9 @@ class KmController extends Controller
                 : collect();
         }
 
-        $usuarios = $usuarios->reject(fn($u) => (int) $u->id === 1 || (int) $u->id_rol === 6)->values();
+        // Mismo criterio que el panel mensual (App\Services\PanelInformes): contrato que cubra
+        // el mes y las exclusiones pedidas.
+        $usuarios = \App\Services\PanelInformes::filtrar($usuarios, $year, $month);
         $userIds  = $usuarios->pluck('id')->all();
 
         $estados = DB::table('vm_informes_estado')
