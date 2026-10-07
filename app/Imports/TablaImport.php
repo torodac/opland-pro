@@ -69,6 +69,34 @@ class TablaImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
         return $val;
     }
 
+    // SI/NO de un CSV en español sobre una columna booleana.
+    //
+    // Los tipos tinyint ("Sí/No") y smallint ("checkbox") crean una columna boolean de Postgres,
+    // que acepta true/false, t/f, yes/no, y/n y 1/0 -- pero NO "si". Y ahí está la trampa que lo
+    // hacía difícil de ver: "NO" sí es un literal válido (vale false), así que un fichero con
+    // 28 "NO" y un "SI" importaba todo menos esa fila y reventaba con un 500 de Postgres sin
+    // explicar nada (caso real: proveedores.csv, 2026-10-07).
+    //
+    // Un valor que no se reconozca se deja TAL CUAL a propósito: que falle de forma ruidosa es
+    // mejor que convertir en "false" un "quizá" y dejar el dato mal en silencio.
+    private function normalizeBooleanValue($valor)
+    {
+        if (is_bool($valor) || $valor === null || $valor === '') return $valor;
+        if (is_int($valor) || is_float($valor)) return (bool) $valor;
+
+        // Sin acentos y en minúsculas: "SÍ", "Sí" y "si" son lo mismo.
+        $v = mb_strtolower(trim((string) $valor));
+        $v = strtr($v, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u']);
+
+        $ciertos = ['si', 's', 'verdadero', 'cierto', 'v', 'true', 't', 'yes', 'y', '1', 'x'];
+        $falsos  = ['no', 'n', 'falso', 'f', 'false', '0', '-'];
+
+        if (in_array($v, $ciertos, true)) return true;
+        if (in_array($v, $falsos, true))  return false;
+
+        return $valor;
+    }
+
     // Pre-carga los mapas nombre→id para todos los campos desplegable
     private function buildRefCache(): void
     {
@@ -113,6 +141,11 @@ class TablaImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
                 // Normalizar fechas, timestamps y horas en formato dd/mm/aaaa [hh:MM] / hh:MM
                 if ($valor !== null && in_array($fieldTypes[$name] ?? '', ['fecha', 'timestamp', 'time'])) {
                     $valor = $this->normalizeDateValue((string) $valor, $fieldTypes[$name]);
+                }
+
+                // SI/NO y compañía sobre las columnas booleanas (tinyint y smallint)
+                if ($valor !== null && in_array($fieldTypes[$name] ?? '', ['tinyint', 'smallint'])) {
+                    $valor = $this->normalizeBooleanValue($valor);
                 }
 
                 $rowData[$name] = $valor;
