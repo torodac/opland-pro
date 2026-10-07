@@ -201,7 +201,7 @@ class IcneaSyncReservationsCommand extends Command
                     'guest_phone'           => $temp->guest_phone,
                     'guest_language'        => $temp->guest_language,
                     'checkin_status'        => $temp->checkin_status,
-                    'trace'                 => json_encode([['fecha' => $now, 'campo' => 'booking_status', 'de' => null, 'a' => $temp->booking_status]]),
+                    'trace'                 => $this->lineaTraza('booking_status', null, $temp->booking_status),
                     'icnea_updatedat'       => $temp->icnea_updatedat,
                     'createuser'            => 1,
                     'createdat'             => $temp->createdat ?? $now,
@@ -211,7 +211,6 @@ class IcneaSyncReservationsCommand extends Command
             }
 
             // Detectar cambios
-            $trace   = json_decode($existing->trace ?? '[]', true) ?? [];
             $cambios = [];
 
             // La propiedad NUNCA se sobrescribe con un hueco: si el lodging que devuelve Icnea no
@@ -226,7 +225,7 @@ class IcneaSyncReservationsCommand extends Command
                 $vAnterior = $existing->$campo;
                 $vNuevo    = $temp->$campo;
                 if ((string) $vAnterior !== (string) $vNuevo) {
-                    $cambios[] = ['fecha' => $now, 'campo' => $campo, 'de' => $vAnterior, 'a' => $vNuevo];
+                    $cambios[] = ['campo' => $campo, 'de' => $vAnterior, 'a' => $vNuevo];
                 }
             }
 
@@ -235,7 +234,9 @@ class IcneaSyncReservationsCommand extends Command
                 continue;
             }
 
-            $trace = array_merge($trace, $cambios);
+            // Se añaden al final, separadas por saltos de línea, conservando lo que ya hubiera.
+            $lineas = array_map(fn($c) => $this->lineaTraza($c['campo'], $c['de'], $c['a']), $cambios);
+            $trace  = trim(($existing->trace ? $existing->trace . "\n" : '') . implode("\n", $lineas));
 
             $datos = [
                 'booking_status'     => $temp->booking_status,
@@ -248,7 +249,7 @@ class IcneaSyncReservationsCommand extends Command
                 'guest_name'         => $temp->guest_name,
                 'guest_email'        => $temp->guest_email,
                 'guest_phone'        => $temp->guest_phone,
-                'trace'              => json_encode($trace),
+                'trace'              => $trace,
                 'icnea_updatedat'    => now(),
                 'updateuser'         => 1,
                 'updatedat'          => $now,
@@ -278,6 +279,20 @@ class IcneaSyncReservationsCommand extends Command
 
         $this->info("Resultado: {$nuevas} nuevas, {$actualizadas} actualizadas, {$sinCambios} sin cambios.");
         Log::info("IcneaSyncReservations merge: {$nuevas} nuevas, {$actualizadas} actualizadas, {$sinCambios} sin cambios.");
+    }
+
+    /**
+     * Una línea de la traza de cambios, legible tal cual en el campo "Traza cambios" de la ficha.
+     *
+     * La traza se guardaba como un array JSON en una columna json, y en la ficha se veía como un
+     * churro de objetos separados por comas. Pasa a ser texto con un cambio por línea (y la
+     * columna, a text, que es lo que el campo declaraba desde siempre).
+     */
+    private function lineaTraza(string $campo, $de, $a): string
+    {
+        $vacio = fn($v) => ($v === null || $v === '') ? '(vacío)' : (string) $v;
+
+        return now()->format('d/m/Y H:i') . " · {$campo}: " . $vacio($de) . ' → ' . $vacio($a);
     }
 
     private function date(?string $val): ?string
