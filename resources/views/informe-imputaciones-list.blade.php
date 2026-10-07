@@ -218,12 +218,9 @@ function filtrarRol(rol) {
                 <span class="ap-paso-badge s-{{ $fila->paso }}"><span class="dot"></span>{{ $paso_labels[$fila->paso] ?? $fila->paso }}</span>
             </div>
             <div class="ap-row-right">
-                @if($fila->desviacion)
-                    <div class="ap-flag gray">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
-                        Desviación fichaje/imputación en {{ $fila->desviacion['dias'] }} {{ $fila->desviacion['dias'] === 1 ? 'día' : 'días' }}, suma {{ sprintfDiasHorasMin($fila->desviacion['total_min']) }}
-                    </div>
-                @endif
+                {{-- Oculto a peticion del cliente (2026-10-07): el aviso de desviacion
+                     fichaje/imputacion no se muestra en este panel. El dato se sigue calculando
+                     ($fila->desviacion) y esta disponible en el informe de cada persona. --}}
                 <div class="ap-actions">
                     <a class="ap-btn ap-btn-white" href="{{ $verUrl }}" target="_blank" rel="noopener" title="Abrir informe completo">Ver informe</a>
                     @if($fila->paso === 'completado')
@@ -261,9 +258,8 @@ function filtrarRol(rol) {
             @if($fila->es_turno && $fila->dias_sin_asignar > 0)
                 <span class="ap-sin-asignar">{{ $fila->dias_sin_asignar }} sin horario</span>
             @endif
-            @if($fila->pendientes_validacion > 0)
-                <span class="ap-pendientes-validacion">{{ $fila->pendientes_validacion }} {{ $fila->pendientes_validacion === 1 ? 'validación pendiente' : 'validaciones pendientes' }}</span>
-            @endif
+            {{-- Oculto a peticion del cliente (2026-10-07), igual que la desviacion. El
+                 contador sigue en $fila->pendientes_validacion. --}}
         </div>
         @if($fila->editado_tras_inicio)
         <div class="ap-line3">
