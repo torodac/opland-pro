@@ -27,7 +27,13 @@
         @endif
     </form>
 
-    <div style="background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px;overflow:hidden">
+    <style>
+.df-fila{border-top:0.5px solid rgba(0,0,0,.06);cursor:pointer;transition:background .12s}
+.df-fila:hover{background:rgba(0,0,0,.025)}
+.dark .df-fila:hover{background:rgba(255,255,255,.04)}
+</style>
+
+<div style="background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px;overflow:hidden">
     <table style="width:100%;border-collapse:collapse">
         <thead>
             <tr style="background:rgba(0,0,0,.02)">
@@ -39,17 +45,20 @@
                 <th style="text-align:center;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Coment.</th>
                 <th style="text-align:center;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Fotos</th>
                 <th style="text-align:left;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Estado</th>
-                <th style="padding:8px 12px"></th>
             </tr>
         </thead>
         <tbody>
         @forelse($filas as $f)
-            <tr style="border-top:0.5px solid rgba(0,0,0,.06)" id="fila-{{ $f->id }}">
+            <tr class="df-fila" id="fila-{{ $f->id }}"
+                data-url="{{ route('vm.dev-fianza', [$project->slug, $f->id]) }}">
                 <td style="padding:8px 12px;font-size:13px;white-space:nowrap">
                     {{ \Carbon\Carbon::parse($f->check_out_date)->format('d/m/Y') }}
                 </td>
                 <td style="padding:8px 12px;font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap">
+                    {{-- stopPropagation: este enlace va a la ficha de la RESERVA, no a la de
+                         revisión, y sin esto el clic en la fila se lo llevaría por delante. --}}
                     <a href="{{ url($project->slug . '/reservas/' . $f->id) }}"
+                       onclick="event.stopPropagation()"
                        style="color:#185FA5;text-decoration:none">{{ $f->booking_id }}</a>
                     {{-- Hay limpieza de salida: lo que hace que la reserva se pueda revisar de
                          verdad. Sin ella no hay comentarios ni fotos que mirar. --}}
@@ -81,26 +90,9 @@
                         <span style="color:#bbb">—</span>
                     @endif
                 </td>
-                <td style="padding:8px 12px;text-align:right;white-space:nowrap" class="celda-acciones">
-                    @if(!$f->estado_fianza && $puedeEditar)
-                        <button type="button" onclick="conforme({{ $f->id }})"
-                                style="font-size:12px;padding:4px 10px;border-radius:6px;border:0.5px solid #B7E0C4;background:#F1FAF4;color:#1B7F3B;cursor:pointer">
-                            Conforme
-                        </button>
-                        <a href="{{ route('vm.dev-fianza', [$project->slug, $f->id]) }}"
-                           style="font-size:12px;padding:4px 10px;border-radius:6px;border:0.5px solid #E3C9A3;background:#FDF8F1;color:#9A5B00;text-decoration:none;display:inline-block">
-                            Revisar
-                        </a>
-                    @elseif(!$f->estado_fianza)
-                        <span style="font-size:11px;color:#bbb">sin permiso</span>
-                    @else
-                        <a href="{{ route('vm.dev-fianza', [$project->slug, $f->id]) }}"
-                           style="font-size:12px;color:#888;text-decoration:none">Ver</a>
-                    @endif
-                </td>
             </tr>
         @empty
-            <tr><td colspan="9" style="padding:1.5rem;text-align:center;font-size:13px;color:#999">
+            <tr><td colspan="8" style="padding:1.5rem;text-align:center;font-size:13px;color:#999">
                 @if($q !== '') Ninguna reserva coincide con «{{ $q }}». @else No hay reservas pendientes. @endif
             </td></tr>
         @endforelse
@@ -115,18 +107,11 @@
 </div>
 
 <script>
-const CSRF_DF = '{{ csrf_token() }}';
-
-async function conforme(id) {
-    if (!confirm('¿Aprobar la devolución completa de la fianza?')) return;
-
-    const r = await fetch('{{ url($project->slug . "/dev-fianzas") }}/' + id + '/conforme', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_DF, 'Accept': 'application/json' },
-    });
-    const j = await r.json().catch(() => ({}));
-    if (j.error) { alert(j.error); return; }
-    location.reload();
-}
+// La fila entera abre la ficha de revisión. Las dos decisiones (Conforme y Retener) viven ahí:
+// desde el listado no se puede decidir, porque decidir sin haber mirado los comentarios y las
+// fotos es justo lo que esta pantalla existe para evitar.
+document.querySelectorAll('.df-fila').forEach(function (tr) {
+    tr.addEventListener('click', function () { location.href = tr.dataset.url; });
+});
 </script>
 </x-app-layout>
