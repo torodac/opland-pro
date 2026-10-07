@@ -153,8 +153,24 @@ class IcneaSyncReservationsCommand extends Command
 
     private function mergeIntoReservas(): void
     {
-        $camposComparar = ['booking_status', 'check_in_date', 'check_out_date', 'checkin_status'];
-        $now            = now()->format('Y-m-d H:i:s');
+        // Los campos que se COMPARAN son los mismos que se escriben abajo. Antes se comparaban
+        // solo cuatro y se escribían diez: si a un huésped le cambiaba el email, el teléfono o el
+        // número de adultos y nada más, el merge concluía "sin cambios" y no guardaba nada.
+        $camposBase = [
+            'booking_status', 'check_in_date', 'check_out_date', 'checkin_status',
+            'number_of_adults', 'number_of_children', 'number_of_infants',
+            'guest_name', 'guest_email', 'guest_phone',
+        ];
+
+        // Icnea puede mover una reserva de villa, y hasta ahora eso no llegaba: la propiedad se
+        // escribía SOLO al insertar y después quedaba congelada para siempre. Importa porque
+        // id_propiedades manda en la planilla de liquidación, las novaciones, las tareas de
+        // limpieza y la devolución de fianzas: una reserva en la villa equivocada paga al
+        // propietario equivocado. Caso que lo destapó: la 131282, grabada en Villa Serendi
+        // cuando Icnea dice Villa Regina (2026-10-07).
+        $camposPropiedad = ['icnea_lodging_id', 'id_propiedades', 'vm_propiedades_nombre'];
+
+        $now = now()->format('Y-m-d H:i:s');
 
         $nuevas      = 0;
         $actualizadas = 0;
@@ -198,6 +214,14 @@ class IcneaSyncReservationsCommand extends Command
             $trace   = json_decode($existing->trace ?? '[]', true) ?? [];
             $cambios = [];
 
+            // La propiedad NUNCA se sobrescribe con un hueco: si el lodging que devuelve Icnea no
+            // está mapeado en vm_propiedades, id_propiedades vendría a null, y quedarse sin
+            // propiedad es peor que tenerla desactualizada.
+            $puedeTocarPropiedad = $temp->id_propiedades !== null;
+            $camposComparar = $puedeTocarPropiedad
+                ? array_merge($camposBase, $camposPropiedad)
+                : $camposBase;
+
             foreach ($camposComparar as $campo) {
                 $vAnterior = $existing->$campo;
                 $vNuevo    = $temp->$campo;
@@ -213,7 +237,7 @@ class IcneaSyncReservationsCommand extends Command
 
             $trace = array_merge($trace, $cambios);
 
-            DB::table('vm_reservas')->where('booking_id', $temp->booking_id)->update([
+            $datos = [
                 'booking_status'     => $temp->booking_status,
                 'check_in_date'      => $temp->check_in_date,
                 'check_out_date'     => $temp->check_out_date,
@@ -228,11 +252,27 @@ class IcneaSyncReservationsCommand extends Command
                 'icnea_updatedat'    => now(),
                 'updateuser'         => 1,
                 'updatedat'          => $now,
-            ]);
+            ];
+            if ($puedeTocarPropiedad) {
+                $datos['icnea_lodging_id']      = $temp->icnea_lodging_id;
+                $datos['id_propiedades']        = $temp->id_propiedades;
+                $datos['vm_propiedades_nombre'] = $temp->vm_propiedades_nombre;
+            }
+
+            DB::table('vm_reservas')->where('booking_id', $temp->booking_id)->update($datos);
             $actualizadas++;
 
             foreach ($cambios as $c) {
-                $this->line("  CAMBIO #{$temp->booking_id} {$temp->guest_name}: {$c['campo']} '{$c['de']}' → '{$c['a']}'");
+                $linea = "  CAMBIO #{$temp->booking_id} {$temp->guest_name}: {$c['campo']} '{$c['de']}' → '{$c['a']}'";
+                // Un cambio de villa no es un cambio cualquiera: arrastra liquidación, limpiezas
+                // y fianzas, así que además de la consola va al log, donde sí se lee.
+                if ($c['campo'] === 'id_propiedades') {
+                    Log::warning("IcneaSyncReservations: la reserva #{$temp->booking_id} "
+                        . "({$temp->guest_name}) cambia de propiedad en Icnea: {$c['de']} → {$c['a']} "
+                        . "({$temp->vm_propiedades_nombre}). Revisar liquidación y limpiezas.");
+                    $linea .= '  [registrado en el log]';
+                }
+                $this->line($linea);
             }
         }
 
