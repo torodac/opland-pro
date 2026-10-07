@@ -2,7 +2,9 @@
     // minToHmTl() vive en app/Support/vista-helpers.php
     $filtroKeys = ['f_propiedad','f_fecha_desde','f_fecha_hasta','f_fecha_fin_desde','f_fecha_fin_hasta','f_responsable','f_estado'];
     $hasFilters = request()->hasAny($filtroKeys);
-    $filterKeys = array_merge(['q'], $filtroKeys, ['stat','borrados','ocultos','sort','dir']);
+    $filterKeys = array_merge(['q'], $filtroKeys, ['stat','borrados','ocultos','todos','sort','dir']);
+    // $vistaTotal lo decide el controlador, que es quien filtra la consulta: si la vista lo
+    // recalculara por su cuenta podrían discrepar y saldría la columna sin las filas, o al revés.
     $listUrl = fn($extra=[]) => route('vm.tarea.list', array_filter(array_merge(['project'=>$project->slug,'tipo'=>$tipo], request()->only($filterKeys), $extra), fn($v) => $v !== null));
 @endphp
 
@@ -164,6 +166,14 @@
         <i class="fas fa-trash text-base leading-none"></i>
     </a>
 
+    {{-- Vista total: activos + ocultos + borrados a la vez, con etiqueta de estado por fila.
+         Mismo icono, color y comportamiento que en los listados de Opland. --}}
+    <a href="{{ $listUrl(['todos' => request('todos') ? null : 1, 'ocultos' => null, 'borrados' => null, 'page' => null]) }}"
+       title="Vista total: activos, ocultos y borrados"
+       class="p-1.5 rounded-lg border transition-colors {{ request('todos') ? 'border-indigo-400 text-indigo-500 bg-indigo-50' : 'border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300' }}">
+        <i class="fas fa-layer-group text-base leading-none"></i>
+    </a>
+
     {{-- Campos ocultos para preservar filtros al buscar --}}
     @foreach($filtroKeys as $fp)
         @if(request($fp))
@@ -317,6 +327,9 @@ document.addEventListener('DOMContentLoaded', function () {
             {!! $thSort('fecha_planificada', 'Fecha') !!}
             {!! $thSort('propiedad_nombre', 'Propiedad') !!}
             {!! $thSort('nombre', 'Nombre') !!}
+            @if($vistaTotal)
+            <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap text-gray-400">Estado reg.</th>
+            @endif
             <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap text-center text-gray-400">Resp.</th>
             {!! $thSort('total_min', 'Tiempo', 'text-right') !!}
             <th class="w-8"></th>
@@ -347,6 +360,20 @@ document.addEventListener('DOMContentLoaded', function () {
             <div class="text-xs font-semibold text-gray-700">{{ $fechaFmt }}</div>
             <span class="tl-badge" style="background:{{ $estadoBadge['bg'] }};color:{{ $estadoBadge['tx'] }}">{{ $tarea->estado ?? '—' }}</span>
         </td>
+
+        @if($vistaTotal)
+        @php
+            $estadoFila  = ($tarea->deleted ?? 0) ? 'borrado' : ((($tarea->hidden ?? 0)) ? 'oculto' : 'activo');
+            $badgeEstado = [
+                'activo'  => ['Activo',  '#e8f2e2', '#2f6d1c'],
+                'oculto'  => ['Oculto',  '#fdf3d3', '#8a6300'],
+                'borrado' => ['Borrado', '#f1f3f5', '#8b949c'],
+            ][$estadoFila];
+        @endphp
+        <td class="px-4 py-2 whitespace-nowrap">
+            <span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:.7rem;font-weight:600;background:{{ $badgeEstado[1] }};color:{{ $badgeEstado[2] }};">{{ $badgeEstado[0] }}</span>
+        </td>
+        @endif
 
         {{-- Propiedad --}}
         <td class="px-4 py-2 text-gray-500 max-w-[140px]">

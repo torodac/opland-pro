@@ -493,16 +493,21 @@ class TareaController extends Controller
                 DB::raw('COALESCE(json_array_length(t.control_user::json), 0) as cu_count'),
             ]);
 
-        // Visibilidad
-        if ($request->boolean('borrados')) {
-            $query->where('t.deleted', 1);
-        } else {
-            $query->where('t.deleted', 0);
-        }
-        if ($request->boolean('ocultos')) {
-            $query->where('t.hidden', 1);
-        } else {
-            $query->where(fn($q) => $q->whereNull('t.hidden')->orWhere('t.hidden', 0));
+        // Visibilidad. "todos" es la vista total del listado generico (listado.blade.php):
+        // activos, ocultos y borrados a la vez, con una etiqueta de estado por fila. Los otros
+        // dos botones muestran un estado cada uno; este los une, y por eso manda sobre ellos.
+        $vistaTotal = $request->boolean('todos');
+        if (!$vistaTotal) {
+            if ($request->boolean('borrados')) {
+                $query->where('t.deleted', 1);
+            } else {
+                $query->where('t.deleted', 0);
+            }
+            if ($request->boolean('ocultos')) {
+                $query->where('t.hidden', 1);
+            } else {
+                $query->where(fn($q) => $q->whereNull('t.hidden')->orWhere('t.hidden', 0));
+            }
         }
 
         // Búsqueda
@@ -610,7 +615,7 @@ class TareaController extends Controller
             'allUsuarios', 'usuariosMap', 'propiedades', 'estadoOptions',
             'vigentes', 'vencidas', 'planificadas', 'nuevas', 'noImputadas',
             'canEdit', 'c', 'tipoLabel', 'tipoIcon', 'stat',
-            'sortField', 'sortDir'
+            'sortField', 'sortDir', 'vistaTotal'
         ));
     }
 
