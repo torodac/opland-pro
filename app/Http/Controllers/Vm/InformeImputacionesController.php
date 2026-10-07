@@ -8,6 +8,7 @@ use App\Models\Project;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use App\Services\CircuitoFirmas;
 use App\Services\RoleHierarchy;
 use App\Services\VmHorasService;
 use App\Services\VmJerarquiaAprobacion;
@@ -44,12 +45,14 @@ class InformeImputacionesController extends Controller
             : collect();
 
         $estadoAprobacion = DB::table('vm_informes_estado')
+            ->where('informe', CircuitoFirmas::MENSUAL)
             ->where('id_usuario', $userId)->where('anio', $year)->where('mes', $month)
             ->first();
         $pasoActual = $estadoAprobacion->paso_actual ?? VmJerarquiaAprobacion::pasoInicial($userId);
 
         $aprobaciones = DB::table('vm_informes_aprobaciones as a')
             ->join('admin_users as u', 'u.id', '=', 'a.aprobado_por')
+            ->where('a.informe', CircuitoFirmas::MENSUAL)
             ->where('a.id_usuario', $userId)->where('a.anio', $year)->where('a.mes', $month)
             ->orderByRaw("array_position(array['aprueba','rrhh','coordinador','trabajador','direccion'], a.step)")
             ->get(['a.step', 'a.aprobado_at', 'u.name as aprobado_por_nombre']);
@@ -169,6 +172,7 @@ class InformeImputacionesController extends Controller
         $userIds = $usuarios->pluck('id')->all();
 
         $estados = DB::table('vm_informes_estado')
+            ->where('informe', CircuitoFirmas::MENSUAL)
             ->where('anio', $year)->where('mes', $month)
             ->whereIn('id_usuario', $userIds)
             ->pluck('paso_actual', 'id_usuario');
@@ -505,6 +509,7 @@ class InformeImputacionesController extends Controller
         // "completado" (firmado por Dirección general) es un estado terminal: los registros ya
         // quedaron bloqueados (bloquearRegistrosDelMes) y no hay vuelta atrás desde aquí.
         $pasoActual = DB::table('vm_informes_estado')
+            ->where('informe', CircuitoFirmas::MENSUAL)
             ->where('id_usuario', $userId)->where('anio', $year)->where('mes', $month)
             ->value('paso_actual');
         if ($pasoActual === 'completado') {
@@ -516,10 +521,12 @@ class InformeImputacionesController extends Controller
         $pasoInicial = VmJerarquiaAprobacion::pasoInicial($userId);
 
         DB::table('vm_informes_estado')
+            ->where('informe', CircuitoFirmas::MENSUAL)
             ->where('id_usuario', $userId)->where('anio', $year)->where('mes', $month)
             ->update(['en_aprobacion' => false, 'paso_actual' => $pasoInicial, 'updatedat' => now()]);
 
         DB::table('vm_informes_aprobaciones')
+            ->where('informe', CircuitoFirmas::MENSUAL)
             ->where('id_usuario', $userId)->where('anio', $year)->where('mes', $month)
             ->delete();
 
@@ -532,74 +539,29 @@ class InformeImputacionesController extends Controller
     // firma de arriba y por VacationmarbellaPwaController::firmarInformeTrabajador().
     public function firmarPaso(int $userId, int $year, int $month, string $step, int $aprobadoPor, Request $request): array
     {
-        // Flujo de firmas (activado 2026-09-24). El primer paso, "aprueba" (etiquetado
-        // "Supervisor" en la interfaz), lo firma la persona designada en la ficha del usuario,
-        // en vm_usuarios.id_aprueba_informe:
+        // La mecánica del circuito (validar el paso en curso, exigir firma manuscrita, registrar
+        // la firma con su huella y avanzar) vive en CircuitoFirmas, compartida con el informe de
+        // kilómetros. Aquí queda lo que es propio del informe mensual: su huella y el cierre.
         //
-        //   aprueba → rrhh → trabajador → direccion → completado
-        //
-        // Ese primer paso se salta -- el informe arranca en 'rrhh' -- cuando el usuario no tiene
-        // aprobador asignado o cuando quien lo aprueba es Dirección general, que ya firma el
-        // último paso (ver VmJerarquiaAprobacion::pasoInicial()).
-        //
-        // Sustituye al antiguo paso "coordinador", que se deducía de la jerarquía de roles
-        // (vm_roles.roles_supervisados, Dirección de Operaciones) y no admitía excepciones por
-        // persona. Su endpoint sigue existiendo pero ya no entra en la cadena ni aparece como
-        // pestaña: firmar ese paso devuelve 409 porque ningún informe nuevo llega a 'coordinador'.
-        // Se conserva para los informes históricos que sí lo tienen firmado.
-        $siguientePaso = [
-            'aprueba'     => 'rrhh',
-            'rrhh'        => 'trabajador',
-            'coordinador' => 'trabajador',  // retirado del flujo; se conserva por compatibilidad
-            'trabajador'  => 'direccion',
-            'direccion'   => 'completado',
-        ];
-        if (!isset($siguientePaso[$step])) {
-            return ['error' => 'Paso de aprobación desconocido.', 'status' => 400];
-        }
-
-        $pasoActual = DB::table('vm_informes_estado')
-            ->where('id_usuario', $userId)->where('anio', $year)->where('mes', $month)
-            ->value('paso_actual') ?? VmJerarquiaAprobacion::pasoInicial($userId);
-        if ($pasoActual !== $step) {
-            return ['error' => "El informe no está en el paso '{$step}' (está en '{$pasoActual}').", 'status' => 409];
-        }
-
-        $signaturePath = DB::table('admin_users')->where('id', $aprobadoPor)->value('signature_path');
-        if (!$signaturePath) {
-            return ['error' => 'Debes registrar tu firma en tu perfil antes de continuar.', 'status' => 422];
-        }
-
-        $hash  = $this->contentHash($userId, $year, $month);
-        $ahora = now();
-
-        DB::table('vm_informes_aprobaciones')->upsert(
-            [[
-                'id_usuario' => $userId, 'anio' => $year, 'mes' => $month, 'step' => $step,
-                'aprobado_por' => $aprobadoPor, 'content_hash' => $hash, 'ip_address' => $request->ip(),
-                'aprobado_at' => $ahora, 'createdat' => $ahora, 'updatedat' => $ahora,
-            ]],
-            ['id_usuario', 'anio', 'mes', 'step'],
-            ['aprobado_por', 'content_hash', 'ip_address', 'aprobado_at', 'updatedat']
+        // El flujo es: aprueba → rrhh → trabajador → direccion → completado. El primer paso,
+        // "aprueba" (etiquetado "Supervisor"), lo firma la persona designada en la ficha del
+        // usuario (vm_usuarios.id_aprueba_informe), y se salta cuando no tiene aprobador o
+        // cuando quien lo aprueba es Dirección general, que ya firma el último paso.
+        $resultado = CircuitoFirmas::firmar(
+            CircuitoFirmas::MENSUAL,
+            $userId, $year, $month, $step, $aprobadoPor,
+            fn() => $this->contentHash($userId, $year, $month),
+            $request->ip()
         );
 
-        $nuevoPaso = $siguientePaso[$step];
-        DB::table('vm_informes_estado')->upsert(
-            [[
-                'id_usuario' => $userId, 'anio' => $year, 'mes' => $month,
-                'en_aprobacion' => true, 'paso_actual' => $nuevoPaso,
-                'marcado_por' => $aprobadoPor, 'marcado_at' => $ahora,
-                'createdat' => $ahora, 'updatedat' => $ahora,
-            ]],
-            ['id_usuario', 'anio', 'mes'],
-            ['en_aprobacion', 'paso_actual', 'marcado_por', 'marcado_at', 'updatedat']
-        );
-
-        if ($nuevoPaso === 'completado') {
+        // Al llegar al paso terminal, los registros del mes quedan bloqueados. Esto NO lo hace el
+        // informe de kilómetros: se alimenta de las mismas filas de vm_fichaje, y el circuito que
+        // terminara primero dejaría al otro sin poder corregirse.
+        if (($resultado['ok'] ?? false) && ($resultado['paso_actual'] ?? null) === 'completado') {
             $this->bloquearRegistrosDelMes($userId, $year, $month);
         }
 
-        return ['ok' => true, 'paso_actual' => $nuevoPaso];
+        return $resultado;
     }
 
     // Al llegar al paso terminal "completado" (firmado por Dirección general), todos los
@@ -713,6 +675,7 @@ class InformeImputacionesController extends Controller
     private function aprobacionesParaPdf(int $userId, int $year, int $month): ?array
     {
         $pasoActual = DB::table('vm_informes_estado')
+            ->where('informe', CircuitoFirmas::MENSUAL)
             ->where('id_usuario', $userId)->where('anio', $year)->where('mes', $month)
             ->value('paso_actual');
         if ($pasoActual !== 'completado') return null;
@@ -722,6 +685,7 @@ class InformeImputacionesController extends Controller
 
         $rows = DB::table('vm_informes_aprobaciones as a')
             ->join('admin_users as u', 'u.id', '=', 'a.aprobado_por')
+            ->where('a.informe', CircuitoFirmas::MENSUAL)
             ->where('a.id_usuario', $userId)->where('a.anio', $year)->where('a.mes', $month)
             ->get(['a.step', 'a.aprobado_at', 'u.name as nombre', 'u.signature_path']);
 

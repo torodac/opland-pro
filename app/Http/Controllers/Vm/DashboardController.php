@@ -491,6 +491,7 @@ class DashboardController extends Controller
         if ($verInformesPendientes) {
             $query = DB::table('vm_informes_estado as e')
                 ->join('vm_usuarios as u', 'u.id', '=', 'e.id_usuario')
+                ->where('e.informe', \App\Services\CircuitoFirmas::MENSUAL)
                 ->where('e.en_aprobacion', true)
                 ->where('e.paso_actual', '!=', 'completado');
 
