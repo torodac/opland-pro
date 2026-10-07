@@ -382,6 +382,7 @@
         <button id="btn-dejar-impersonar" style="float:right;background:none;border:none;color:#fcd34d;font-size:13px;cursor:pointer;text-decoration:underline">Volver a mí</button>
       </div>
       <button class="btn btn-outline" id="btn-mi-informe" style="margin-bottom:10px">Mi informe mensual</button>
+      <button class="btn btn-outline" id="btn-mi-informe-km" style="margin-bottom:10px">Mi informe de kilómetros</button>
       <button class="btn btn-outline" id="btn-push-test" style="margin-bottom:10px">Activar notificaciones</button>
       <button class="btn btn-outline" id="btn-actualizar-app" style="margin-bottom:10px">Actualizar app</button>
 
@@ -409,6 +410,27 @@
       <p id="app-version" style="text-align:center;color:var(--muted);font-size:11px;margin-top:18px"></p>
     </div>
     <nav class="bottom-nav" data-nav-container="perfil"></nav>
+  </div>
+
+  <!-- ══ MI INFORME DE KILÓMETROS ════════════════════════════════════════════
+       Mismo circuito de firmas que el mensual, por eso la pantalla es la misma con
+       otras cifras: aquí los kilómetros y el trayecto de cada día. -->
+  <div id="informe-km-screen" class="screen" style="position:relative">
+    <div class="topbar" id="informe-km-back">
+      <span class="back-btn">‹</span>
+      <h1>Mi informe de kilómetros</h1>
+    </div>
+    <div class="scroll">
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <select id="informe-km-mes" style="flex:1"></select>
+        <select id="informe-km-anio" style="flex:1"></select>
+      </div>
+      <div id="informe-km-estado-badge" style="margin-bottom:12px;padding:10px 14px;border-radius:var(--radius);font-size:14px;font-weight:600"></div>
+      <div id="informe-km-resumen" style="margin-bottom:14px"></div>
+      <div id="informe-km-aprobaciones" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
+      <button class="btn btn-outline" id="btn-informe-km-pdf" style="margin-bottom:10px">Ver PDF del informe</button>
+      <button class="btn btn-green" id="btn-informe-km-firmar" style="display:none">Firmar mis kilómetros</button>
+    </div>
   </div>
 
   <!-- ══ MI INFORME MENSUAL ══════════════════════════════════════════════════ -->
@@ -560,6 +582,6 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/signature_pad@4/dist/signature_pad.umd.min.js"></script>
-<script src="app.js?v=20260819"></script>
+<script src="app.js?v=20261008"></script>
 </body>
 </html>
