@@ -170,6 +170,15 @@ class IcneaSyncReservationsCommand extends Command
         // cuando Icnea dice Villa Regina (2026-10-07).
         $camposPropiedad = ['icnea_lodging_id', 'id_propiedades', 'vm_propiedades_nombre'];
 
+        // De todo lo que se compara, solo estos cuatro se escriben en la traza. Detectar y trazar
+        // son cosas distintas: la detección tiene que mirarlo todo o un cambio de email dejaría de
+        // guardarse, pero la traza es para que una persona entienda qué le ha pasado a la reserva,
+        // y ahí el ruido estorba. Fuera quedan el email, el teléfono, la ocupación y
+        // checkin_status (que va y viene entre valores varias veces al día), y también
+        // icnea_lodging_id e id_propiedades, que son el mismo hecho que
+        // vm_propiedades_nombre contado con números en lugar de con el nombre de la villa.
+        $camposTraza = ['booking_status', 'check_in_date', 'check_out_date', 'vm_propiedades_nombre'];
+
         $now = now()->format('Y-m-d H:i:s');
 
         $nuevas      = 0;
@@ -210,8 +219,10 @@ class IcneaSyncReservationsCommand extends Command
                 continue;
             }
 
-            // Detectar cambios
-            $cambios = [];
+            // Detectar cambios. $cambios es todo lo que ha cambiado (decide si se actualiza);
+            // $cambiosTraza es el subconjunto que además se cuenta en la traza.
+            $cambios      = [];
+            $cambiosTraza = [];
 
             // La propiedad NUNCA se sobrescribe con un hueco: si el lodging que devuelve Icnea no
             // está mapeado en vm_propiedades, id_propiedades vendría a null, y quedarse sin
@@ -225,7 +236,11 @@ class IcneaSyncReservationsCommand extends Command
                 $vAnterior = $existing->$campo;
                 $vNuevo    = $temp->$campo;
                 if ((string) $vAnterior !== (string) $vNuevo) {
-                    $cambios[] = ['campo' => $campo, 'de' => $vAnterior, 'a' => $vNuevo];
+                    $cambio    = ['campo' => $campo, 'de' => $vAnterior, 'a' => $vNuevo];
+                    $cambios[] = $cambio;
+                    if (in_array($campo, $camposTraza, true)) {
+                        $cambiosTraza[] = $cambio;
+                    }
                 }
             }
 
@@ -235,8 +250,11 @@ class IcneaSyncReservationsCommand extends Command
             }
 
             // Se añaden al final, separadas por saltos de línea, conservando lo que ya hubiera.
-            $lineas = array_map(fn($c) => $this->lineaTraza($c['campo'], $c['de'], $c['a']), $cambios);
-            $trace  = trim(($existing->trace ? $existing->trace . "\n" : '') . implode("\n", $lineas));
+            // Si lo que cambió no es trazable, la traza se queda como estaba.
+            $lineas = array_map(fn($c) => $this->lineaTraza($c['campo'], $c['de'], $c['a']), $cambiosTraza);
+            $trace  = $lineas
+                ? trim(($existing->trace ? $existing->trace . "\n" : '') . implode("\n", $lineas))
+                : $existing->trace;
 
             $datos = [
                 'booking_status'     => $temp->booking_status,
@@ -267,10 +285,10 @@ class IcneaSyncReservationsCommand extends Command
                 $linea = "  CAMBIO #{$temp->booking_id} {$temp->guest_name}: {$c['campo']} '{$c['de']}' → '{$c['a']}'";
                 // Un cambio de villa no es un cambio cualquiera: arrastra liquidación, limpiezas
                 // y fianzas, así que además de la consola va al log, donde sí se lee.
-                if ($c['campo'] === 'id_propiedades') {
+                if ($c['campo'] === 'vm_propiedades_nombre') {
                     Log::warning("IcneaSyncReservations: la reserva #{$temp->booking_id} "
-                        . "({$temp->guest_name}) cambia de propiedad en Icnea: {$c['de']} → {$c['a']} "
-                        . "({$temp->vm_propiedades_nombre}). Revisar liquidación y limpiezas.");
+                        . "({$temp->guest_name}) cambia de propiedad en Icnea: '{$c['de']}' → '{$c['a']}'. "
+                        . 'Revisar liquidación y limpiezas.');
                     $linea .= '  [registrado en el log]';
                 }
                 $this->line($linea);
