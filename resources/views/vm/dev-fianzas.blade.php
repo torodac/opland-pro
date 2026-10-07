@@ -2,14 +2,13 @@
     $fmt = fn($n) => $n === null ? '—' : number_format((float) $n, 2, ',', '.') . ' €';
 @endphp
 
-<x-app-layout :project="$project">
-<x-slot name="header">
-    <div class="flex items-center gap-2 text-sm text-gray-500">
-        <span class="font-medium text-gray-700">Dev. fianzas</span>
-        <span class="text-gray-300">·</span>
-        <span>{{ $filas->count() }} {{ $filas->count() === 1 ? 'reserva' : 'reservas' }}</span>
-    </div>
-</x-slot>
+{{-- El layout pinta el encabezado desde :breadcrumb (o :title); no tiene slot "header", así
+     que lo que se le pasaba ahí se descartaba sin avisar y la página salía sin título. --}}
+<x-app-layout
+    :breadcrumb="[
+        ['label' => 'Dev. fianzas', 'url' => ''],
+    ]"
+    :project="$project">
 
 <div style="padding:0 0 3rem;">
 
@@ -49,9 +48,15 @@
                 <td style="padding:8px 12px;font-size:13px;white-space:nowrap">
                     {{ \Carbon\Carbon::parse($f->check_out_date)->format('d/m/Y') }}
                 </td>
-                <td style="padding:8px 12px;font-size:13px;font-variant-numeric:tabular-nums">
+                <td style="padding:8px 12px;font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap">
                     <a href="{{ url($project->slug . '/reservas/' . $f->id) }}"
                        style="color:#185FA5;text-decoration:none">{{ $f->booking_id }}</a>
+                    {{-- Hay limpieza de salida: lo que hace que la reserva se pueda revisar de
+                         verdad. Sin ella no hay comentarios ni fotos que mirar. --}}
+                    @if($f->n_tareas)
+                        <span title="{{ $f->n_tareas }} {{ $f->n_tareas === 1 ? 'limpieza' : 'limpiezas' }} de salida asociada{{ $f->n_tareas === 1 ? '' : 's' }}"
+                              style="color:#1B7F3B;margin-left:5px;font-weight:600">✔</span>
+                    @endif
                 </td>
                 <td style="padding:8px 12px;font-size:13px">{{ $f->nombre ?: '—' }}</td>
                 <td style="padding:8px 12px;font-size:13px;color:#666">{{ $f->propiedad ?: '—' }}</td>

@@ -3,14 +3,12 @@
     $pendiente = empty($reserva->estado_fianza);
 @endphp
 
-<x-app-layout :project="$project">
-<x-slot name="header">
-    <div class="flex items-center gap-2 text-sm text-gray-500">
-        <a href="{{ route('vm.dev-fianzas', $project->slug) }}" class="hover:text-gray-700">Dev. fianzas</a>
-        <span class="text-gray-300">/</span>
-        <span class="font-medium text-gray-700">{{ $reserva->booking_id }}</span>
-    </div>
-</x-slot>
+<x-app-layout
+    :breadcrumb="[
+        ['label' => 'Dev. fianzas', 'url' => route('vm.dev-fianzas', $project->slug)],
+        ['label' => $reserva->booking_id . ($reserva->nombre ? ' · ' . $reserva->nombre : ''), 'url' => ''],
+    ]"
+    :project="$project">
 
 <style>
 .df-card{background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px;padding:1.1rem 1.25rem;margin-bottom:12px}
