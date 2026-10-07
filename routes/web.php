@@ -198,6 +198,16 @@ Route::middleware('auth')->group(function () {
         Route::get('km/informe/pdf',       [KmController::class, 'informePdf'])->name('km.informe.pdf');
         Route::get('km/informe/pdf-todos', [KmController::class, 'informePdfTodos'])->name('km.informe.pdf-todos');
 
+        // Circuito de firmas del informe de kilometros: el mismo que el mensual
+        // (aprueba -> rrhh -> trabajador -> direccion -> completado), sobre las mismas tablas
+        // distinguidas por informe='km'. Ver App\Services\CircuitoFirmas.
+        Route::get('km/informe_list',              [KmController::class, 'listado'])->name('km.informe.listado');
+        Route::post('km/informe/firmar-aprueba',    [KmController::class, 'firmarAprueba'])->name('km.informe.firmar-aprueba');
+        Route::post('km/informe/firmar-rrhh',       [KmController::class, 'firmarRrhh'])->name('km.informe.firmar-rrhh');
+        Route::post('km/informe/firmar-trabajador', [KmController::class, 'firmarTrabajador'])->name('km.informe.firmar-trabajador');
+        Route::post('km/informe/firmar-direccion',  [KmController::class, 'firmarDireccion'])->name('km.informe.firmar-direccion');
+        Route::post('km/informe/reabrir',           [KmController::class, 'reabrir'])->name('km.informe.reabrir');
+
         Route::get('novaciones',                  [NovacionesController::class, 'index'])->name('novaciones');
         Route::get('novaciones/importes',         [NovacionesController::class, 'importes'])->name('novaciones.importes');
         Route::post('novaciones/toggle-importe',  [NovacionesController::class, 'toggleImporte'])->name('novaciones.toggle');
