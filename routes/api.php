@@ -14,6 +14,9 @@ Route::prefix('vm')->group(function () {
     Route::get('informe',                          [VacationmarbellaPwaController::class, 'miInforme']);
     Route::get('informe/pdf',                       [VacationmarbellaPwaController::class, 'miInformePdf']);
     Route::post('informe/firmar',                  [VacationmarbellaPwaController::class, 'firmarInformeTrabajador']);
+    Route::get('informe-km',                       [VacationmarbellaPwaController::class, 'miInformeKm']);
+    Route::get('informe-km/pdf',                   [VacationmarbellaPwaController::class, 'miInformeKmPdf']);
+    Route::post('informe-km/firmar',               [VacationmarbellaPwaController::class, 'firmarInformeKmTrabajador']);
     Route::post('logout',                       [VacationmarbellaPwaController::class, 'logout']);
     Route::get('me',                            [VacationmarbellaPwaController::class, 'me']);
     Route::get('duraciones',                    [VacationmarbellaPwaController::class, 'duraciones']);

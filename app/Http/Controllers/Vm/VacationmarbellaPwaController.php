@@ -1592,6 +1592,79 @@ class VacationmarbellaPwaController extends Controller
         return response()->json($result);
     }
 
+    // ── Informe de kilómetros ─────────────────────────────────────────────────
+    //
+    // Mismo circuito que el informe mensual, distinguido por informe='km'. El trabajador firma
+    // su paso desde el móvil igual que el otro.
+
+    public function miInformeKm(Request $request)
+    {
+        $user = $this->authenticate($request);
+        if (!$user->id) {
+            return response()->json(['error' => 'No disponible para esta cuenta.'], 403);
+        }
+
+        $year  = max(2020, min(2040, (int) $request->input('year', now()->year)));
+        $month = max(1, min(12, (int) $request->input('month', now()->month)));
+
+        $km = (new \App\Http\Controllers\Vm\KmController())->resumenParaPwa((int) $user->id, $year, $month);
+
+        $estado     = \App\Services\CircuitoFirmas::estado(\App\Services\CircuitoFirmas::KM, (int) $user->id, $year, $month);
+        $pasoActual = \App\Services\CircuitoFirmas::pasoActual(\App\Services\CircuitoFirmas::KM, (int) $user->id, $year, $month);
+
+        $aprobaciones = \App\Services\CircuitoFirmas::firmas(\App\Services\CircuitoFirmas::KM, (int) $user->id, $year, $month)
+            ->map(fn($f) => [
+                'step'                 => $f->step,
+                'aprobado_at'          => $f->aprobado_at,
+                'aprobado_por_nombre'  => $f->aprobado_por_nombre,
+            ]);
+
+        return response()->json([
+            'year'          => $year,
+            'month'         => $month,
+            'paso_actual'   => $pasoActual,
+            'en_aprobacion' => (bool) ($estado->en_aprobacion ?? false),
+            // Sin kilómetros no hay informe que firmar: quedan fuera del circuito.
+            'puede_firmar'  => $pasoActual === 'trabajador' && $km['total_km'] > 0,
+            'aprobaciones'  => $aprobaciones,
+            'resumen'       => $km,
+        ]);
+    }
+
+    public function miInformeKmPdf(Request $request)
+    {
+        $user = $this->authenticate($request);
+        if (!$user->id) {
+            return response()->json(['error' => 'No disponible para esta cuenta.'], 403);
+        }
+
+        $year  = max(2020, min(2040, (int) $request->input('year', now()->year)));
+        $month = max(1, min(12, (int) $request->input('month', now()->month)));
+
+        $pdf = (new \App\Http\Controllers\Vm\KmController())->buildPdf((int) $user->id, $year, $month);
+
+        return response($pdf->output(), 200, ['Content-Type' => 'application/pdf']);
+    }
+
+    public function firmarInformeKmTrabajador(Request $request)
+    {
+        $user = $this->authenticate($request);
+        if (!$user->id || !$user->admin_user_id) {
+            return response()->json(['error' => 'No disponible para esta cuenta.'], 403);
+        }
+
+        $year  = max(2020, min(2040, (int) $request->input('year', now()->year)));
+        $month = max(1, min(12, (int) $request->input('month', now()->month)));
+
+        $result = (new \App\Http\Controllers\Vm\KmController())
+            ->firmarPaso((int) $user->id, $year, $month, 'trabajador', (int) $user->admin_user_id, $request);
+
+        if (isset($result['error'])) {
+            return response()->json(['error' => $result['error']], $result['status'] ?? 400);
+        }
+        return response()->json($result);
+    }
+
     // Jerarquia de roles (delegado en App\Services\RoleHierarchy, compartido con el backoffice)
 
     private function resolveRoleHierarchy(int $startRoleId): array

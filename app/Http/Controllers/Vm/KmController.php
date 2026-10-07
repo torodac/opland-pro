@@ -132,10 +132,7 @@ class KmController extends Controller
         $nombre   = str_replace(' ', '_', $data['usuario']->nombre ?? 'usuario');
         $filename = "km_{$nombre}_{$meses[$month-1]}_{$year}.pdf";
 
-        $pdf = Pdf::loadView('km-informe-pdf', array_merge($data, [
-            'year' => $year, 'month' => $month,
-            'firmas' => $this->firmasParaPdf($userId, $year, $month),
-        ]))->setPaper('a4', 'portrait');
+        $pdf = $this->buildPdf($userId, $year, $month);
         return response($pdf->output(), 200, [
             'Content-Type'        => 'application/pdf',
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
@@ -184,6 +181,34 @@ class KmController extends Controller
 
         $pdf = Pdf::loadHTML($html)->setPaper('a4', 'portrait');
         return $pdf->download($filename);
+    }
+
+    /** El PDF de un usuario y mes, sin depender de la Request: lo usan el backoffice y la PWA. */
+    public function buildPdf(int $userId, int $year, int $month)
+    {
+        $data = $this->getInformeKmData($userId, $year, $month);
+
+        return Pdf::loadView('km-informe-pdf', array_merge($data, [
+            'year'   => $year,
+            'month'  => $month,
+            'firmas' => $this->firmasParaPdf($userId, $year, $month),
+        ]))->setPaper('a4', 'portrait');
+    }
+
+    /** Resumen del informe para la PWA: lo justo para pintarlo en el móvil. */
+    public function resumenParaPwa(int $userId, int $year, int $month): array
+    {
+        $data = $this->getInformeKmData($userId, $year, $month);
+
+        return [
+            'total_km'    => $data['total_km'],
+            'dias_con_km' => count(array_filter($data['dias'], fn($d) => $d['km'] > 0)),
+            'dias'        => array_values(array_filter(array_map(fn($d) => $d['km'] > 0 ? [
+                'fecha'    => $d['fecha'],
+                'km'       => $d['km'],
+                'trayecto' => $d['trayecto'],
+            ] : null, $data['dias']))),
+        ];
     }
 
     // ── Circuito de firmas ────────────────────────────────────────────────────
