@@ -341,7 +341,8 @@ class BreezewaySyncTasksCommand extends Command
         // menos una imputacion ya registrada (limpieza/mantenimiento) — deja visibles en
         // el listado por defecto solo las que de verdad necesitan atencion humana.
         $ocultadas = 0;
-        foreach (['vm_tareas_limpieza' => 'limpieza', 'vm_tareas_mantenimiento' => 'mantenimiento'] as $tabla => $tipoImp) {
+        $ocultarActivo = (bool) config('services.breezeway.ocultar_tareas', true);
+        foreach ($ocultarActivo ? ['vm_tareas_limpieza' => 'limpieza', 'vm_tareas_mantenimiento' => 'mantenimiento'] : [] as $tabla => $tipoImp) {
             $ocultadas += DB::table($tabla)
                 ->where('deleted', 0)
                 ->where(fn($q) => $q->whereNull('hidden')->orWhere('hidden', 0))
@@ -366,13 +367,13 @@ class BreezewaySyncTasksCommand extends Command
             'errores'     => $errores,
         ]);
 
-        $this->info("Resultado: {$creadas} creadas, {$actualizadas} actualizadas, {$bloqueadas} bloqueadas (sin tocar), {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$descartadas} descartadas, {$ocultadas} ocultadas, {$errores} errores de propiedad.");
+        $this->info("Resultado: {$creadas} creadas, {$actualizadas} actualizadas, {$bloqueadas} bloqueadas (sin tocar), {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$descartadas} descartadas, " . ($ocultarActivo ? "{$ocultadas} ocultadas" : 'ocultado en pausa') . ", {$errores} errores de propiedad.");
         \App\Services\SaludIntegraciones::comprobar(
             'breezeway:sync-tasks', count($propiedades), count($propiedades) - $errores,
             'Las tareas de limpieza y mantenimiento dejan de llegar, y con ellas sus imputaciones de tiempo.'
         );
 
-        Log::info("BreezewaySyncTasks: {$creadas} creadas, {$actualizadas} actualizadas, {$bloqueadas} bloqueadas (sin tocar), {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$descartadas} descartadas, {$ocultadas} ocultadas, {$errores} errores.");
+        Log::info("BreezewaySyncTasks: {$creadas} creadas, {$actualizadas} actualizadas, {$bloqueadas} bloqueadas (sin tocar), {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$descartadas} descartadas, " . ($ocultarActivo ? "{$ocultadas} ocultadas" : 'ocultado en pausa') . ", {$errores} errores.");
     }
 
     // Tareas que quedaron con control_user vacío por asignados sin mapear en su momento (marcadas en

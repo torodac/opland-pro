@@ -67,6 +67,12 @@ return [
     'breezeway' => [
         'client_id'     => env('BREEZEWAY_CLIENT_ID'),
         'client_secret' => env('BREEZEWAY_CLIENT_SECRET'),
+
+        // Si breezeway:sync-tasks oculta automaticamente las tareas ya cerradas (Cancelada,
+        // Descartada, o Completada con imputacion). En pausa desde el 2026-10-07 a peticion del
+        // cliente: se quiso ver el listado completo. Es un interruptor y no un borrado de codigo
+        // para poder reactivarlo cambiando una linea del .env y limpiando la cache.
+        'ocultar_tareas' => env('BREEZEWAY_OCULTAR_TAREAS', true),
     ],
 
     // Icnea. Dos juegos distintos de credenciales porque son dos interfaces:
