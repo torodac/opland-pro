@@ -112,7 +112,10 @@ foreach (['aprueba','rrhh','trabajador','direccion','completado'] as $p) {
 .ap-pill.Asuntos      { background:#D1FAE5; color:#065F46; }
 .ap-pill.Absentismo   { background:#FEE2E2; color:#991B1B; }
 
-.ap-sin-asignar { font-size:11.5px; font-weight:700; color:#991B1B; }
+/* Fondo rojo y letra amarilla: es el aviso mas urgente de la fila (dias de turno sin horario
+   asignado), y antes era solo texto rojo, indistinguible del resto. Mismo alto y radio que las
+   pastillas de .ap-pill para que no rompa la linea. */
+.ap-sin-asignar { font-size:11px; font-weight:700; background:#B91C1C; color:#FDE047; padding:2px 8px; border-radius:20px; white-space:nowrap; }
 
 .ap-line3 { display:flex; flex-direction:column; gap:3px; padding-left:42px; }
 .ap-flag { display:flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; }
