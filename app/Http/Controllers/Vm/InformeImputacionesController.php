@@ -370,6 +370,12 @@ class InformeImputacionesController extends Controller
         // 'turno', 'descanso' o una ausencia -- lo que no encaja en ninguna de las tres es un
         // hueco real en la planificación, no un domingo implícito (esos usuarios no tienen
         // fin de semana fijo, ver VmHorasService::esDescansoEfectivo()).
+        //
+        // Un día en el que SÍ fichó no cuenta, aunque nadie le hubiera asignado turno: el hueco
+        // de planificación existió, pero los hechos lo resolvieron y no hay nada que decidir.
+        // El badge cuenta lo que hay que resolver: días que nadie planificó y nadie trabajó.
+        // Antes contaba los dos casos y el panel no cuadraba con el informe -- que a un día con
+        // fichaje le pinta "Trabajo" y no lo señala de ninguna forma (decisión 2026-10-08).
         $esTurno = VmHorasService::esDeptoTurno($userId);
         $diasTurno = 0;
         $diasDescanso = 0;
@@ -379,6 +385,7 @@ class InformeImputacionesController extends Controller
                 if ($d['horario_tipo'] === 'turno') { $diasTurno++; continue; }
                 if ($d['horario_tipo'] === 'descanso') { $diasDescanso++; continue; }
                 if ($d['tipo']) continue;
+                if ($d['entrada']) continue;   // fichó: el hueco lo resolvió la realidad
                 $diasSinAsignar++;
             }
         }
