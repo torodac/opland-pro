@@ -59,6 +59,10 @@ foreach (['aprueba','rrhh','trabajador','direccion','completado'] as $p) {
 .ap-rol-pill:hover { background:#f9fafb; color:#374151; }
 .ap-rol-pill.active { background:#f97316; border-color:#f97316; color:#fff; }
 .ap-btn-listado:hover { background:#e5e7eb; color:#374151; }
+/* margin-left:auto empuja el grupo de botones a la derecha, pero si lo llevan los dos el
+   espacio libre se reparte ENTRE ellos y quedan separados. Solo empuja el primero; el segundo
+   se pega a su lado con el gap normal del contenedor. */
+.ap-btn-listado + .ap-btn-listado { margin-left:0; }
 
 .ap-chevrons { display:flex; margin-bottom:16px; flex-wrap:wrap; }
 .ap-chev { position:relative; border:none; cursor:pointer; font:inherit; background:#eef1f5; color:#6b7280; padding:10px 20px 10px 26px; font-size:12.5px; font-weight:700; display:flex; align-items:center; gap:7px; clip-path: polygon(0 0, calc(100% - 13px) 0, 100% 50%, calc(100% - 13px) 100%, 0 100%, 12px 50%); margin-left:-12px; }
@@ -79,6 +83,7 @@ foreach (['aprueba','rrhh','trabajador','direccion','completado'] as $p) {
 .ap-row-right { display:flex; align-items:center; gap:14px; flex-shrink:0; margin-left:auto; }
 .ap-who { display:flex; align-items:center; gap:10px; min-width:0; }
 .ap-avatar { width:32px; height:32px; border-radius:50%; background:#ffedd5; color:#9a3412; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; flex-shrink:0; }
+.ap-avatar.km { background:#d1fae5; color:#065f46; }
 .ap-who-name { font-weight:700; font-size:13.5px; color:#111827; display:flex; align-items:center; gap:8px; }
 .ap-progress { display:inline-flex; align-items:center; gap:6px; }
 .ap-progress-bar { width:56px; height:6px; border-radius:4px; background:#e5e7eb; overflow:hidden; flex-shrink:0; }
@@ -172,9 +177,13 @@ foreach (['aprueba','rrhh','trabajador','direccion','completado'] as $p) {
         <button type="button" class="ap-rol-pill {{ $rol_filtro === 'sscc' ? 'active' : '' }}" onclick="filtrarRol('sscc')">SSCC</button>
     </div>
 
-    <a class="ap-btn-listado" href="{{ route('informe-imputaciones', $project->slug) }}?year={{ $year }}&month={{ $month }}" title="Ver como ficha individual clásica">
+    <a class="ap-btn-listado" href="{{ route('informe-imputaciones', $project->slug) }}?year={{ $year }}&month={{ $month }}" title="Ver informe de horas">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-        Vista clásica
+        Informe horas
+    </a>
+    <a class="ap-btn-listado" href="{{ route('km.informe', $project->slug) }}" title="Ver informe de kilómetros">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 12l4-4m-4 4 4 4M21 12l-4-4m4 4-4 4"/></svg>
+        Informe km
     </a>
 </form>
 
@@ -232,13 +241,11 @@ function filtrarRol(rol) {
     <div class="ap-row" data-step="{{ $fila->paso }}">
         <div class="ap-row-top">
             <div class="ap-who">
-                <div class="ap-avatar">{{ strtoupper($iniciales) }}</div>
+                <div class="ap-avatar {{ $esKm ? 'km' : '' }}">{{ strtoupper($iniciales) }}</div>
                 <div>
                     <div class="ap-who-name">
                         {{ $fila->nombre }}
-                        @if($esKm)
-                            <span class="ap-km-chip">Kilómetros</span>
-                        @elseif($fila->pct_imputado === 'fuera_de_rango')
+                        @if(!$esKm && $fila->pct_imputado === 'fuera_de_rango')
                             <span class="ap-pct-fuera" title="Horas de tareas imputadas muy alejadas de las horas fichadas">Fuera de rango</span>
                         @elseif(!$esKm && $fila->pct_imputado !== null)
                             <span class="ap-progress" title="{{ $fila->pct_imputado }}% de horas de tareas imputadas sobre horas fichadas">
