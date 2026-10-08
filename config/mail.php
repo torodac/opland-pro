@@ -88,6 +88,15 @@ return [
             'timeout' => null,
         ],
 
+        'clase' => [
+            'transport' => 'smtp',
+            'host' => env('MAIL_CLASE_HOST', 'smtp.hostinger.com'),
+            'port' => env('MAIL_CLASE_PORT', 587),
+            'username' => env('MAIL_CLASE_USERNAME'),
+            'password' => env('MAIL_CLASE_PASSWORD'),
+            'timeout' => null,
+        ],
+
         'failover' => [
             'transport' => 'failover',
             'mailers' => [

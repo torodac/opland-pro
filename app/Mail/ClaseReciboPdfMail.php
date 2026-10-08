@@ -21,8 +21,16 @@ class ClaseReciboPdfMail extends Mailable
     {
         $num = $this->recibo->numero_factura ?? $this->recibo->numero_recibo;
         $mes = \Carbon\Carbon::parse($this->recibo->mes . '-01')->translatedFormat('F Y');
+        // El remitente solo se fija cuando hay buzon propio configurado. Sin el, el Envelope se
+        // queda sin "from" y Laravel usa MAIL_FROM_ADDRESS, de modo que los recibos siguen
+        // saliendo aunque el buzon de la academia todavia no este puesto en el .env.
+        $from = config('services.correo.clase_from');
+
         return new Envelope(
             subject: "Factura {$num} — Academia Clase ({$mes})",
+            from: $from
+                ? new \Illuminate\Mail\Mailables\Address($from, config('services.correo.clase_from_nombre'))
+                : null,
         );
     }
 

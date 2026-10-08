@@ -801,6 +801,7 @@ class ClaseController extends Controller
         ]);
 
         // Enviar por email si hay dirección
+        $enviado = false;
         if ($recibo->pagador_email) {
             $recibo = DB::table('clase_recibos')->find($id);
             $cobrosIds = json_decode($recibo->cobros_ids, true) ?: [];
@@ -829,12 +830,39 @@ class ClaseController extends Controller
                 'logoB64'   => $logoB64,
             ])->setPaper('a4', 'portrait')->output();
 
-            Mail::to($recibo->pagador_email)
-                ->send(new \App\Mail\ClaseReciboPdfMail($recibo, $pdfContent));
+            // Mail::to(...)->send() ignora el mailer que fije el propio Mailable: hay que
+            // elegirlo aqui. Sin esto el correo sale por el SMTP por defecto (no_reply@opland.es)
+            // con un From de la academia, que ese servidor rechaza por suplantacion.
+            // Mientras no haya buzon propio en el .env se usa el mailer por defecto, para que los
+            // recibos no dejen de enviarse.
+            $buzon = config('mail.mailers.clase.username') ? 'clase' : null;
+
+            try {
+                $envio = $buzon ? Mail::mailer($buzon) : Mail::mailer();
+                $envio->to($recibo->pagador_email)
+                      ->send(new \App\Mail\ClaseReciboPdfMail($recibo, $pdfContent));
+                $enviado = true;
+            } catch (\Throwable $e) {
+                // La factura ya tiene numero asignado y ese numero no se puede reutilizar: un
+                // fallo de envio no debe deshacerlo ni, peor, decir que el recibo salio cuando no.
+                \Illuminate\Support\Facades\Log::error('clase: la factura ' . $numFactura
+                    . ' se emitio pero su correo no salio', [
+                        'recibo'      => $id,
+                        'destinatario'=> $recibo->pagador_email,
+                        'error'       => $e->getMessage(),
+                    ]);
+                $enviado = false;
+                $errorEnvio = 'La factura ' . $numFactura . ' ha quedado emitida, pero el correo '
+                            . 'no ha podido enviarse. Reenvialo desde la ficha del recibo.';
+            }
         }
 
-        return response()->json(['ok' => true, 'numero_factura' => $numFactura,
-                                 'enviado' => (bool)$recibo->pagador_email]);
+        return response()->json(array_filter([
+            'ok'             => true,
+            'numero_factura' => $numFactura,
+            'enviado'        => $enviado ?? false,
+            'aviso'          => $errorEnvio ?? null,
+        ], fn($v) => $v !== null));
     }
 
 }
