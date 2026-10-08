@@ -18,6 +18,10 @@
 .dark .al-chip.on{background:rgba(249,115,22,.12)}
 .al-chip-n{font-size:20px;font-weight:600;line-height:1.1;margin:0}
 .al-chip-l{font-size:12px;color:#888;margin:3px 0 0}
+/* El logo manda en la tarjeta, asi que la cifra se queda a su lado y no encima. object-fit
+   contain: los logos vienen con proporciones distintas y recortarlos los haria irreconocibles. */
+.al-chip-top{display:flex;align-items:center;gap:10px}
+.al-chip-logo{width:30px;height:30px;object-fit:contain;flex:0 0 auto}
 .al-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
 .al-card{display:block;background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px;
          padding:1rem 1.1rem;text-decoration:none;color:inherit;transition:background .12s}
@@ -32,9 +36,6 @@
 .al-empty{padding:2rem;text-align:center;color:#888;font-size:13px;
           background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px}
 .dark .al-empty{background:#1a1a1a;border-color:rgba(255,255,255,.08)}
-.al-btn{font-size:13px;padding:6px 14px;border-radius:6px;cursor:pointer;text-decoration:none;
-        border:0.5px solid rgba(0,0,0,.15);background:#fff;color:#333;display:inline-block}
-.dark .al-btn{background:#1a1a1a;border-color:rgba(255,255,255,.15);color:#ddd}
 </style>
 
 <div style="padding:0 0 3rem;">
@@ -42,6 +43,19 @@
     @if(session('status'))
         <div style="margin-bottom:1rem;padding:.7rem 1rem;border-radius:8px;background:#F1FAF4;
                     border:0.5px solid #B7E0C4;color:#1B7F3B;font-size:13px">{{ session('status') }}</div>
+    @endif
+
+    {{-- El botón Nuevo, con la misma forma y el mismo sitio que en los listados estándar. --}}
+    @if($puedeEditar)
+        <div style="display:flex;justify-content:flex-end;margin-bottom:1rem">
+            <a href="{{ route('vm.alarma.nueva', $project->slug) }}"
+               class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Nuevo
+            </a>
+        </div>
     @endif
 
     {{-- Las tarjetas de empresa filtran; no son una pantalla intermedia. "Todas" primero, para
@@ -55,17 +69,17 @@
         @foreach($empresas as $e)
             <a class="al-chip {{ $empresa === $e->empresa ? 'on' : '' }}"
                href="{{ route('vm.alarmas', [$project->slug, 'empresa' => $e->empresa]) }}">
-                <p class="al-chip-n">{{ $e->propiedades }}</p>
+                <div class="al-chip-top">
+                    {{-- Mientras no haya logo de la empresa, el de Opland. --}}
+                    <img class="al-chip-logo" alt="{{ $e->empresa }}"
+                         src="{{ $logos[$e->empresa] ?? asset('projects/opland/logo.png') }}">
+                    <p class="al-chip-n">{{ $e->propiedades }}</p>
+                </div>
                 <p class="al-chip-l">{{ $e->empresa }}</p>
             </a>
         @endforeach
     </div>
 
-    @if($puedeEditar)
-        <div style="margin-bottom:1rem">
-            <a class="al-btn" href="{{ route('vm.alarma.nueva', $project->slug) }}">+ Nueva alarma</a>
-        </div>
-    @endif
 
     @if($alarmas->isEmpty())
         <div class="al-empty">

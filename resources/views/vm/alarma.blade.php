@@ -22,9 +22,6 @@
 .dark .al-cell{background:rgba(255,255,255,.04)}
 .al-lbl{font-size:11px;color:#888;margin:0 0 3px}
 .al-val{font-size:13px;font-weight:500;margin:0}
-.al-btn{font-size:13px;padding:6px 14px;border-radius:6px;cursor:pointer;text-decoration:none;
-        border:0.5px solid rgba(0,0,0,.15);background:#fff;color:#333;display:inline-block}
-.dark .al-btn{background:#1a1a1a;border-color:rgba(255,255,255,.15);color:#ddd}
 
 /* El recuadro sensible: un botón con pinta de campo tapado, para que se vea que hay algo y que
    pulsarlo tiene consecuencias. */
@@ -39,6 +36,10 @@
              margin:0;word-break:break-all}
 .al-aviso{font-size:11px;color:#9A5B00;background:#FDF8F1;border:0.5px solid #E3C9A3;
           border-radius:6px;padding:.5rem .7rem;margin:0 0 12px;font-size:12px}
+/* El registro de consultas va sin fondo ni borde: es un apéndice de la ficha, no una
+   tarjeta más al mismo nivel que los datos. */
+.al-plano{background:transparent;border:0;padding:1.1rem 0 0}
+.dark .al-plano{background:transparent}
 .al-tabla{width:100%;border-collapse:collapse}
 .al-tabla th{text-align:left;padding:6px 10px;font-size:11px;color:#888;font-weight:500}
 .al-tabla td{padding:6px 10px;font-size:13px;border-top:0.5px solid rgba(0,0,0,.06)}
@@ -46,6 +47,24 @@
 </style>
 
 <div style="padding:0 0 3rem;">
+
+{{-- Mismos botones y misma forma que en la ficha estándar del no-code. --}}
+@if($puedeEditar)
+<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px">
+    <a href="{{ route('vm.alarma.nueva', $project->slug) }}"
+       class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+        </svg>
+        <span class="hidden sm:inline">Nueva</span>
+    </a>
+    <a href="{{ route('vm.alarma.editar', [$project->slug, $alarma->id]) }}"
+       class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">
+        <i class="fa-solid fa-pen-to-square text-sm"></i>
+        <span class="hidden sm:inline">Editar</span>
+    </a>
+</div>
+@endif
 
 @if(session('status'))
     <div style="margin-bottom:1rem;padding:.7rem 1rem;border-radius:8px;background:#F1FAF4;
@@ -89,12 +108,6 @@
       <p class="al-val">{{ $alarma->direccion ?: '—' }}</p>
     </div>
   </div>
-
-  @if($puedeEditar)
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <a class="al-btn" href="{{ route('vm.alarma.editar', [$project->slug, $alarma->id]) }}">Editar</a>
-    </div>
-  @endif
 </div>
 
 {{-- ── Bloque 2: a quién se llama, en orden ────────────────────────────── --}}
@@ -153,7 +166,7 @@
 </div>
 
 {{-- ── Bloque 4: quién ha mirado qué ───────────────────────────────────── --}}
-<div class="al-card">
+<div class="al-card al-plano">
   <div class="al-title"><i class="ti ti-eye"></i>Consultas registradas</div>
   <table class="al-tabla">
     <thead>

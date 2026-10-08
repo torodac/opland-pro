@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 // Alarmas de las propiedades. Pantalla aparte y no un bloque de la ficha de la propiedad, porque
 // lleva la palabra clave de la central receptora y las credenciales de la app del instalador: ahi
@@ -57,6 +58,7 @@ class AlarmasController extends Controller
         return view('vm.alarmas', [
             'project'     => $project,
             'empresas'    => $empresas,
+            'logos'       => $this->logos($empresas),
             'empresa'     => $empresa,
             'alarmas'     => $alarmas,
             'total'       => $empresas->sum('propiedades'),
@@ -208,6 +210,37 @@ class AlarmasController extends Controller
 
         return redirect()->route('vm.alarma', [$project->slug, $id])
             ->with('status', 'Alarma actualizada.');
+    }
+
+    /**
+     * El logo de cada empresa de seguridad, por convencion de nombre de fichero:
+     * public/img/alarmas/<empresa-en-slug>.(svg|png|jpg|jpeg|webp).
+     *
+     * Por convencion y no por un campo en la base porque "empresa" es texto libre y no un
+     * catalogo: en cuanto haya que gestionar mas cosas de la empresa (telefono de la central,
+     * contrato marco) tendra que ser una tabla, y entonces el logo se movera con ella.
+     *
+     * Una empresa sin fichero no sale sin nada: la vista pone el logo de Opland.
+     */
+    private function logos(iterable $empresas): array
+    {
+        $mapa = [];
+
+        foreach ($empresas as $e) {
+            $slug = Str::slug((string) $e->empresa);
+            if ($slug === '') {
+                continue;
+            }
+            foreach (['svg', 'png', 'jpg', 'jpeg', 'webp'] as $ext) {
+                $rel = "img/alarmas/{$slug}.{$ext}";
+                if (is_file(public_path($rel))) {
+                    $mapa[$e->empresa] = asset($rel);
+                    break;
+                }
+            }
+        }
+
+        return $mapa;
     }
 
     // ── Consultas compartidas ────────────────────────────────────────────────
