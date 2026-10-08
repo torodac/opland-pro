@@ -1634,14 +1634,10 @@ async function loadInforme() {
     boxK.style.display = 'block';
     pintarBadge(document.getElementById('km-badge'), km);
     pintarFirmas(document.getElementById('km-aprobaciones'), km);
-    const dias = (rk.dias || []).map(d => {
-      const f = d.fecha.slice(8, 10) + '/' + d.fecha.slice(5, 7);
-      return `<div>${f}: <strong>${d.km} km</strong>${d.trayecto ? ` <span style="color:var(--muted)">· ${d.trayecto}</span>` : ''}</div>`;
-    }).join('');
+    // Solo el total y los días: el detalle por día esta en el PDF, al que lleva el botón "Ver".
     document.getElementById('km-resumen').innerHTML = `
       <div>Total: <strong>${(rk.total_km ?? 0).toLocaleString('es-ES')} km</strong></div>
-      <div>Días con kilómetros: <strong>${rk.dias_con_km ?? 0}</strong></div>
-      ${dias ? '<div style="margin-top:6px">' + dias + '</div>' : ''}`;
+      <div>Días con kilómetros: <strong>${rk.dias_con_km ?? 0}</strong></div>`;
     btnK.style.display = km.puede_firmar ? 'block' : 'none';
   }
 }
