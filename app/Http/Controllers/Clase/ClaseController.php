@@ -143,8 +143,21 @@ class ClaseController extends Controller
             $update['forma_pago']    = null;
             $update['fecha_cobrado'] = null;
         }
+        $antes = DB::table('clase_cobros')->where('id', $id)->value('estado_cobros');
+
         DB::table('clase_cobros')->where('id', $id)->update($update);
-        return response()->json(['ok' => true]);
+
+        // Solo se avisa cuando el estado cambia de verdad. Guardar dos veces el mismo estado no
+        // es noticia para el pagador, y repetir el correo resta credibilidad a los que si lo son.
+        $avisado = null;
+        if ($antes !== $data['estado_cobros']) {
+            $avisado = $this->avisarCambioEstado([$id], $data['estado_cobros']);
+        }
+
+        return response()->json(array_filter([
+            'ok'      => true,
+            'avisado' => $avisado,
+        ], fn($v) => $v !== null));
     }
 
     // ── Cobrar un lote desde la cesta ──────────────────────────────────────
@@ -203,8 +216,12 @@ class ClaseController extends Controller
             'updatedat'      => now(),
         ]);
 
+        // El recibo acaba de nacer aqui, asi que el aviso lo lleva adjunto sin tener que buscarlo.
+        $avisado = $this->avisarCambioEstado($data['ids'], 'Cobrado', $reciboId);
+
         return response()->json(['ok' => true, 'n' => count($data['ids']),
-                                 'recibo_id' => $reciboId, 'numero_recibo' => $numRecibo]);
+                                 'recibo_id' => $reciboId, 'numero_recibo' => $numRecibo,
+                                 'avisado' => $avisado]);
     }
 
     // ── Generar cobros del mes actual ──────────────────────────────────────
@@ -804,56 +821,18 @@ class ClaseController extends Controller
         $enviado = false;
         if ($recibo->pagador_email) {
             $recibo = DB::table('clase_recibos')->find($id);
-            $cobrosIds = json_decode($recibo->cobros_ids, true) ?: [];
-            $cobros = DB::table('clase_cobros as c')
-                ->leftJoin('clase_contratos as ct', 'ct.id', '=', 'c.id_contrato')
-                ->leftJoin('clase_grupo as g',      'g.id',  '=', 'ct.id_grupo')
-                ->whereIn('c.id', $cobrosIds)
-                ->select('c.nombre_alumno', 'c.cantidad_pagador', 'c.fecha_cobro',
-                         'ct.nombre as contrato_nombre', 'g.nombre as grupo_nombre')
-                ->get();
-            $porAlumno = $cobros->groupBy('nombre_alumno');
-            $formas    = json_decode($recibo->formas_pago, true) ?: [];
 
-            $logoPath = public_path('projects/clase/logo.png');
-            $src = imagecreatefrompng($logoPath);
-            $thumb = imagecreatetruecolor(80, 80);
-            imagealphablending($thumb, false); imagesavealpha($thumb, true);
-            imagecopyresampled($thumb, $src, 0, 0, 0, 0, 80, 80, imagesx($src), imagesy($src));
-            ob_start(); imagepng($thumb, null, 6); $pngData = ob_get_clean();
-            imagedestroy($src); imagedestroy($thumb);
-            $logoB64 = 'data:image/png;base64,' . base64_encode($pngData);
-            $pdfContent = Pdf::loadView('clase.recibo-pdf', [
-                'recibo'    => $recibo,
-                'porAlumno' => $porAlumno,
-                'formas'    => $formas,
-                'logoB64'   => $logoB64,
-            ])->setPaper('a4', 'portrait')->output();
+            $enviado = $this->enviarClase(
+                $recibo->pagador_email,
+                new \App\Mail\ClaseReciboPdfMail($recibo, $this->pdfDeRecibo($recibo)),
+                'la factura ' . $numFactura
+            );
 
-            // Mail::to(...)->send() ignora el mailer que fije el propio Mailable: hay que
-            // elegirlo aqui. Sin esto el correo sale por el SMTP por defecto (no_reply@opland.es)
-            // con un From de la academia, que ese servidor rechaza por suplantacion.
-            // Mientras no haya buzon propio en el .env se usa el mailer por defecto, para que los
-            // recibos no dejen de enviarse.
-            $buzon = config('mail.mailers.clase.username') ? 'clase' : null;
-
-            try {
-                $envio = $buzon ? Mail::mailer($buzon) : Mail::mailer();
-                $envio->to($recibo->pagador_email)
-                      ->send(new \App\Mail\ClaseReciboPdfMail($recibo, $pdfContent));
-                $enviado = true;
-            } catch (\Throwable $e) {
+            if (!$enviado) {
                 // La factura ya tiene numero asignado y ese numero no se puede reutilizar: un
-                // fallo de envio no debe deshacerlo ni, peor, decir que el recibo salio cuando no.
-                \Illuminate\Support\Facades\Log::error('clase: la factura ' . $numFactura
-                    . ' se emitio pero su correo no salio', [
-                        'recibo'      => $id,
-                        'destinatario'=> $recibo->pagador_email,
-                        'error'       => $e->getMessage(),
-                    ]);
-                $enviado = false;
+                // fallo de envio no debe deshacerlo ni, peor, decir que salio cuando no.
                 $errorEnvio = 'La factura ' . $numFactura . ' ha quedado emitida, pero el correo '
-                            . 'no ha podido enviarse. Reenvialo desde la ficha del recibo.';
+                            . 'no ha podido enviarse. Vuelve a intentarlo desde el recibo.';
             }
         }
 
@@ -865,4 +844,125 @@ class ClaseController extends Controller
         ], fn($v) => $v !== null));
     }
 
+    // ── Correo del proyecto ────────────────────────────────────────────────
+
+    /**
+     * Avisa al pagador de que unos cobros han cambiado de estado. Cuando el estado es "Cobrado"
+     * adjunta el recibo: el que se indique, o el que ya contenga esos cobros.
+     *
+     * Devuelve true si el correo salio, false si fallo, y null si no habia a quien escribir.
+     */
+    private function avisarCambioEstado(array $ids, string $estado, ?int $reciboId = null): ?bool
+    {
+        $cobros = DB::table('clase_cobros')
+            ->whereIn('id', $ids)->where('deleted', false)
+            ->get(['id', 'id_tutor', 'nombre_alumno', 'nombre_pagador', 'cantidad_pagador', 'fecha_cobro']);
+
+        if ($cobros->isEmpty()) {
+            return null;
+        }
+
+        $idTutor = $cobros->first()->id_tutor;
+        $destino = $idTutor ? DB::table('clase_tutores')->where('id', $idTutor)->value('email') : null;
+        if (!$destino) {
+            return null;
+        }
+
+        // El recibo solo acompaña a un cobro efectuado. Si el cambio es manual sobre un cobro que
+        // ya estaba en un recibo, se adjunta ese; si no pertenece a ninguno, el aviso sale sin
+        // adjunto en vez de no salir.
+        $pdf = $numeroRecibo = null;
+        if ($estado === 'Cobrado') {
+            $recibo = $reciboId
+                ? DB::table('clase_recibos')->where('id', $reciboId)->first()
+                : $this->reciboQueContiene((int) $cobros->first()->id);
+
+            if ($recibo) {
+                $pdf          = $this->pdfDeRecibo($recibo);
+                $numeroRecibo = $recibo->numero_recibo;
+            }
+        }
+
+        $conceptos = $cobros->map(fn($c) => [
+            'alumno'  => $c->nombre_alumno,
+            'importe' => (float) $c->cantidad_pagador,
+            'mes'     => $c->fecha_cobro ? substr((string) $c->fecha_cobro, 0, 7) : null,
+        ])->all();
+
+        return $this->enviarClase(
+            $destino,
+            new \App\Mail\ClaseCobroEstadoMail(
+                $estado,
+                (string) ($cobros->first()->nombre_pagador ?? ''),
+                $conceptos,
+                round($cobros->sum('cantidad_pagador'), 2),
+                $pdf,
+                $numeroRecibo
+            ),
+            'el aviso de cobro ' . strtolower($estado)
+        );
+    }
+
+    /** El recibo que incluye un cobro, si lo hay. cobros_ids es un JSON con la lista de ids. */
+    private function reciboQueContiene(int $cobroId): ?object
+    {
+        return DB::table('clase_recibos')
+            ->where('deleted', false)
+            ->whereRaw('cobros_ids::jsonb @> ?::jsonb', [json_encode([$cobroId])])
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    /** El recibo (o la factura, si ya la tiene) en PDF. */
+    private function pdfDeRecibo(object $recibo): string
+    {
+        $cobrosIds = json_decode($recibo->cobros_ids, true) ?: [];
+        $cobros = DB::table('clase_cobros as c')
+            ->leftJoin('clase_contratos as ct', 'ct.id', '=', 'c.id_contrato')
+            ->leftJoin('clase_grupo as g',      'g.id',  '=', 'ct.id_grupo')
+            ->whereIn('c.id', $cobrosIds)
+            ->select('c.nombre_alumno', 'c.cantidad_pagador', 'c.fecha_cobro',
+                     'ct.nombre as contrato_nombre', 'g.nombre as grupo_nombre')
+            ->get();
+
+        $logoPath = public_path('projects/clase/logo.png');
+        $src   = imagecreatefrompng($logoPath);
+        $thumb = imagecreatetruecolor(80, 80);
+        imagealphablending($thumb, false); imagesavealpha($thumb, true);
+        imagecopyresampled($thumb, $src, 0, 0, 0, 0, 80, 80, imagesx($src), imagesy($src));
+        ob_start(); imagepng($thumb, null, 6); $pngData = ob_get_clean();
+        imagedestroy($src); imagedestroy($thumb);
+
+        return Pdf::loadView('clase.recibo-pdf', [
+            'recibo'    => $recibo,
+            'porAlumno' => $cobros->groupBy('nombre_alumno'),
+            'formas'    => json_decode($recibo->formas_pago, true) ?: [],
+            'logoB64'   => 'data:image/png;base64,' . base64_encode($pngData),
+        ])->setPaper('a4', 'portrait')->output();
+    }
+
+    /**
+     * Envia por el buzon del proyecto. El mailer se elige AQUI y no dentro del Mailable, porque
+     * Mail::to(...)->send() fuerza el mailer por defecto antes de que el Mailable pueda cambiarlo:
+     * el correo saldria por no_reply@opland.es con un From de la academia, que ese servidor
+     * rechaza por suplantacion.
+     *
+     * Mientras no haya buzon propio en el .env se usa el por defecto, para que nada deje de
+     * enviarse. Un fallo de envio nunca deshace lo que ya se guardo: se registra y se devuelve.
+     */
+    private function enviarClase(string $destino, \Illuminate\Mail\Mailable $mensaje, string $que): bool
+    {
+        $buzon = config('mail.mailers.clase.username') ? 'clase' : null;
+
+        try {
+            ($buzon ? Mail::mailer($buzon) : Mail::mailer())->to($destino)->send($mensaje);
+            return true;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('clase: no se pudo enviar ' . $que, [
+                'destinatario' => $destino,
+                'error'        => $e->getMessage(),
+            ]);
+            return false;
+        }
+    }
 }

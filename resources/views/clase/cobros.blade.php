@@ -171,12 +171,12 @@ function fmtC(float $v): string {
 {{-- Modal cesta --}}
 <div id="cl-overlay" class="hidden fixed inset-0 bg-black/40 z-[300] items-center justify-center p-4"
      onclick="if(event.target===this)cerrarCesta()">
-  <div class="bg-white rounded-xl w-full max-w-md shadow-xl">
-    <div class="px-5 py-4 border-b border-gray-200 flex justify-between items-center">
+  <div class="bg-white rounded-xl w-full max-w-lg shadow-xl max-h-[88vh] flex flex-col">
+    <div class="px-5 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
       <h2 class="text-sm font-bold text-gray-900">Confirmar cobros</h2>
       <button class="text-gray-400 hover:text-gray-600 text-sm border border-gray-200 rounded-lg px-3 py-1 transition-colors" onclick="cerrarCesta()">✕</button>
     </div>
-    <div class="px-5 py-4">
+    <div class="px-5 py-4 overflow-y-auto">
       <p class="text-xs text-gray-500 mb-3">Pagador: <strong id="cl-cesta-pagador" class="text-gray-800">—</strong></p>
       <div id="cl-cesta-lista" class="text-xs mb-4"></div>
       <div class="flex justify-between font-bold text-sm py-2 border-t border-gray-200">
@@ -193,13 +193,13 @@ function fmtC(float $v): string {
         <div id="cl-formas-importes" class="mt-3"></div>
       </div>
     </div>
-    <div class="px-5 py-3 border-t border-gray-200 flex justify-end gap-2">
+    <div class="px-5 py-3 border-t border-gray-200 flex justify-end gap-2 shrink-0">
       <button onclick="cerrarCesta()"
               class="inline-flex items-center px-3 py-1.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
         Cancelar
       </button>
       <button id="cl-confirmar-btn" onclick="confirmarCesta()" disabled
-              class="inline-flex items-center px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+              class="inline-flex items-center px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors disabled:bg-gray-200 disabled:text-gray-400 disabled:hover:bg-gray-200 disabled:cursor-not-allowed">
         Confirmar cobro
       </button>
     </div>
@@ -331,9 +331,18 @@ function actualizarImportesForma() {
     const wrap = document.getElementById('cl-formas-importes');
     const n = formasSeleccionadas.size;
     if (n === 0) { wrap.innerHTML = ''; document.getElementById('cl-confirmar-btn').disabled = true; return; }
+    // Con una sola forma no se pinta desglose: el importe es el total de la cesta y ya está
+    // a la vista. Los campos solo hacen falta cuando hay que repartir entre varias.
+    if (n === 1) {
+        formasSeleccionadas.set([...formasSeleccionadas.keys()][0], totalCesta);
+        wrap.innerHTML = '';
+        document.getElementById('cl-confirmar-btn').disabled = false;
+        return;
+    }
+
     let html = '<div style="display:flex;flex-direction:column;gap:8px">';
     formasSeleccionadas.forEach((imp, forma) => {
-        const autoVal = n === 1 ? totalCesta.toFixed(2) : (imp > 0 ? imp.toFixed(2) : '');
+        const autoVal = imp > 0 ? imp.toFixed(2) : '';
         html += `<div style="display:flex;align-items:center;gap:10px">`
               + `<span style="flex:1;font-size:12px;font-weight:600">${forma}</span>`
               + `<input type="number" class="cl-forma-imp" data-forma="${forma}" value="${autoVal}"`
@@ -342,21 +351,21 @@ function actualizarImportesForma() {
               + `border-radius:6px;padding:5px 8px;font-size:13px;">`
               + `<span style="font-size:11px;color:#64748b">€</span></div>`;
     });
-    if (n > 1) {
-        html += `<div style="display:flex;justify-content:space-between;font-size:11px;`
-               + `color:#64748b;border-top:1px solid #e5e7eb;padding-top:6px">`
-               + `<span>Total: <strong>${fmt(totalCesta)}</strong></span>`
-               + `<span id="cl-forma-diff"></span></div>`;
-    }
+    html += `<div style="display:flex;justify-content:space-between;font-size:11px;`
+          + `color:#64748b;border-top:1px solid #e5e7eb;padding-top:6px">`
+          + `<span>Total: <strong>${fmt(totalCesta)}</strong></span>`
+          + `<span id="cl-forma-diff"></span></div>`;
     html += '</div>';
     wrap.innerHTML = html;
-    if (n === 1) {
-        formasSeleccionadas.set([...formasSeleccionadas.keys()][0], totalCesta);
-        document.getElementById('cl-confirmar-btn').disabled = false;
-    } else { validarFormaImportes(); }
+    validarFormaImportes();
 }
 
 function validarFormaImportes() {
+    // Con una sola forma no hay campos que validar: el importe es el total de la cesta.
+    if (formasSeleccionadas.size === 1) {
+        document.getElementById('cl-confirmar-btn').disabled = false;
+        return;
+    }
     let suma = 0, ok = true;
     document.querySelectorAll('.cl-forma-imp').forEach(inp => {
         const v = parseFloat(inp.value) || 0;
@@ -364,16 +373,14 @@ function validarFormaImportes() {
         suma += v;
         if (v <= 0) ok = false;
     });
-    const n = formasSeleccionadas.size;
-    if (n > 1) {
-        const diff = totalCesta - suma;
-        const el = document.getElementById('cl-forma-diff');
-        if (el) {
-            if (Math.abs(diff) < 0.01) { el.textContent = '✓ Cuadra'; el.style.color = '#10b981'; }
-            else { el.textContent = 'Pendiente: ' + fmt(diff); el.style.color = diff > 0 ? '#f59e0b' : '#ef4444'; ok = false; }
-        }
-        ok = ok && Math.abs(suma - totalCesta) < 0.01;
+    const diff = totalCesta - suma;
+    const el = document.getElementById('cl-forma-diff');
+    if (el) {
+        if (Math.abs(diff) < 0.01) { el.textContent = '✓ Cuadra'; el.style.color = '#10b981'; }
+        else { el.textContent = 'Pendiente: ' + fmt(diff); el.style.color = diff > 0 ? '#f59e0b' : '#ef4444'; ok = false; }
     }
+    ok = ok && Math.abs(suma - totalCesta) < 0.01;
+
     document.getElementById('cl-confirmar-btn').disabled = !ok;
 }
 
