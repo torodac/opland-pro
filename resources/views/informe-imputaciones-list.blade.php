@@ -178,11 +178,11 @@ foreach (['aprueba','rrhh','trabajador','direccion','completado'] as $p) {
     </div>
 
     <a class="ap-btn-listado" href="{{ route('informe-imputaciones', $project->slug) }}?year={{ $year }}&month={{ $month }}" title="Ver informe de horas">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        <i class="fa-solid fa-file-signature"></i>
         Informe horas
     </a>
     <a class="ap-btn-listado" href="{{ route('km.informe', $project->slug) }}" title="Ver informe de kilómetros">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 12l4-4m-4 4 4 4M21 12l-4-4m4 4-4 4"/></svg>
+        <i class="fa-solid fa-car"></i>
         Informe km
     </a>
 </form>
