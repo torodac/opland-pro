@@ -25,9 +25,9 @@ $puede_firmar_paso = [
 ];
 
 // Las tarjetas de kilometraje van en el mismo panel, con sus propias rutas de firma, para no
-// tener que recorrer dos pantallas para firmar lo de una misma persona.
-$filas_km = $filas_km ?? collect();
-
+// tener que recorrer dos pantallas para firmar lo de una misma persona. El controlador las
+// entrega ya mezcladas con las de horas y ordenadas por nombre, con $fila->clase distinguiendo
+// una de otra.
 $firma_routes_km = [
     'aprueba'    => route('km.informe.firmar-aprueba', $project->slug),
     'rrhh'       => route('km.informe.firmar-rrhh', $project->slug),
@@ -37,9 +37,9 @@ $firma_routes_km = [
 
 // Los conteos de las pestañas suman las dos clases: lo que cada uno tiene que firmar, de
 // cualquiera de los dos informes.
-$conteos = ['todos' => $filas->count() + $filas_km->count()];
+$conteos = ['todos' => $filas->count()];
 foreach (['aprueba','rrhh','trabajador','direccion','completado'] as $p) {
-    $conteos[$p] = $filas->where('paso', $p)->count() + $filas_km->where('paso', $p)->count();
+    $conteos[$p] = $filas->where('paso', $p)->count();
 }
 
 // sprintfHoras() y sprintfDiasHorasMin() viven en app/Support/vista-helpers.php
@@ -128,9 +128,8 @@ foreach (['aprueba','rrhh','trabajador','direccion','completado'] as $p) {
 /* Fondo rojo y letra amarilla: es el aviso mas urgente de la fila (dias de turno sin horario
    asignado), y antes era solo texto rojo, indistinguible del resto. Mismo alto y radio que las
    pastillas de .ap-pill para que no rompa la linea. */
-/* Las tarjetas de kilometraje llevan un filo y una pastilla propios: en una lista donde una
-   misma persona aparece dos veces, lo que no puede pasar es firmar el informe equivocado. */
-.ap-row.km { border-left:3px solid #7c3aed; }
+/* La pastilla distingue las tarjetas de kilometraje: en una lista donde una misma persona
+   aparece dos veces, lo que no puede pasar es firmar el informe equivocado. */
 .ap-km-chip { font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:20px; background:#EDE9FE; color:#5B21B6; white-space:nowrap; }
 .ap-sin-asignar { font-size:11px; font-weight:700; background:#B91C1C; color:#FDE047; padding:2px 8px; border-radius:20px; white-space:nowrap; }
 
@@ -215,7 +214,14 @@ function filtrarRol(rol) {
             default => null,
         };
         $iniciales = collect(explode(' ', $fila->nombre))->map(fn($p) => mb_substr($p, 0, 1))->take(2)->implode('');
-        $verUrl = route('informe-imputaciones', $project->slug) . "?year={$year}&month={$month}&user_id={$fila->id}";
+
+        // Las dos clases de tarjeta comparten circuito, permisos y aspecto; cambian el informe al
+        // que llevan, la ruta donde se firma y la etiqueta del botón.
+        $esKm    = ($fila->clase ?? 'horas') === 'km';
+        $verUrl  = route($esKm ? 'km.informe' : 'informe-imputaciones', $project->slug)
+                 . "?year={$year}&month={$month}&user_id={$fila->id}";
+        $rutaFirma = ($esKm ? $firma_routes_km : $firma_routes)[$fila->paso] ?? '';
+        $etiquetaFirma = $esKm ? 'Firma Km' : 'Firma horas';
     @endphp
     <div class="ap-row" data-step="{{ $fila->paso }}">
         <div class="ap-row-top">
@@ -224,9 +230,11 @@ function filtrarRol(rol) {
                 <div>
                     <div class="ap-who-name">
                         {{ $fila->nombre }}
-                        @if($fila->pct_imputado === 'fuera_de_rango')
+                        @if($esKm)
+                            <span class="ap-km-chip">Kilómetros</span>
+                        @elseif($fila->pct_imputado === 'fuera_de_rango')
                             <span class="ap-pct-fuera" title="Horas de tareas imputadas muy alejadas de las horas fichadas">Fuera de rango</span>
-                        @elseif($fila->pct_imputado !== null)
+                        @elseif(!$esKm && $fila->pct_imputado !== null)
                             <span class="ap-progress" title="{{ $fila->pct_imputado }}% de horas de tareas imputadas sobre horas fichadas">
                                 <span class="ap-progress-bar"><span class="ap-progress-fill {{ ($fila->pct_imputado < 95 || $fila->pct_imputado > 105) ? 'off-range' : '' }}" style="width:{{ min($fila->pct_imputado, 100) }}%"></span></span>
                                 <span class="ap-progress-label">{{ $fila->pct_imputado }}%</span>
@@ -242,22 +250,28 @@ function filtrarRol(rol) {
                      fichaje/imputacion no se muestra en este panel. El dato se sigue calculando
                      ($fila->desviacion) y esta disponible en el informe de cada persona. --}}
                 <div class="ap-actions">
-                    <a class="ap-btn ap-btn-white" href="{{ $verUrl }}" target="_blank" rel="noopener" title="Abrir informe completo">Ver informe</a>
+                    <a class="ap-btn ap-btn-white" href="{{ $verUrl }}" target="_blank" rel="noopener"
+                       title="{{ $esKm ? 'Abrir informe de kilómetros' : 'Abrir informe completo' }}">Ver informe</a>
                     @if($fila->paso === 'completado')
                         <span class="ap-done-pill">✓ Completado</span>
                     @else
                         <button type="button" class="ap-btn ap-btn-sign"
-                            data-url="{{ $firma_routes[$fila->paso] ?? '' }}?year={{ $year }}&month={{ $month }}&user_id={{ $fila->id }}"
+                            data-url="{{ $rutaFirma }}?year={{ $year }}&month={{ $month }}&user_id={{ $fila->id }}"
                             data-nombre="{{ $fila->nombre }}"
-                            data-paso="{{ $paso_labels[$fila->paso] ?? $fila->paso }}"
+                            data-paso="{{ ($paso_labels[$fila->paso] ?? $fila->paso) . ($esKm ? ' · kilómetros' : ' · horas') }}"
                             {{ $puedeFirmarEste ? '' : 'disabled' }}
                             title="{{ $motivoNoPuede ?? '' }}"
-                            onclick="firmarFila(this)">Firmar</button>
+                            onclick="firmarFila(this)">{{ $etiquetaFirma }}</button>
                     @endif
                 </div>
             </div>
         </div>
         <div class="ap-line2">
+        @if($esKm)
+            <span><span class="ap-stat">{{ number_format($fila->total_km, 0, ',', '.') }}</span> km</span>
+            <span class="ap-sep">·</span>
+            <span><span class="ap-stat">{{ $fila->dias_con_km }}</span> {{ $fila->dias_con_km === 1 ? 'día con kilómetros' : 'días con kilómetros' }}</span>
+        @else
             <span><span class="ap-stat">{{ $fila->dias_trabajados }}</span> fichajes</span>
             <span class="ap-sep">·</span>
             <span><span class="ap-stat {{ $fila->horas_extra > 0 ? 'pos' : ($fila->horas_extra < 0 ? 'neg' : '') }}">{{ sprintfHoras($fila->horas_extra) }}</span> extra</span>
@@ -280,8 +294,12 @@ function filtrarRol(rol) {
             @endif
             {{-- Oculto a peticion del cliente (2026-10-07), igual que la desviacion. El
                  contador sigue en $fila->pendientes_validacion. --}}
+        @endif
         </div>
-        @if($fila->editado_tras_inicio)
+
+        {{-- Solo el informe mensual lleva este aviso: las tarjetas de kilometraje no traen ese
+             dato, y el circuito de kilómetros no se reinicia por editar un fichaje. --}}
+        @if(!$esKm && $fila->editado_tras_inicio)
         <div class="ap-line3">
             <div class="ap-flag warn">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9"/><path d="M12 7v6l4 2"/></svg>
@@ -293,65 +311,7 @@ function filtrarRol(rol) {
 @empty
 @endforelse
 
-{{-- Tarjetas del informe de KILÓMETROS. Mismo circuito y mismos permisos; lo que cambia es la
-     ruta de firma, el enlace al informe y las cifras de la línea de abajo. --}}
-@foreach($filas_km as $fila)
-    @php
-        $puedeFirmarEste = match($fila->paso) {
-            'rrhh', 'direccion' => ($puede_firmar_paso[$fila->paso] ?? false) && $viewer_tiene_firma,
-            'aprueba'    => $fila->puede_firmar_aprueba && $viewer_tiene_firma,
-            'trabajador' => $fila->es_mi_informe && $fila->tiene_firma,
-            default => false,
-        };
-        $motivoNoPuede = match(true) {
-            $fila->paso === 'completado' => null,
-            in_array($fila->paso, ['rrhh','direccion']) && !($puede_firmar_paso[$fila->paso] ?? false) => 'No tienes permiso para firmar como ' . $paso_labels[$fila->paso] . '.',
-            $fila->paso === 'aprueba' && !$fila->puede_firmar_aprueba => 'Solo el supervisor asignado en la ficha de ' . $fila->nombre . ' puede firmar este paso.',
-            in_array($fila->paso, ['rrhh','direccion','aprueba']) && !$viewer_tiene_firma => 'Debes registrar tu firma en tu perfil.',
-            $fila->paso === 'trabajador' && !$fila->es_mi_informe => 'Solo ' . $fila->nombre . ' puede firmar su propio informe.',
-            $fila->paso === 'trabajador' && !$fila->tiene_firma => $fila->nombre . ' no tiene firma registrada en su perfil.',
-            default => null,
-        };
-        $iniciales = collect(explode(' ', $fila->nombre))->map(fn($p) => mb_substr($p, 0, 1))->take(2)->implode('');
-        $verUrl = route('km.informe', $project->slug) . "?year={$year}&month={$month}&user_id={$fila->id}";
-    @endphp
-    <div class="ap-row km" data-step="{{ $fila->paso }}">
-        <div class="ap-row-top">
-            <div class="ap-who">
-                <div class="ap-avatar">{{ $iniciales }}</div>
-                <div>
-                    <div class="ap-who-name">{{ $fila->nombre }}</div>
-                    <div class="ap-who-dept">{{ $fila->departamento ?? '—' }}</div>
-                </div>
-                <span class="ap-km-chip">Kilómetros</span>
-                <span class="ap-paso-badge s-{{ $fila->paso }}"><span class="dot"></span>{{ $paso_labels[$fila->paso] ?? $fila->paso }}</span>
-            </div>
-            <div class="ap-row-right">
-                <div class="ap-actions">
-                    <a class="ap-btn ap-btn-white" href="{{ $verUrl }}" target="_blank" rel="noopener" title="Abrir informe de kilómetros">Ver informe</a>
-                    @if($fila->paso === 'completado')
-                        <span class="ap-done-pill">✓ Completado</span>
-                    @else
-                        <button type="button" class="ap-btn ap-btn-sign"
-                            data-url="{{ $firma_routes_km[$fila->paso] ?? '' }}?year={{ $year }}&month={{ $month }}&user_id={{ $fila->id }}"
-                            data-nombre="{{ $fila->nombre }}"
-                            data-paso="{{ ($paso_labels[$fila->paso] ?? $fila->paso) . ' · kilómetros' }}"
-                            {{ $puedeFirmarEste ? '' : 'disabled' }}
-                            title="{{ $motivoNoPuede ?? '' }}"
-                            onclick="firmarFila(this)">Firmar</button>
-                    @endif
-                </div>
-            </div>
-        </div>
-        <div class="ap-line2">
-            <span><span class="ap-stat">{{ number_format($fila->total_km, 0, ',', '.') }}</span> km</span>
-            <span class="ap-sep">·</span>
-            <span><span class="ap-stat">{{ $fila->dias_con_km }}</span> {{ $fila->dias_con_km === 1 ? 'día con kilómetros' : 'días con kilómetros' }}</span>
-        </div>
-    </div>
-@endforeach
-
-@if($filas->isEmpty() && $filas_km->isEmpty())
+@if($filas->isEmpty())
     <div class="ap-empty">No hay nada que firmar en este mes.</div>
 @endif
 </div>

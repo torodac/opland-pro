@@ -240,8 +240,15 @@ class InformeImputacionesController extends Controller
         $filasKm = app(\App\Http\Controllers\Vm\KmController::class)
             ->filasPanel($usuarios, $year, $month, $currentVmUserId, $isAdmin, $authRol ? (int) $authRol : null);
 
+        // Las dos clases van en UNA sola lista ordenada por nombre, para que las dos tarjetas de
+        // una misma persona salgan juntas. 'horas' antes que 'km' dentro de cada persona, que es
+        // el orden en que se firman.
+        $filas = $filas->map(fn($f) => tap($f, fn($x) => $x->clase = 'horas'))
+            ->concat($filasKm->map(fn($f) => tap($f, fn($x) => $x->clase = 'km')))
+            ->sortBy([['nombre', 'asc'], ['clase', 'asc']])
+            ->values();
+
         return view('informe-imputaciones-list', [
-            'filas_km'               => $filasKm,
             'project'                => $project,
             'year'                   => $year,
             'month'                  => $month,
