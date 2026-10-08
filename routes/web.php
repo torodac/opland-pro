@@ -388,6 +388,16 @@ Route::middleware('auth')->group(function () {
             Route::post('importar/confirmar-dudosos', [\App\Http\Controllers\Rodcar\ImportarMovimientosController::class, 'confirmarDudosos'])->where('project', 'rodcar')->name('rodcar.importar.confirmar-dudosos');
             Route::get('importar/huerfanos/{lote}', [\App\Http\Controllers\Rodcar\ImportarMovimientosController::class, 'huerfanosLote'])->where(['project' => 'rodcar', 'lote' => '[0-9]+'])->name('rodcar.importar.huerfanos');
             Route::post('importar/huerfanos/{lote}/vincular', [\App\Http\Controllers\Rodcar\ImportarMovimientosController::class, 'vincular'])->where(['project' => 'rodcar', 'lote' => '[0-9]+'])->name('rodcar.importar.vincular');
+
+            // Informes de tesoreria y balance. Los controladores y las vistas estaban desde
+            // siempre, pero sin estas rutas: las dos entradas del menu de rodcar daban 500 y
+            // las vistas llamaban a nombres de ruta inexistentes. Las URI son las que el menu
+            // ya tenia guardadas (/rodcar/informe-tesoreria y /rodcar/informe-balance).
+            Route::get('informe-tesoreria', [\App\Http\Controllers\Rodcar\TesoreriaController::class, 'index'])->where('project', 'rodcar')->name('rodcar.tesoreria');
+            Route::get('informe-balance', [\App\Http\Controllers\Rodcar\BalanceController::class, 'index'])->where('project', 'rodcar')->name('rodcar.balance');
+            // El guardado y la carga por fecha los llama el JS de la propia vista.
+            Route::post('informe-balance/guardar', [\App\Http\Controllers\Rodcar\BalanceController::class, 'store'])->where('project', 'rodcar')->name('rodcar.balance.store');
+            Route::get('informe-balance/cargar', [\App\Http\Controllers\Rodcar\BalanceController::class, 'loadFecha'])->where('project', 'rodcar')->name('rodcar.balance.load');
         }); // fin rodcar.only
 
         Route::middleware('mb.only')->group(function () {
