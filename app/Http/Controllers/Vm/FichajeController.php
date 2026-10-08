@@ -335,8 +335,7 @@ class FichajeController extends Controller
     {
         abort_unless(auth()->user()->canViewTable($project, 'fichaje'), 403);
 
-        $user       = auth()->user();
-        $puedeSinLimiteFecha = VmFichajePermisos::puedeSinLimiteFecha($project);
+        $user = auth()->user();
 
         $data = $request->validate([
             'control_user'   => 'required|integer',
@@ -347,6 +346,10 @@ class FichajeController extends Controller
             'pausa_fin'      => 'nullable|date_format:H:i',
             'observacion'    => 'nullable|string|max:1000',
         ]);
+
+        // Después de validar, porque el límite de fecha depende de DE QUIÉN es el fichaje: quien
+        // firma el informe de esa persona puede crearlo en cualquier fecha del mes que firma.
+        $puedeSinLimiteFecha = VmFichajePermisos::puedeSinLimiteFecha($project, (int) $data['control_user']);
 
         // Visibilidad: el control_user elegido tiene que estar dentro de lo que el usuario puede ver/crear.
         $visibleIds = $this->resolveVisibleUserIds($project);
@@ -540,7 +543,7 @@ class FichajeController extends Controller
         // antiguas lo tiene también Operaciones, que es quien resuelve las incidencias de fichaje
         // del dashboard.
         $puedeAjustar        = VmFichajePermisos::puedeAjustarHe($project);
-        $puedeSinLimiteFecha = VmFichajePermisos::puedeSinLimiteFecha($project);
+        $puedeSinLimiteFecha = VmFichajePermisos::puedeSinLimiteFecha($project, (int) $fichaje->control_user);
 
         // "Pendiente" solo tiene sentido para el mismo caso que el bloque del dashboard
         // "Fichaje vs imputaciones (diff > 30 min)": roles que imputan tiempo por tarea
@@ -579,7 +582,8 @@ class FichajeController extends Controller
         }
 
         // Mismo límite de fecha que para editarlo: borrar un fichaje antiguo pesa al menos tanto.
-        if (!VmFichajePermisos::puedeSinLimiteFecha($project) && $fichaje->fecha_fichaje < VmFichajePermisos::fechaMinima()) {
+        if (!VmFichajePermisos::puedeSinLimiteFecha($project, (int) $fichaje->control_user)
+            && $fichaje->fecha_fichaje < VmFichajePermisos::fechaMinima()) {
             return response()->json(['error' => 'Solo se pueden borrar fichajes de los últimos ' . VmFichajePermisos::DIAS_LIMITE . ' días'], 422);
         }
 
@@ -607,8 +611,7 @@ class FichajeController extends Controller
     {
         abort_unless(auth()->user()->canViewTable($project, 'fichaje'), 403);
 
-        $user       = auth()->user();
-        $puedeSinLimiteFecha = VmFichajePermisos::puedeSinLimiteFecha($project);
+        $user = auth()->user();
 
         $data = $request->validate([
             'control_user'   => 'required|integer',
@@ -629,6 +632,8 @@ class FichajeController extends Controller
             'ajuste_he_motivo' => 'nullable|string|max:500',
             'deleted'        => 'nullable|integer',
         ]);
+
+        $puedeSinLimiteFecha = VmFichajePermisos::puedeSinLimiteFecha($project, (int) $data['control_user']);
 
         if (!$puedeSinLimiteFecha && $data['fecha_fichaje'] < VmFichajePermisos::fechaMinima()) {
             return response()->json(['error' => 'Solo se pueden editar fichajes de los últimos 2 días'], 422);

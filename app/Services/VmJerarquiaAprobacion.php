@@ -3,9 +3,10 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
-// Jerarquía de aprobación del informe mensual, definida persona a persona en el campo
-// "Aprueba informe" de la ficha del usuario (vm_usuarios.id_aprueba_informe).
+// Jerarquía de aprobación del informe mensual, definida en el campo "Supervisa a" de la ficha
+// del responsable (vm_usuarios.supervisados): la lista de las personas cuyo informe firma.
 //
 // Convive con RoleHierarchy (vm_roles.roles_supervisados) sin sustituirla: la jerarquía de
 // ROLES sigue gobernando la visibilidad general (fichajes, listados, dashboard, PWA y el
@@ -28,23 +29,49 @@ class VmJerarquiaAprobacion
     // una baja o unas vacaciones no bloqueen el cierre de mes (decisión explícita 2026-09-24).
     public const ROLES_FIRMAN_POR_SUPERVISOR = [self::ROL_DIRECCION_GENERAL, self::ROL_DIRECTOR_RRHH];
 
-    // [id_usuario => id_aprobador] de los usuarios activos, descartando referencias a usuarios
-    // borrados o inexistentes y la autoaprobación (que la ficha hoy no impide).
+    /**
+     * [id_usuario => id_aprobador] de los usuarios activos.
+     *
+     * La fuente es **vm_usuarios.supervisados**: la lista, en la ficha de cada responsable, de
+     * las personas cuyo informe firma. Se informa así desde el 2026-10-08; antes estaba al
+     * revés, en un desplegable "Aprueba informe" en la ficha de cada trabajador
+     * (`id_aprueba_informe`), que se conserva en la base de datos pero ya no se lee ni se
+     * ofrece en la ficha. Ver 3.124 del DOC_TECNICO.
+     *
+     * Se descartan los usuarios borrados o inexistentes y la autosupervisión. Si una persona
+     * apareciera en DOS listas, gana la del responsable de id más bajo y se deja constancia en
+     * el log: el circuito de firmas asume un único aprobador y, sin este aviso, el informe lo
+     * firmaría quien saliera primero en la consulta. MultiusuarioGuard lo impide al guardar, así
+     * que llegar aquí significa que algo entró por otra vía.
+     */
     public static function mapaAprobadores(): array
     {
         $filas = DB::table('vm_usuarios')
             ->where('deleted', 0)
-            ->get(['id', 'id_aprueba_informe']);
+            ->orderBy('id')
+            ->get(['id', 'supervisados']);
 
         $activos = [];
         foreach ($filas as $f) $activos[(int) $f->id] = true;
 
         $mapa = [];
         foreach ($filas as $f) {
-            $id  = (int) $f->id;
-            $apr = $f->id_aprueba_informe ? (int) $f->id_aprueba_informe : null;
-            if ($apr === null || $apr === $id || !isset($activos[$apr])) continue;
-            $mapa[$id] = $apr;
+            $responsable = (int) $f->id;
+
+            foreach (json_decode($f->supervisados ?? '[]', true) ?: [] as $supervisado) {
+                $sid = (int) $supervisado;
+
+                if ($sid === $responsable || !isset($activos[$sid])) continue;
+
+                if (isset($mapa[$sid])) {
+                    Log::warning("VmJerarquiaAprobacion: el usuario {$sid} está en la lista "
+                        . "\"Supervisa a\" de {$mapa[$sid]} y de {$responsable}. Se usa el primero; "
+                        . 'corrige una de las dos fichas.');
+                    continue;
+                }
+
+                $mapa[$sid] = $responsable;
+            }
         }
 
         return $mapa;

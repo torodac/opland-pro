@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Project;
+use App\Services\VmJerarquiaAprobacion;
 use Illuminate\Support\Facades\DB;
 
 // Permisos de fichaje compartidos entre FichajeController, el dashboard y el listado por
@@ -24,6 +25,9 @@ class VmFichajePermisos
     // Dirección general y Director de RRHH. Vivía pegado a ROLES_SIN_LIMITE, y al abrir ese al
     // área de Operaciones les habría dado también esto, que es otra cosa: tocar a mano el saldo
     // de horas de una persona.
+    // Y sigue siendo solo de ellos: al abrir el límite de fecha a los supervisores (2026-10-08)
+    // esto se dejó fuera a propósito. Es el único control que impide que alguien arregle el saldo
+    // de horas de su propio equipo sin que quede rastro de rol.
     public const ROLES_AJUSTE_HE = [3, 11];
 
     public const DIAS_LIMITE = 2;
@@ -42,24 +46,75 @@ class VmFichajePermisos
         $role = $user->getProjectRolePublic($project);
         if (!$role || ($role->todos_registros ?? null) === 'todos') return null;
 
+        // La rama de APROBACIÓN se suma a la de roles, no la sustituye. Quien firma el informe
+        // de alguien tiene que poder ver y corregir sus fichajes, aunque su rol no alcance a esa
+        // persona -- y hasta ahora la visibilidad salía solo de los roles, así que el permiso de
+        // edición habría prometido tocar fichajes que la visibilidad negaba. Misma unión que ya
+        // hace el informe mensual en resolveParams() (decisión 2026-10-08).
+        $rama = array_map('strval', VmJerarquiaAprobacion::ramaDe((int) $projectUserId));
+
         if (($role->todos_registros ?? null) === 'supervisados') {
-            return RoleHierarchy::visibleUserIds(
+            $porRoles = RoleHierarchy::visibleUserIds(
                 $project->slug . '_roles',
                 $project->slug . '_usuarios',
                 (int) $projectUserId,
                 (int) $role->id
             );
+
+            return array_values(array_unique(array_merge(array_map('strval', $porRoles), $rama)));
         }
 
-        return [(string) $projectUserId];
+        return array_values(array_unique(array_merge([(string) $projectUserId], $rama)));
     }
 
     /**
      * Si puede crear o editar fichajes de fechas antiguas, sin el límite de los últimos días.
+     *
+     * Con $targetId, además de los roles de ROLES_SIN_LIMITE lo puede quien firme el informe de
+     * esa persona: el supervisor firma el mes entero y con el límite de 2 días no podía corregir
+     * lo que firma. Se resuelve por PERSONA y no por rol porque "supervisor" es una relación de
+     * la ficha ("Supervisa a"), no un rol (decisión 2026-10-08).
+     *
+     * Sin $targetId se comporta como siempre -- hay sitios (la modal de alta, el dashboard) que
+     * preguntan antes de saber de quién será el fichaje.
      */
-    public static function puedeSinLimiteFecha(Project $project): bool
+    public static function puedeSinLimiteFecha(Project $project, ?int $targetId = null): bool
     {
-        return self::rolEnLista($project, self::ROLES_SIN_LIMITE);
+        if (self::rolEnLista($project, self::ROLES_SIN_LIMITE)) return true;
+
+        return $targetId !== null && self::esDeSuRamaDeAprobacion($project, $targetId);
+    }
+
+    /**
+     * Si puede crear o editar el fichaje de esa persona: admin, Dirección general, Director de
+     * RRHH, o quien firme su informe mensual. Incluye los propios fichajes, porque ramaDe()
+     * incluye a la propia persona (decisión expresa 2026-10-08).
+     */
+    public static function puedeEditarFichajeDe(Project $project, int $targetId): bool
+    {
+        if (self::rolEnLista($project, self::ROLES_AJUSTE_HE)) return true;   // admin, 3 y 11
+
+        return self::esDeSuRamaDeAprobacion($project, $targetId);
+    }
+
+    private static function esDeSuRamaDeAprobacion(Project $project, int $targetId): bool
+    {
+        $user = auth()->user();
+        if (!$user) return false;
+
+        $authUserId = $user->projectUserId($project);
+        if (!$authUserId) return false;
+
+        $rama = VmJerarquiaAprobacion::ramaDe((int) $authUserId);
+
+        // ramaDe() incluye SIEMPRE a la propia persona, así que sin esta condición el permiso se
+        // le concedería también a quien no supervisa a nadie: los 19 empleados sin rol
+        // privilegiado podrían editar sus propios fichajes de cualquier mes, y eso no es lo que
+        // se decidió -- la pregunta que se respondió era si un SUPERVISOR puede editar los
+        // suyos. Para abrirlo a todos basta con quitar estas tres líneas.
+        if (count($rama) <= 1) return false;
+
+        return in_array($targetId, $rama, true);
     }
 
     /**

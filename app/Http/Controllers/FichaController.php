@@ -149,7 +149,9 @@ class FichaController extends Controller
         // extra, que ya no coinciden.
         $puedeSinLimiteFecha = null;
         if ($projectTable->name === 'fichaje' && $project->slug === 'vm') {
-            $puedeSinLimiteFecha = VmFichajePermisos::puedeSinLimiteFecha($project);
+            $puedeSinLimiteFecha = VmFichajePermisos::puedeSinLimiteFecha($project, (int) ($registro->control_user ?? 0));
+            // De quien es el fichaje: el limite de fecha depende de eso, porque quien firma
+            // su informe mensual puede corregirlo en cualquier fecha del mes que firma.
 
             if (!VmFichajePermisos::puedeAjustarHe($project)) {
                 $camposFicha = $camposFicha->whereNotIn('name', ['ajuste_he', 'ajuste_he_motivo'])->values();
@@ -367,7 +369,7 @@ class FichaController extends Controller
         }
 
         if ($projectTable->name === 'fichaje' && $project->slug === 'vm') {
-            $puedeSinLimiteFecha = VmFichajePermisos::puedeSinLimiteFecha($project);
+            $puedeSinLimiteFecha = VmFichajePermisos::puedeSinLimiteFecha($project, (int) ($data['control_user'] ?? $registro->control_user ?? 0));
 
             if (!VmFichajePermisos::puedeAjustarHe($project)) {
                 unset($data['ajuste_he'], $data['ajuste_he_motivo']);
