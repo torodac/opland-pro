@@ -376,39 +376,7 @@ class KmController extends Controller
         $usuarios = \App\Services\PanelInformes::filtrar($usuarios, $year, $month);
         $userIds  = $usuarios->pluck('id')->all();
 
-        $estados = DB::table('vm_informes_estado')
-            ->where('informe', CircuitoFirmas::KM)
-            ->where('anio', $year)->where('mes', $month)
-            ->whereIn('id_usuario', $userIds ?: [0])
-            ->pluck('paso_actual', 'id_usuario');
-
-        $firmasPorUsuario = DB::table('vm_usuarios as u')
-            ->join('admin_users as a', 'a.id', '=', 'u.admin_user_id')
-            ->whereIn('u.id', $userIds ?: [0])
-            ->pluck('a.signature_path', 'u.id');
-
-        $rolesMap = DB::table('vm_roles')->pluck('nombre', 'id');
-
-        $filas = $usuarios->map(function ($u) use ($year, $month, $estados, $firmasPorUsuario, $rolesMap, $authUserId, $isAdmin, $authRol) {
-            $data = $this->getInformeKmData($u->id, $year, $month);
-            if ($data['total_km'] <= 0) return null;   // sin kilómetros, sin informe
-
-            $diasConKm = count(array_filter($data['dias'], fn($d) => $d['km'] > 0));
-
-            return (object) [
-                'id'          => $u->id,
-                'nombre'      => $u->nombre,
-                'departamento' => $rolesMap[$u->id_rol] ?? null,
-                'paso'        => $estados[$u->id] ?? VmJerarquiaAprobacion::pasoInicial((int) $u->id),
-                'total_km'    => $data['total_km'],
-                'dias_con_km' => $diasConKm,
-                'tiene_firma' => (bool) ($firmasPorUsuario[$u->id] ?? null),
-                'es_mi_informe' => $u->admin_user_id && (int) $u->admin_user_id === (int) auth()->id(),
-                'puede_firmar_aprueba' => VmJerarquiaAprobacion::puedeFirmarAprueba(
-                    $authUserId ? (int) $authUserId : null, (int) $u->id, $isAdmin, $authRol
-                ),
-            ];
-        })->filter()->sortBy('nombre')->values();
+        $filas = $this->filasPanel($usuarios, $year, $month, $authUserId, $isAdmin, $authRol);
 
         $defaultTab = match (true) {
             $authRol === VmJerarquiaAprobacion::ROL_DIRECTOR_RRHH     => 'rrhh',
@@ -434,6 +402,50 @@ class KmController extends Controller
             'pasos_visibles'         => CircuitoFirmas::PASOS_VISIBLES,
             'breadcrumb'             => [['label' => 'Informe kilómetros', 'url' => '']],
         ]);
+    }
+
+    /**
+     * Las filas del panel de kilómetros para una lista de usuarios y un mes. Público porque el
+     * panel del informe mensual las incluye como tarjetas propias, y así los dos usan la misma
+     * lógica en lugar de una copia (2026-10-08).
+     *
+     * Quien no tiene kilómetros en el mes no genera fila: queda fuera del circuito.
+     */
+    public function filasPanel($usuarios, int $year, int $month, $authUserId, bool $isAdmin, ?int $authRol)
+    {
+        $userIds = $usuarios->pluck('id')->all() ?: [0];
+
+        $estados = DB::table('vm_informes_estado')
+            ->where('informe', CircuitoFirmas::KM)
+            ->where('anio', $year)->where('mes', $month)
+            ->whereIn('id_usuario', $userIds)
+            ->pluck('paso_actual', 'id_usuario');
+
+        $firmasPorUsuario = DB::table('vm_usuarios as u')
+            ->join('admin_users as a', 'a.id', '=', 'u.admin_user_id')
+            ->whereIn('u.id', $userIds)
+            ->pluck('a.signature_path', 'u.id');
+
+        $rolesMap = DB::table('vm_roles')->pluck('nombre', 'id');
+
+        return $usuarios->map(function ($u) use ($year, $month, $estados, $firmasPorUsuario, $rolesMap, $authUserId, $isAdmin, $authRol) {
+            $data = $this->getInformeKmData($u->id, $year, $month);
+            if ($data['total_km'] <= 0) return null;
+
+            return (object) [
+                'id'           => $u->id,
+                'nombre'       => $u->nombre,
+                'departamento' => $rolesMap[$u->id_rol] ?? null,
+                'paso'         => $estados[$u->id] ?? VmJerarquiaAprobacion::pasoInicial((int) $u->id),
+                'total_km'     => $data['total_km'],
+                'dias_con_km'  => count(array_filter($data['dias'], fn($d) => $d['km'] > 0)),
+                'tiene_firma'  => (bool) ($firmasPorUsuario[$u->id] ?? null),
+                'es_mi_informe' => $u->admin_user_id && (int) $u->admin_user_id === (int) auth()->id(),
+                'puede_firmar_aprueba' => VmJerarquiaAprobacion::puedeFirmarAprueba(
+                    $authUserId ? (int) $authUserId : null, (int) $u->id, $isAdmin, $authRol
+                ),
+            ];
+        })->filter()->sortBy('nombre')->values();
     }
 
     /** Firmas para estampar en el PDF, solo cuando el circuito está completado. */

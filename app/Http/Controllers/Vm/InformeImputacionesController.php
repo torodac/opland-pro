@@ -234,7 +234,14 @@ class InformeImputacionesController extends Controller
             ];
         })->sortBy('nombre')->values();
 
+        // Tarjetas de firma del informe de KILÓMETROS, sobre los mismos usuarios y mes. Van en
+        // el mismo panel para no obligar a recorrer dos pantallas para firmar lo de una persona.
+        // Las construye KmController, así que la lógica es la misma que en su propio panel.
+        $filasKm = app(\App\Http\Controllers\Vm\KmController::class)
+            ->filasPanel($usuarios, $year, $month, $currentVmUserId, $isAdmin, $authRol ? (int) $authRol : null);
+
         return view('informe-imputaciones-list', [
+            'filas_km'               => $filasKm,
             'project'                => $project,
             'year'                   => $year,
             'month'                  => $month,
