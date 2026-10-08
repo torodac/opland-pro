@@ -467,7 +467,14 @@ Route::middleware('auth')->group(function () {
         Route::middleware('nf.only')->group(function () {
             Route::get('clientes_form/{id}', [\App\Http\Controllers\Nf\FitnessController::class, 'ficha'])->where(['project' => 'nf', 'id' => '[0-9]+'])->name('nf.clientes_form');
             Route::post('clientes/{id}/contratos', [\App\Http\Controllers\Nf\FitnessController::class, 'guardarContrato'])->where(['project' => 'nf', 'id' => '[0-9]+'])->name('nf.clientes.contratos.store');
-            Route::put('contratos/{id}', [\App\Http\Controllers\Nf\FitnessController::class, 'actualizarContrato'])->where(['project' => 'nf', 'id' => '[0-9]+'])->name('nf.contratos.update');
+            // La URI lleva "/actualizar" en vez de ser un PUT a 'contratos/{id}' porque clase
+            // declara esa misma combinacion mas abajo. Laravel indexa las rutas por metodo +
+            // patron de URI y NO mira las restricciones ->where(), asi que la que se registra
+            // despues borra a la anterior del router, con su nombre incluido: por eso esta se
+            // perdia y la ficha de cliente de nf moria con "Route [nf.contratos.update] not
+            // defined". Mientras los proyectos compartan el prefijo {project:slug}, dos rutas
+            // identicas de proyectos distintos chocan aunque las URL finales no se parezcan.
+            Route::put('contratos/{id}/actualizar', [\App\Http\Controllers\Nf\FitnessController::class, 'actualizarContrato'])->where(['project' => 'nf', 'id' => '[0-9]+'])->name('nf.contratos.update');
             Route::post('pagos/{pago}/pagar/{formaPago}', [\App\Http\Controllers\Nf\FitnessController::class, 'pagarPago'])->where(['project' => 'nf', 'pago' => '[0-9]+', 'formaPago' => '[0-9]+'])->name('nf.pagos.pagar');
             Route::post('documentos/{documento}/enviar', [\App\Http\Controllers\Nf\FitnessController::class, 'enviarDocumento'])->where(['project' => 'nf', 'documento' => '[0-9]+'])->name('nf.documentos.enviar');
             Route::post('pagos/generar', [\App\Http\Controllers\Nf\FitnessController::class, 'generarPagos'])->where('project', 'nf')->name('nf.pagos.generar');
@@ -478,6 +485,38 @@ Route::middleware('auth')->group(function () {
             Route::get('dashboard2/objetivos', [\App\Http\Controllers\Nf\FitnessController::class, 'objetivosData'])->where('project', 'nf')->name('nf.dashboard2.objetivos');
             Route::get('dashboard2/marketing', [\App\Http\Controllers\Nf\FitnessController::class, 'marketingData'])->where('project', 'nf')->name('nf.dashboard2.marketing');
         }); // fin nf.only
+
+        Route::middleware('clase.only')->group(function () {
+            Route::get('tutores',                [\App\Http\Controllers\Clase\ClaseController::class, 'listadoTutores'])->where('project','clase')->name('clase.tutores');
+            Route::get('tutores/buscar',         [\App\Http\Controllers\Clase\ClaseController::class, 'buscarTutores'])->where('project','clase')->name('clase.tutores.buscar');
+            Route::post('tutores/store',         [\App\Http\Controllers\Clase\ClaseController::class, 'guardarTutor'])->where('project','clase')->name('clase.tutores.store');
+            Route::get('tutores/{id}',           [\App\Http\Controllers\Clase\ClaseController::class, 'fichaTutor'])->where(['project'=>'clase','id'=>'[0-9]+'])->name('clase.tutores.ficha');
+            Route::post('tutores/{id}/datos',    [\App\Http\Controllers\Clase\ClaseController::class, 'actualizarDatosTutor'])->where(['project'=>'clase','id'=>'[0-9]+'])->name('clase.tutores.update_datos');
+            Route::post('tutores/{id}/borrar',   [\App\Http\Controllers\Clase\ClaseController::class, 'borrarMasterTutor'])->where(['project'=>'clase','id'=>'[0-9]+'])->name('clase.tutores.borrar');
+            Route::post('tutores/alumnos/{id}',         [\App\Http\Controllers\Clase\ClaseController::class, 'actualizarTutor'])->where(['project'=>'clase','id'=>'[0-9]+'])->name('clase.tutores.update');
+            Route::post('tutores/alumnos/{id}/borrar',  [\App\Http\Controllers\Clase\ClaseController::class, 'borrarTutor'])->where(['project'=>'clase','id'=>'[0-9]+'])->name('clase.tutores.borrar_relacion');
+            Route::post('alumnos/{id}/duplicar', [\App\Http\Controllers\Clase\ClaseController::class, 'duplicarAlumno'])->where(['project'=>'clase','id'=>'[0-9]+'])->name('clase.alumnos.duplicar');
+            Route::get('alumnos_form/{id}',     [\App\Http\Controllers\Clase\ClaseController::class, 'fichaAlumno'])->where(['project'=>'clase','id'=>'[0-9]+'])->name('clase.alumnos_form');
+            Route::post('alumnos/{alumnoId}/contratos', [\App\Http\Controllers\Clase\ClaseController::class, 'guardarContrato'])->where(['project'=>'clase','alumnoId'=>'[0-9]+'])->name('clase.contratos.store');
+            Route::post('contratos/{id}/borrar',[\App\Http\Controllers\Clase\ClaseController::class, 'borrarContrato'])->where(['project'=>'clase','id'=>'[0-9]+'])->name('clase.contratos.borrar');
+            Route::put('contratos/{id}',[\App\Http\Controllers\Clase\ClaseController::class, 'actualizarContrato'])->where(['project'=>'clase','id'=>'[0-9]+'])->name('clase.contratos.update');
+            Route::get('grupos',                   [\App\Http\Controllers\Clase\ClaseController::class, 'listadoGrupos'])->where('project','clase')->name('clase.grupos');
+            Route::get('grupos/nuevo',              [\App\Http\Controllers\Clase\ClaseController::class, 'nuevoGrupo'])->where('project','clase')->name('clase.grupos.nuevo');
+            Route::post('grupos/store',             [\App\Http\Controllers\Clase\ClaseController::class, 'guardarGrupo'])->where('project','clase')->name('clase.grupos.store');
+            Route::get('grupos/{id}',               [\App\Http\Controllers\Clase\ClaseController::class, 'fichaGrupo'])->where(['project'=>'clase','id'=>'[0-9]+'])->name('clase.grupos.ficha');
+            Route::post('grupos/{id}',              [\App\Http\Controllers\Clase\ClaseController::class, 'actualizarGrupo'])->where(['project'=>'clase','id'=>'[0-9]+'])->name('clase.grupos.update');
+            Route::post('grupos/{id}/borrar',       [\App\Http\Controllers\Clase\ClaseController::class, 'borrarGrupo'])->where(['project'=>'clase','id'=>'[0-9]+'])->name('clase.grupos.borrar');
+            Route::get('recibos',                  [\App\Http\Controllers\Clase\ClaseController::class, 'recibos'])->where('project','clase')->name('clase.recibos');
+            Route::get('recibos/{id}/pdf',          [\App\Http\Controllers\Clase\ClaseController::class, 'verReciboPdf'])->where(['project'=>'clase','id'=>'[0-9]+'])->name('clase.recibos.pdf');
+            Route::post('recibos/{id}/facturar',    [\App\Http\Controllers\Clase\ClaseController::class, 'facturarRecibo'])->where(['project'=>'clase','id'=>'[0-9]+'])->name('clase.recibos.facturar');
+            Route::get('cobros',                   [\App\Http\Controllers\Clase\ClaseController::class, 'cobros'])->where('project', 'clase')->name('clase.cobros');
+            Route::get('cobros/{id}',              [\App\Http\Controllers\Clase\ClaseController::class, 'fichaCobro'])->where(['project'=>'clase','id'=>'[0-9]+'])->name('clase.cobros.ficha');
+            Route::post('cobros/{id}',             [\App\Http\Controllers\Clase\ClaseController::class, 'actualizarCobro'])->where(['project'=>'clase','id'=>'[0-9]+'])->name('clase.cobros.update');
+            Route::post('cobros/{id}/estado',      [\App\Http\Controllers\Clase\ClaseController::class, 'actualizarEstadoCobro'])->where(['project'=>'clase','id'=>'[0-9]+'])->name('clase.cobros.estado');
+            Route::post('cobros/generar',[\App\Http\Controllers\Clase\ClaseController::class, 'generarCobros'])->where('project', 'clase')->name('clase.cobros.generar');
+            Route::post('cobros/lote',   [\App\Http\Controllers\Clase\ClaseController::class, 'cobrarLote'])->where('project', 'clase')->name('clase.cobros.lote');
+        }); // fin clase.only
+
 
         // Embed de Power BI: generico, disponible para cualquier proyecto con fila(s) en
         // admin_pbi_reports (controller devuelve 404 si no la tiene). Segmento "powerbi_report"
