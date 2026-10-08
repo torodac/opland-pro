@@ -389,6 +389,13 @@ Route::middleware('auth')->group(function () {
             Route::get('importar/huerfanos/{lote}', [\App\Http\Controllers\Rodcar\ImportarMovimientosController::class, 'huerfanosLote'])->where(['project' => 'rodcar', 'lote' => '[0-9]+'])->name('rodcar.importar.huerfanos');
             Route::post('importar/huerfanos/{lote}/vincular', [\App\Http\Controllers\Rodcar\ImportarMovimientosController::class, 'vincular'])->where(['project' => 'rodcar', 'lote' => '[0-9]+'])->name('rodcar.importar.vincular');
 
+            // Movimientos cuyo desglose no suma el importe del movimiento, y el desglose de
+            // uno. Las dos URI son las que la vista ya construye con url(), y la entrada de
+            // menu "Validacion detalles" ya existia apuntando a la primera: de ahi saca
+            // menu.access el permiso (tabla validacion_detalles), sin tener que declararlo.
+            Route::get('validacion-detalles', [\App\Http\Controllers\Rodcar\ValidacionDetallesController::class, 'index'])->where('project', 'rodcar')->name('rodcar.validacion-detalles');
+            Route::get('validacion-detalles/{id}', [\App\Http\Controllers\Rodcar\ValidacionDetallesController::class, 'detalles'])->where(['project' => 'rodcar', 'id' => '[0-9]+'])->name('rodcar.validacion-detalles.detalles');
+
             // Informes de tesoreria y balance. Los controladores y las vistas estaban desde
             // siempre, pero sin estas rutas: las dos entradas del menu de rodcar daban 500 y
             // las vistas llamaban a nombres de ruta inexistentes. Las URI son las que el menu
