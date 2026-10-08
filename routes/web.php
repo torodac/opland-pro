@@ -176,6 +176,26 @@ Route::middleware('auth')->group(function () {
             ->where('id', '[0-9]+')->name('vm.dev-fianza.conforme');
         Route::post('dev-fianzas/{id}/retener', [\App\Http\Controllers\Vm\DevFianzasController::class, 'retener'])
             ->where('id', '[0-9]+')->name('vm.dev-fianza.retener');
+        // Alarmas de las propiedades. Pantalla aparte de la ficha de la propiedad porque lleva
+        // la palabra clave de la central y las credenciales de la app: el acceso de lectura lo da
+        // menu.access desde la entrada del menu (tabla alarmas) y las de escritura comprueban
+        // ademas permiso de edicion en el controlador. revelar() es POST porque escribe: deja
+        // apuntado quien ha consultado el campo antes de devolverlo.
+        Route::get('alarmas', [\App\Http\Controllers\Vm\AlarmasController::class, 'index'])
+            ->name('vm.alarmas');
+        Route::get('alarmas/nueva', [\App\Http\Controllers\Vm\AlarmasController::class, 'form'])
+            ->name('vm.alarma.nueva');
+        Route::post('alarmas/nueva', [\App\Http\Controllers\Vm\AlarmasController::class, 'guardar'])
+            ->name('vm.alarma.crear');
+        Route::get('alarmas/{id}', [\App\Http\Controllers\Vm\AlarmasController::class, 'show'])
+            ->where('id', '[0-9]+')->name('vm.alarma');
+        Route::get('alarmas/{id}/editar', [\App\Http\Controllers\Vm\AlarmasController::class, 'form'])
+            ->where('id', '[0-9]+')->name('vm.alarma.editar');
+        Route::post('alarmas/{id}/editar', [\App\Http\Controllers\Vm\AlarmasController::class, 'guardar'])
+            ->where('id', '[0-9]+')->name('vm.alarma.guardar');
+        Route::post('alarmas/{id}/revelar', [\App\Http\Controllers\Vm\AlarmasController::class, 'revelar'])
+            ->where('id', '[0-9]+')->name('vm.alarma.revelar');
+
         Route::get('permisos-roles', [\App\Http\Controllers\Vm\PermisosRolesController::class, 'index'])
             ->name('permisos-roles');
 

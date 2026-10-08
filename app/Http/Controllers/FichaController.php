@@ -112,10 +112,17 @@ class FichaController extends Controller
 
     private function resolveTable(Project $project, string $table): ProjectTable
     {
-        return $project->tables()
+        $projectTable = $project->tables()
             ->where('name', $table)
             ->with(['fields', 'project'])
             ->firstOrFail();
+
+        // Una tabla virtual tiene pantalla propia, y esa es su unica puerta: las genericas no
+        // conocen sus reglas. En alarmas, por ejemplo, escribirian la palabra clave en claro,
+        // sin cifrar y sin dejar constancia de quien la ha visto.
+        abort_if($projectTable->is_virtual, 404);
+
+        return $projectTable;
     }
 
     public function show(Project $project, string $table, int $id)

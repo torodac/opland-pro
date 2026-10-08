@@ -26,6 +26,11 @@ class ListadoController extends Controller
             ->with(['listFields', 'fields'])
             ->firstOrFail();
 
+        // Una tabla virtual tiene pantalla propia, y esa es su unica puerta: las genericas no
+        // conocen sus reglas. En alarmas, por ejemplo, escribirian la palabra clave en claro,
+        // sin cifrar y sin dejar constancia de quien la ha visto.
+        abort_if($projectTable->is_virtual, 404);
+
         $fullTable    = $projectTable->getFullTableName();
         $tieneDeleted = Schema::hasColumn($fullTable, 'deleted');
         $tieneHidden  = Schema::hasColumn($fullTable, 'hidden');
@@ -219,6 +224,11 @@ class ListadoController extends Controller
             ->where('name', $table)
             ->with(['listFields'])
             ->firstOrFail();
+
+        // Una tabla virtual tiene pantalla propia, y esa es su unica puerta: las genericas no
+        // conocen sus reglas. En alarmas, por ejemplo, escribirian la palabra clave en claro,
+        // sin cifrar y sin dejar constancia de quien la ha visto.
+        abort_if($projectTable->is_virtual, 404);
 
         abort_unless(Auth::user()?->canViewTable($project, $table), 403);
 

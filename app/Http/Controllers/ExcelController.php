@@ -23,6 +23,11 @@ class ExcelController extends Controller
     public function export(Request $request, Project $project, string $table)
     {
         $projectTable = $project->tables()->where('name', $table)->with('fields')->firstOrFail();
+        // Una tabla virtual tiene pantalla propia, y esa es su unica puerta: las genericas no
+        // conocen sus reglas. En alarmas, por ejemplo, escribirian la palabra clave en claro,
+        // sin cifrar y sin dejar constancia de quien la ha visto.
+        abort_if($projectTable->is_virtual, 404);
+
         $fullTable    = $projectTable->getFullTableName();
         $tipo         = $request->input('tipo', 'listado'); // 'listado' | 'tabla'
 
@@ -51,6 +56,11 @@ class ExcelController extends Controller
     public function importForm(Project $project, string $table)
     {
         $projectTable = $project->tables()->where('name', $table)->with('fields')->firstOrFail();
+        // Una tabla virtual tiene pantalla propia, y esa es su unica puerta: las genericas no
+        // conocen sus reglas. En alarmas, por ejemplo, escribirian la palabra clave en claro,
+        // sin cifrar y sin dejar constancia de quien la ha visto.
+        abort_if($projectTable->is_virtual, 404);
+
 
         return view('excel.import-form', compact('project', 'projectTable'));
     }
@@ -59,6 +69,11 @@ class ExcelController extends Controller
     public function importTemplate(Project $project, string $table)
     {
         $projectTable = $project->tables()->where('name', $table)->with('fields')->firstOrFail();
+        // Una tabla virtual tiene pantalla propia, y esa es su unica puerta: las genericas no
+        // conocen sus reglas. En alarmas, por ejemplo, escribirian la palabra clave en claro,
+        // sin cifrar y sin dejar constancia de quien la ha visto.
+        abort_if($projectTable->is_virtual, 404);
+
 
         $campos = $projectTable->fields
             ->filter(fn($f) => !$f->hidden && !in_array($f->type, ['file']) && !in_array($f->name, ['blocked', 'hidden', 'deleted']))
@@ -94,6 +109,11 @@ class ExcelController extends Controller
         $request->validate(['archivo' => 'required|file|mimes:xlsx,xls,csv|max:20480']);
 
         $projectTable = $project->tables()->where('name', $table)->with('fields')->firstOrFail();
+        // Una tabla virtual tiene pantalla propia, y esa es su unica puerta: las genericas no
+        // conocen sus reglas. En alarmas, por ejemplo, escribirian la palabra clave en claro,
+        // sin cifrar y sin dejar constancia de quien la ha visto.
+        abort_if($projectTable->is_virtual, 404);
+
 
         $path = $request->file('archivo')->store('imports/tmp');
 
@@ -132,6 +152,11 @@ class ExcelController extends Controller
         }
 
         $projectTable = $project->tables()->where('name', $table)->with('fields')->firstOrFail();
+        // Una tabla virtual tiene pantalla propia, y esa es su unica puerta: las genericas no
+        // conocen sus reglas. En alarmas, por ejemplo, escribirian la palabra clave en claro,
+        // sin cifrar y sin dejar constancia de quien la ha visto.
+        abort_if($projectTable->is_virtual, 404);
+
         $path = session('excel_import_path');
 
         if (!$path) {
