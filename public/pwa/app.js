@@ -1553,7 +1553,7 @@ document.getElementById('btn-actualizar-app').addEventListener('click', async ()
 
 document.getElementById('btn-push-test').addEventListener('click', probarSuscripcionPush);
 
-// ── Mi informe mensual ───────────────────────────────────────────────────────
+// ── Mi informe mensual: fichaje y kilómetros en la misma pantalla ────────────
 const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const PASO_LABELS = { aprueba: 'Supervisor', rrhh: 'RRHH', coordinador: 'Coordinador', trabajador: 'Trabajador', direccion: 'Dirección', completado: 'Completado' };
 let informeSel = { year: new Date().getFullYear(), month: new Date().getMonth() + 1 };
@@ -1567,44 +1567,83 @@ function initInformeSelectores() {
   for (let y = anioActual - 2; y <= anioActual; y++) selAnio.add(new Option(y, y));
 }
 
+// Colores del badge según el estado del circuito, iguales para los dos informes.
+function pintarBadge(el, data) {
+  const completado = data.paso_actual === 'completado';
+  el.style.background = completado ? '#052e1a' : '#1e3a5f';
+  el.style.color = completado ? '#4ade80' : '#7dd3fc';
+  el.textContent = completado
+    ? 'Firmado'
+    : (data.en_aprobacion ? `Pendiente: ${PASO_LABELS[data.paso_actual] || data.paso_actual}` : 'Sin iniciar');
+}
+
+function pintarFirmas(el, data) {
+  el.innerHTML = (data.aprobaciones || []).map(a =>
+    `<span style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:4px 10px;font-size:12px;color:var(--muted)">${PASO_LABELS[a.step] || a.step} ✓</span>`
+  ).join('');
+}
+
 async function loadInforme() {
   initInformeSelectores();
   document.getElementById('informe-mes').value = informeSel.month;
   document.getElementById('informe-anio').value = informeSel.year;
 
-  const badge = document.getElementById('informe-estado-badge');
-  badge.textContent = 'Cargando…';
+  const aviso = document.getElementById('informe-aviso');
+  const boxF = document.getElementById('box-fichaje');
+  const boxK = document.getElementById('box-km');
+  const btnF = document.getElementById('btn-informe-firmar');
+  const btnK = document.getElementById('btn-informe-km-firmar');
+
+  // Se esconde todo mientras carga, para no dejar a la vista los datos del mes anterior.
+  [boxF, boxK, btnF, btnK].forEach(el => el.style.display = 'none');
+  aviso.style.display = 'block';
+  aviso.textContent = 'Cargando…';
+
+  const q = `?year=${informeSel.year}&month=${informeSel.month}`;
+  let fichaje = null, km = null;
   try {
-    const data = await api('GET', `/informe?year=${informeSel.year}&month=${informeSel.month}`);
-    renderInforme(data);
+    [fichaje, km] = await Promise.all([api('GET', '/informe' + q), api('GET', '/informe-km' + q)]);
   } catch (e) {
-    badge.textContent = e.message || 'No se pudo cargar el informe.';
+    aviso.textContent = e.message || 'No se pudo cargar el informe.';
+    return;
   }
-}
 
-function renderInforme(data) {
-  const badge = document.getElementById('informe-estado-badge');
-  const completado = data.paso_actual === 'completado';
-  badge.style.background = completado ? '#052e1a' : '#1e3a5f';
-  badge.style.color = completado ? '#4ade80' : '#7dd3fc';
-  badge.textContent = completado ? 'Aprobación completa' : (data.en_aprobacion ? `Pendiente: ${PASO_LABELS[data.paso_actual] || data.paso_actual}` : 'Sin iniciar');
+  // Sin contrato ese mes no hay nada que mostrar: ningún cuadro, y se explica por qué.
+  if (!fichaje.tiene_contrato) {
+    aviso.textContent = 'No tenías contrato en vigor en ' + MESES_ES[informeSel.month - 1].toLowerCase() + ' de ' + informeSel.year + '.';
+    return;
+  }
+  aviso.style.display = 'none';
 
-  const r = data.resumen || {};
-  const ausenciasHtml = Object.entries(r.ausencias || {}).map(([tipo, n]) => `<div>${tipo}: <strong>${n}</strong></div>`).join('') || '<div>Sin ausencias</div>';
-  document.getElementById('informe-resumen').innerHTML = `
-    <div class="agenda-dia">
-      <div>Días trabajados: <strong>${r.dias_trabajados ?? 0}</strong></div>
-      <div>Horas extra: <strong>${(r.horas_extra_positivas ?? 0).toFixed(1)}h</strong></div>
-      <div>Horas de menos: <strong>${(r.horas_extra_negativas ?? 0).toFixed(1)}h</strong></div>
-      ${ausenciasHtml}
-    </div>`;
+  // ── Cuadro de fichaje ──
+  boxF.style.display = 'block';
+  pintarBadge(document.getElementById('fichaje-badge'), fichaje);
+  pintarFirmas(document.getElementById('fichaje-aprobaciones'), fichaje);
+  const r = fichaje.resumen || {};
+  const ausencias = Object.entries(r.ausencias || {}).map(([tipo, n]) => `<div>${tipo}: <strong>${n}</strong></div>`).join('');
+  document.getElementById('fichaje-resumen').innerHTML = `
+    <div>Días trabajados: <strong>${r.dias_trabajados ?? 0}</strong></div>
+    <div>Horas extra: <strong>${(r.horas_extra_positivas ?? 0).toFixed(1)}h</strong></div>
+    <div>Horas de menos: <strong>${(r.horas_extra_negativas ?? 0).toFixed(1)}h</strong></div>
+    ${ausencias || '<div>Sin ausencias</div>'}`;
+  btnF.style.display = fichaje.puede_firmar ? 'block' : 'none';
 
-  document.getElementById('informe-aprobaciones').innerHTML = (data.aprobaciones || []).map(a =>
-    `<span style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:4px 10px;font-size:12px;color:var(--muted)">${PASO_LABELS[a.step] || a.step} ✓</span>`
-  ).join('');
-
-  const btnFirmar = document.getElementById('btn-informe-firmar');
-  btnFirmar.style.display = data.puede_firmar ? 'block' : 'none';
+  // ── Cuadro de kilómetros: solo si ese mes condujo ──
+  const rk = km.resumen || {};
+  if (rk.total_km > 0) {
+    boxK.style.display = 'block';
+    pintarBadge(document.getElementById('km-badge'), km);
+    pintarFirmas(document.getElementById('km-aprobaciones'), km);
+    const dias = (rk.dias || []).map(d => {
+      const f = d.fecha.slice(8, 10) + '/' + d.fecha.slice(5, 7);
+      return `<div>${f}: <strong>${d.km} km</strong>${d.trayecto ? ` <span style="color:var(--muted)">· ${d.trayecto}</span>` : ''}</div>`;
+    }).join('');
+    document.getElementById('km-resumen').innerHTML = `
+      <div>Total: <strong>${(rk.total_km ?? 0).toLocaleString('es-ES')} km</strong></div>
+      <div>Días con kilómetros: <strong>${rk.dias_con_km ?? 0}</strong></div>
+      ${dias ? '<div style="margin-top:6px">' + dias + '</div>' : ''}`;
+    btnK.style.display = km.puede_firmar ? 'block' : 'none';
+  }
 }
 
 document.getElementById('btn-mi-informe').addEventListener('click', () => {
@@ -1617,149 +1656,47 @@ document.getElementById('informe-back').addEventListener('click', () => navTo('p
 document.getElementById('informe-mes').addEventListener('change', e => { informeSel.month = parseInt(e.target.value, 10); loadInforme(); });
 document.getElementById('informe-anio').addEventListener('change', e => { informeSel.year = parseInt(e.target.value, 10); loadInforme(); });
 
-document.getElementById('btn-informe-pdf').addEventListener('click', async () => {
-  const btn = document.getElementById('btn-informe-pdf');
-  btn.disabled = true; btn.textContent = 'Cargando…';
+// Los dos botones "Ver" abren el PDF de su informe.
+async function verPdf(btn, ruta) {
+  btn.disabled = true;
+  const txt = btn.textContent;
+  btn.textContent = 'Cargando…';
   try {
-    let url = `${API}/informe/pdf?year=${informeSel.year}&month=${informeSel.month}`;
+    let url = `${API}${ruta}?year=${informeSel.year}&month=${informeSel.month}`;
     if (state.asUser) url += '&as_user=' + state.asUser.id;
-    const res = await fetch(url, {
-      headers: { 'Authorization': 'Bearer ' + state.token },
-    });
+    const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + state.token } });
     if (!res.ok) throw new Error('No se pudo cargar el PDF.');
-    const blob = await res.blob();
-    window.open(URL.createObjectURL(blob), '_blank');
+    window.open(URL.createObjectURL(await res.blob()), '_blank');
   } catch (e) {
     alert(e.message || 'No se pudo cargar el PDF.');
   } finally {
-    btn.disabled = false; btn.textContent = 'Ver PDF del informe';
+    btn.disabled = false; btn.textContent = txt;
   }
-});
+}
 
-document.getElementById('btn-informe-firmar').addEventListener('click', async () => {
-  if (!confirm('¿Firmar tu informe de este mes? A partir de aquí pasa a revisión de Dirección.')) return;
-  const btn = document.getElementById('btn-informe-firmar');
-  btn.disabled = true; btn.textContent = 'Firmando…';
+document.getElementById('btn-informe-pdf').addEventListener('click', e => verPdf(e.target, '/informe/pdf'));
+document.getElementById('btn-informe-km-pdf').addEventListener('click', e => verPdf(e.target, '/informe-km/pdf'));
+
+async function firmar(btn, ruta, pregunta) {
+  if (!confirm(pregunta)) return;
+  btn.disabled = true;
+  const txt = btn.textContent;
+  btn.textContent = 'Firmando…';
   try {
-    await api('POST', `/informe/firmar?year=${informeSel.year}&month=${informeSel.month}`);
+    await api('POST', `${ruta}?year=${informeSel.year}&month=${informeSel.month}`);
     toast('Informe firmado');
     loadInforme();
   } catch (e) {
     alert(e.message || 'No se pudo firmar el informe.');
   } finally {
-    btn.disabled = false; btn.textContent = 'Firmar mi informe';
-  }
-});
-
-// ── Mi informe de kilómetros ─────────────────────────────────────────────────
-// Mismo circuito y mismas etiquetas que el mensual (PASO_LABELS y MESES_ES se reutilizan);
-// lo que cambia son las cifras y la ruta.
-let informeKmSel = { year: new Date().getFullYear(), month: new Date().getMonth() + 1 };
-
-function initInformeKmSelectores() {
-  const selMes = document.getElementById('informe-km-mes');
-  const selAnio = document.getElementById('informe-km-anio');
-  if (selMes.options.length) return;
-  MESES_ES.forEach((m, i) => selMes.add(new Option(m, i + 1)));
-  const anioActual = new Date().getFullYear();
-  for (let y = anioActual - 2; y <= anioActual; y++) selAnio.add(new Option(y, y));
-}
-
-async function loadInformeKm() {
-  initInformeKmSelectores();
-  document.getElementById('informe-km-mes').value = informeKmSel.month;
-  document.getElementById('informe-km-anio').value = informeKmSel.year;
-
-  const badge = document.getElementById('informe-km-estado-badge');
-  badge.textContent = 'Cargando…';
-  try {
-    const data = await api('GET', `/informe-km?year=${informeKmSel.year}&month=${informeKmSel.month}`);
-    renderInformeKm(data);
-  } catch (e) {
-    badge.textContent = e.message || 'No se pudo cargar el informe.';
+    btn.disabled = false; btn.textContent = txt;
   }
 }
 
-function renderInformeKm(data) {
-  const badge = document.getElementById('informe-km-estado-badge');
-  const r = data.resumen || {};
-  const sinKm = !(r.total_km > 0);
-  const completado = data.paso_actual === 'completado';
-
-  // Sin kilómetros no hay informe que firmar, y el circuito no se le aplica: se dice en lugar
-  // de mostrar un estado que no significa nada.
-  if (sinKm) {
-    badge.style.background = '#1f2937';
-    badge.style.color = 'var(--muted)';
-    badge.textContent = 'Sin kilómetros este mes';
-  } else {
-    badge.style.background = completado ? '#052e1a' : '#1e3a5f';
-    badge.style.color = completado ? '#4ade80' : '#7dd3fc';
-    badge.textContent = completado ? 'Aprobación completa' : (data.en_aprobacion ? `Pendiente: ${PASO_LABELS[data.paso_actual] || data.paso_actual}` : 'Sin iniciar');
-  }
-
-  const dias = (r.dias || []).map(d => {
-    const f = d.fecha.slice(8, 10) + '/' + d.fecha.slice(5, 7);
-    const trayecto = d.trayecto ? ` · ${d.trayecto}` : '';
-    return `<div>${f}: <strong>${d.km} km</strong><span style="color:var(--muted)">${trayecto}</span></div>`;
-  }).join('');
-
-  document.getElementById('informe-km-resumen').innerHTML = `
-    <div class="agenda-dia">
-      <div>Total: <strong>${(r.total_km ?? 0).toLocaleString('es-ES')} km</strong></div>
-      <div>Días con kilómetros: <strong>${r.dias_con_km ?? 0}</strong></div>
-      ${dias ? '<div style="margin-top:8px">' + dias + '</div>' : '<div style="color:var(--muted);margin-top:8px">Ningún día con kilómetros.</div>'}
-    </div>`;
-
-  document.getElementById('informe-km-aprobaciones').innerHTML = (data.aprobaciones || []).map(a =>
-    `<span style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:4px 10px;font-size:12px;color:var(--muted)">${PASO_LABELS[a.step] || a.step} ✓</span>`
-  ).join('');
-
-  document.getElementById('btn-informe-km-firmar').style.display = data.puede_firmar ? 'block' : 'none';
-  document.getElementById('btn-informe-km-pdf').style.display = sinKm ? 'none' : 'block';
-}
-
-document.getElementById('btn-mi-informe-km').addEventListener('click', () => {
-  showScreen('informe-km');
-  loadInformeKm();
-});
-
-document.getElementById('informe-km-back').addEventListener('click', () => navTo('perfil'));
-
-document.getElementById('informe-km-mes').addEventListener('change', e => { informeKmSel.month = parseInt(e.target.value, 10); loadInformeKm(); });
-document.getElementById('informe-km-anio').addEventListener('change', e => { informeKmSel.year = parseInt(e.target.value, 10); loadInformeKm(); });
-
-document.getElementById('btn-informe-km-pdf').addEventListener('click', async () => {
-  const btn = document.getElementById('btn-informe-km-pdf');
-  btn.disabled = true; btn.textContent = 'Cargando…';
-  try {
-    let url = `${API}/informe-km/pdf?year=${informeKmSel.year}&month=${informeKmSel.month}`;
-    if (state.asUser) url += '&as_user=' + state.asUser.id;
-    const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + state.token } });
-    if (!res.ok) throw new Error('No se pudo cargar el PDF.');
-    const blob = await res.blob();
-    window.open(URL.createObjectURL(blob), '_blank');
-  } catch (e) {
-    alert(e.message || 'No se pudo cargar el PDF.');
-  } finally {
-    btn.disabled = false; btn.textContent = 'Ver PDF del informe';
-  }
-});
-
-document.getElementById('btn-informe-km-firmar').addEventListener('click', async () => {
-  if (!confirm('¿Firmar tu informe de kilómetros de este mes? A partir de aquí pasa a revisión de Dirección.')) return;
-  const btn = document.getElementById('btn-informe-km-firmar');
-  btn.disabled = true; btn.textContent = 'Firmando…';
-  try {
-    await api('POST', `/informe-km/firmar?year=${informeKmSel.year}&month=${informeKmSel.month}`);
-    toast('Informe de kilómetros firmado');
-    loadInformeKm();
-  } catch (e) {
-    alert(e.message || 'No se pudo firmar el informe.');
-  } finally {
-    btn.disabled = false; btn.textContent = 'Firmar mis kilómetros';
-  }
-});
+document.getElementById('btn-informe-firmar').addEventListener('click', e =>
+  firmar(e.target, '/informe/firmar', '¿Firmar tu informe de fichaje de este mes? A partir de aquí pasa a revisión de Dirección.'));
+document.getElementById('btn-informe-km-firmar').addEventListener('click', e =>
+  firmar(e.target, '/informe-km/firmar', '¿Firmar tu informe de kilómetros de este mes? A partir de aquí pasa a revisión de Dirección.'));
 
 // ── Horario ───────────────────────────────────────────────────────────────────
 let horarioSemana = null; // ISO week string actual en vista agenda

@@ -1545,10 +1545,12 @@ class VacationmarbellaPwaController extends Controller
             'month'         => $month,
             'paso_actual'   => $pasoActual,
             'en_aprobacion' => (bool) ($estado->en_aprobacion ?? false),
-            'puede_firmar'  => $pasoActual === 'trabajador',
+            'puede_firmar'  => $pasoActual === 'trabajador'
+                                && $this->tieneContratoEnMes((int) $user->id, $year, $month),
             'aprobaciones'  => $aprobaciones,
             'resumen'       => (new \App\Http\Controllers\Vm\InformeImputacionesController())
                 ->resumenParaPwa((int) $user->id, $year, $month),
+            'tiene_contrato' => $this->tieneContratoEnMes((int) $user->id, $year, $month),
         ]);
     }
 
@@ -1592,6 +1594,27 @@ class VacationmarbellaPwaController extends Controller
         return response()->json($result);
     }
 
+    /**
+     * Si la persona tenía contrato vigente en algún momento de ese mes. Mismo criterio que los
+     * paneles de aprobaciones (App\Services\PanelInformes): el contrato tiene que solaparse con
+     * el mes, no empezar ni acabar dentro de él.
+     *
+     * Sin contrato no hay informe que mostrar ni que firmar, y la PWA esconde el cuadro entero
+     * en lugar de pintar un informe vacío de un mes en el que esa persona no trabajaba aquí.
+     */
+    private function tieneContratoEnMes(int $vmUserId, int $year, int $month): bool
+    {
+        $ini = sprintf('%04d-%02d-01', $year, $month);
+        $fin = date('Y-m-t', strtotime($ini));
+
+        return DB::table('vm_contratos')
+            ->where('id_usuarios', $vmUserId)
+            ->where(fn($q) => $q->where('deleted', 0)->orWhereNull('deleted'))
+            ->where('fecha_alta', '<=', $fin)
+            ->where(fn($q) => $q->whereNull('fecha_baja')->orWhere('fecha_baja', '>=', $ini))
+            ->exists();
+    }
+
     // ── Informe de kilómetros ─────────────────────────────────────────────────
     //
     // Mismo circuito que el informe mensual, distinguido por informe='km'. El trabajador firma
@@ -1625,9 +1648,11 @@ class VacationmarbellaPwaController extends Controller
             'paso_actual'   => $pasoActual,
             'en_aprobacion' => (bool) ($estado->en_aprobacion ?? false),
             // Sin kilómetros no hay informe que firmar: quedan fuera del circuito.
-            'puede_firmar'  => $pasoActual === 'trabajador' && $km['total_km'] > 0,
+            'puede_firmar'  => $pasoActual === 'trabajador' && $km['total_km'] > 0
+                                && $this->tieneContratoEnMes((int) $user->id, $year, $month),
             'aprobaciones'  => $aprobaciones,
             'resumen'       => $km,
+            'tiene_contrato' => $this->tieneContratoEnMes((int) $user->id, $year, $month),
         ]);
     }
 

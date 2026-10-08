@@ -15,6 +15,15 @@
   <title>VM Equipo</title>
   <link rel="manifest" href="manifest.json">
   <style>
+    /* Cuadros de los informes: el estado va DENTRO de cada cuadro, no en un banner suelto, para
+       que al haber dos no haya duda de a cuál se refiere. */
+    .inf-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px}
+    .inf-box-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+    .inf-box-tit{font-size:15px;font-weight:600}
+    .inf-badge{font-size:12px;font-weight:600;padding:3px 10px;border-radius:12px;white-space:nowrap}
+    .inf-box-body{font-size:14px;line-height:1.7}
+    .inf-firmas{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+    .inf-box-btn{margin-top:10px}
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
@@ -382,7 +391,6 @@
         <button id="btn-dejar-impersonar" style="float:right;background:none;border:none;color:#fcd34d;font-size:13px;cursor:pointer;text-decoration:underline">Volver a mí</button>
       </div>
       <button class="btn btn-outline" id="btn-mi-informe" style="margin-bottom:10px">Mi informe mensual</button>
-      <button class="btn btn-outline" id="btn-mi-informe-km" style="margin-bottom:10px">Mi informe de kilómetros</button>
       <button class="btn btn-outline" id="btn-push-test" style="margin-bottom:10px">Activar notificaciones</button>
       <button class="btn btn-outline" id="btn-actualizar-app" style="margin-bottom:10px">Actualizar app</button>
 
@@ -412,27 +420,6 @@
     <nav class="bottom-nav" data-nav-container="perfil"></nav>
   </div>
 
-  <!-- ══ MI INFORME DE KILÓMETROS ════════════════════════════════════════════
-       Mismo circuito de firmas que el mensual, por eso la pantalla es la misma con
-       otras cifras: aquí los kilómetros y el trayecto de cada día. -->
-  <div id="informe-km-screen" class="screen" style="position:relative">
-    <div class="topbar" id="informe-km-back">
-      <span class="back-btn">‹</span>
-      <h1>Mi informe de kilómetros</h1>
-    </div>
-    <div class="scroll">
-      <div style="display:flex;gap:8px;margin-bottom:14px">
-        <select id="informe-km-mes" style="flex:1"></select>
-        <select id="informe-km-anio" style="flex:1"></select>
-      </div>
-      <div id="informe-km-estado-badge" style="margin-bottom:12px;padding:10px 14px;border-radius:var(--radius);font-size:14px;font-weight:600"></div>
-      <div id="informe-km-resumen" style="margin-bottom:14px"></div>
-      <div id="informe-km-aprobaciones" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
-      <button class="btn btn-outline" id="btn-informe-km-pdf" style="margin-bottom:10px">Ver PDF del informe</button>
-      <button class="btn btn-green" id="btn-informe-km-firmar" style="display:none">Firmar mis kilómetros</button>
-    </div>
-  </div>
-
   <!-- ══ MI INFORME MENSUAL ══════════════════════════════════════════════════ -->
   <div id="informe-screen" class="screen" style="position:relative">
     <div class="topbar" id="informe-back">
@@ -444,11 +431,33 @@
         <select id="informe-mes" style="flex:1"></select>
         <select id="informe-anio" style="flex:1"></select>
       </div>
-      <div id="informe-estado-badge" style="margin-bottom:12px;padding:10px 14px;border-radius:var(--radius);font-size:14px;font-weight:600"></div>
-      <div id="informe-resumen" style="margin-bottom:14px"></div>
-      <div id="informe-aprobaciones" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
-      <button class="btn btn-outline" id="btn-informe-pdf" style="margin-bottom:10px">Ver PDF del informe</button>
-      <button class="btn btn-green" id="btn-informe-firmar" style="display:none">Firmar mi informe</button>
+      <!-- Un cuadro por informe, cada uno con su estado dentro y su propio botón de ver.
+           Si un informe no aplica (sin contrato ese mes, o sin kilómetros), su cuadro no se
+           pinta: es más claro que mostrarlo vacío. -->
+      <div id="informe-aviso" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:var(--radius);font-size:14px;background:#1f2937;color:var(--muted)"></div>
+
+      <div id="box-fichaje" class="inf-box" style="display:none">
+        <div class="inf-box-head">
+          <span class="inf-box-tit">Fichaje</span>
+          <span class="inf-badge" id="fichaje-badge"></span>
+        </div>
+        <div id="fichaje-resumen" class="inf-box-body"></div>
+        <div id="fichaje-aprobaciones" class="inf-firmas"></div>
+        <button class="btn btn-outline inf-box-btn" id="btn-informe-pdf">Ver</button>
+      </div>
+
+      <div id="box-km" class="inf-box" style="display:none">
+        <div class="inf-box-head">
+          <span class="inf-box-tit">Kilómetros</span>
+          <span class="inf-badge" id="km-badge"></span>
+        </div>
+        <div id="km-resumen" class="inf-box-body"></div>
+        <div id="km-aprobaciones" class="inf-firmas"></div>
+        <button class="btn btn-outline inf-box-btn" id="btn-informe-km-pdf">Ver</button>
+      </div>
+
+      <button class="btn btn-green" id="btn-informe-firmar" style="display:none;margin-top:4px">Firmar fichaje</button>
+      <button class="btn btn-green" id="btn-informe-km-firmar" style="display:none;margin-top:10px">Firmar kilómetros</button>
     </div>
   </div>
 
@@ -582,6 +591,6 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/signature_pad@4/dist/signature_pad.umd.min.js"></script>
-<script src="app.js?v=20261008"></script>
+<script src="app.js?v=20261008b"></script>
 </body>
 </html>
