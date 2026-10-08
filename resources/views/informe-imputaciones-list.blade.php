@@ -94,6 +94,12 @@ foreach (['aprueba','rrhh','trabajador','direccion','completado'] as $p) {
 .ap-btn-sign { background:#f97316; color:#fff; }
 .ap-btn-sign:hover { background:#ea580c; }
 .ap-btn-sign:disabled { background:#f3f4f6; color:#9ca3af; cursor:not-allowed; }
+/* La firma de kilometraje en verde, para distinguirla de la de horas de un vistazo: con dos
+   botones seguidos por persona, el color hace el trabajo que el texto solo no termina de hacer.
+   El deshabilitado se hereda de .ap-btn-sign:disabled, que va despues en la cascada. */
+.ap-btn-sign.km { background:#13C1AC; }
+.ap-btn-sign.km:hover { background:#0FA592; }
+.ap-btn-sign.km:disabled { background:#f3f4f6; color:#9ca3af; cursor:not-allowed; }
 .ap-btn-ghost { background:transparent; color:#6b7280; border-color:#e5e7eb; padding:7px 9px; }
 .ap-btn-white { background:#fff; color:#374151; border-color:#e5e7eb; font-weight:400; }
 .ap-btn-white:hover { background:#f9fafb; border-color:#9ca3af; }
@@ -255,7 +261,7 @@ function filtrarRol(rol) {
                     @if($fila->paso === 'completado')
                         <span class="ap-done-pill">✓ Completado</span>
                     @else
-                        <button type="button" class="ap-btn ap-btn-sign"
+                        <button type="button" class="ap-btn ap-btn-sign {{ $esKm ? 'km' : '' }}"
                             data-url="{{ $rutaFirma }}?year={{ $year }}&month={{ $month }}&user_id={{ $fila->id }}"
                             data-nombre="{{ $fila->nombre }}"
                             data-paso="{{ ($paso_labels[$fila->paso] ?? $fila->paso) . ($esKm ? ' · kilómetros' : ' · horas') }}"
