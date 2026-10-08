@@ -142,15 +142,24 @@
   </p>
 
   <div class="al-grid3">
-    <div class="al-cell">
-      <p class="al-lbl">Usuario en la app</p>
-      <p class="al-val">{{ $alarma->app_usuario ?: '—' }}</p>
-    </div>
+    @php
+        // Las tres celdas en orden: la palabra clave primero, y detrás el usuario y la
+        // contraseña de la app, que van juntos porque son del mismo sitio. Se declaran así, en
+        // vez de partir el bucle, para no repetir el recuadro tapado en dos ramas.
+        $celdas = [
+            ['secreto' => 'palabra_clave', 'tiene' => $alarma->tiene_palabra_clave],
+            ['label'   => 'Usuario en la app', 'valor' => $alarma->app_usuario],
+            ['secreto' => 'app_password',  'tiene' => $alarma->tiene_app_password],
+        ];
+    @endphp
 
-    @foreach(['palabra_clave' => $alarma->tiene_palabra_clave, 'app_password' => $alarma->tiene_app_password] as $campo => $tiene)
+    @foreach($celdas as $celda)
+      @php $campo = $celda['secreto'] ?? null; @endphp
       <div class="al-cell">
-        <p class="al-lbl">{{ $sensibles[$campo] }}</p>
-        @if($tiene)
+        <p class="al-lbl">{{ $campo ? $sensibles[$campo] : $celda['label'] }}</p>
+        @if(!$campo)
+          <p class="al-val">{{ $celda['valor'] ?: '—' }}</p>
+        @elseif($celda['tiene'])
           <button type="button" class="al-secreto" id="btn-{{ $campo }}"
                   onclick="revelar('{{ $campo }}')">
             <span class="al-puntos">••••••••</span>
