@@ -8,6 +8,7 @@ use App\Models\Project;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use App\Services\AlcanceInformes;
 use App\Services\CircuitoFirmas;
 use App\Services\VmJerarquiaAprobacion;
 use Illuminate\Support\Facades\DB;
@@ -149,8 +150,9 @@ class KmController extends Controller
         $isAdmin    = $user->isProjectAdmin($project);
         $authUserId = $user->projectUserId($project);
         $authRol    = $authUserId ? DB::table('vm_usuarios')->where('id', $authUserId)->value('id_rol') : null;
-        $puedeVerTodos = $isAdmin || in_array((int) $authRol, [3, 11]); // Dirección general, Director RRHH
-        if (!$puedeVerTodos) abort(403);
+        // Mismo criterio que el informe mensual: el PDF de todos es de quien puede elegir a
+        // cualquiera, no de quien supervisa una rama.
+        if (!AlcanceInformes::para($project, $user, $isAdmin)['canSelectTodos']) abort(403);
 
         $year  = max(2020, min(2040, (int) $request->input('year',  now()->year)));
         $month = max(1,    min(12,   (int) $request->input('month', now()->month)));
@@ -458,21 +460,17 @@ class KmController extends Controller
 
     private function resolveParams(Request $request, Project $project, $user, bool $isAdmin): array
     {
-        $allUsuarios     = DB::table('vm_usuarios')->where('deleted', 0)->orderBy('nombre')->get(['id', 'nombre']);
-        $currentVmUserId = $user->projectUserId($project);
-        $authRol         = $currentVmUserId ? DB::table('vm_usuarios')->where('id', $currentVmUserId)->value('id_rol') : null;
-        $canSelect       = $isAdmin || in_array((int) $authRol, [3, 11]); // Dirección general, Director RRHH
-
-        if ($canSelect) {
-            $userId = (int) $request->input('user_id', $currentVmUserId ?? ($allUsuarios->first()->id ?? 0));
-        } else {
-            $userId = $currentVmUserId ?? 0;
-        }
+        // La MISMA lógica que el informe mensual (App\Services\AlcanceInformes): la unión de la
+        // jerarquía de roles y la rama de aprobación. Antes aquí solo podían elegir usuario
+        // Dirección general, RRHH y los administradores, así que un supervisor no podía abrir el
+        // informe de kilómetros de su gente -- ni, por tanto, aprobarlo (2026-10-08).
+        $alcance = AlcanceInformes::para($project, $user, $isAdmin);
+        $userId  = AlcanceInformes::usuarioElegido($alcance, $request->input('user_id'));
 
         $year  = max(2020, min(2040, (int) $request->input('year',  now()->year)));
         $month = max(1,    min(12,   (int) $request->input('month', now()->month)));
 
-        return [$year, $month, $userId, $allUsuarios, $canSelect];
+        return [$year, $month, $userId, $alcance['usuarios'], $alcance['canSelect'], $alcance['canSelectTodos']];
     }
 
     private function getInformeKmData(int $userId, int $year, int $month): array

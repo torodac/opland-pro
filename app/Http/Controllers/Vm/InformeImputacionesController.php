@@ -8,6 +8,7 @@ use App\Models\Project;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use App\Services\AlcanceInformes;
 use App\Services\CircuitoFirmas;
 use App\Services\PanelInformes;
 use App\Services\RoleHierarchy;
@@ -767,66 +768,16 @@ class InformeImputacionesController extends Controller
 
     private function resolveParams(Request $request, Project $project, $user, bool $isAdmin): array
     {
-        $currentVmUserId = $user->projectUserId($project);
-        $authRol         = $currentVmUserId ? DB::table('vm_usuarios')->where('id', $currentVmUserId)->value('id_rol') : null;
-
-        // Selección sin restricción: ven y pueden generar el PDF de todos.
-        $canSelectTodos = $isAdmin || in_array((int) $authRol, [3, 11]); // Dirección general, Director RRHH
-        // Selección limitada a su equipo (vm_roles.roles_supervisados), mismo mecanismo que
-        // fichajes/listados (RoleHierarchy) — sin PDF de todos, solo su equipo.
-        $canSelectEquipo = !$canSelectTodos && in_array((int) $authRol, [10, 5, 2]); // Dir. Operaciones, Coord. mantenimiento, Coord. limpieza
-        $canSelect       = $canSelectTodos || $canSelectEquipo;
-
-        if ($canSelectTodos) {
-            $allUsuarios = DB::table('vm_usuarios')->where('deleted', 0)->orderBy('nombre')->get(['id', 'nombre', 'id_rol', 'admin_user_id']);
-        } else {
-            // Unión de las DOS jerarquías, no sustitución (decisión explícita 2026-09-24):
-            //   - roles      → RoleHierarchy sobre vm_roles.roles_supervisados, como hasta ahora;
-            //   - aprobación → la rama que cuelga de esta persona en vm_usuarios.id_aprueba_informe.
-            // Lo segundo solo AÑADE: quien tiene que firmar un informe necesita poder abrirlo
-            // aunque su rol no alcance a esa persona (caso Dirección contabilidad, que supervisa
-            // Contabilidad y Transformación digital pero no figura en ninguna de las dos listas
-            // de roles de arriba y hasta hoy solo se veía a sí misma).
-            $visibleIds = $canSelectEquipo
-                ? RoleHierarchy::visibleUserIds(
-                    $project->slug . '_roles', $project->slug . '_usuarios',
-                    (int) $currentVmUserId, (int) $authRol
-                  )
-                : [];
-
-            $idsAprobacion = $currentVmUserId ? VmJerarquiaAprobacion::ramaDe((int) $currentVmUserId) : [];
-
-            $visibleIds = array_values(array_unique(array_merge(
-                array_map('intval', $visibleIds),
-                array_map('intval', $idsAprobacion)
-            )));
-
-            $allUsuarios = $visibleIds
-                ? DB::table('vm_usuarios')
-                    ->where('deleted', 0)
-                    ->whereIn('id', $visibleIds)
-                    ->orderBy('nombre')
-                    ->get(['id', 'nombre', 'id_rol', 'admin_user_id'])
-                : collect();
-
-            // Se puede seleccionar en cuanto hay alguien más que uno mismo en la lista.
-            $canSelect = $allUsuarios->count() > 1;
-        }
-
-        if ($canSelect) {
-            $userId = (int) $request->input('user_id', $currentVmUserId ?? ($allUsuarios->first()->id ?? 0));
-            // Si pide un user_id fuera de su alcance (manipulando el parámetro), se cae a su propio informe.
-            if (!$canSelectTodos && !$allUsuarios->contains('id', $userId)) {
-                $userId = (int) $currentVmUserId;
-            }
-        } else {
-            $userId = $currentVmUserId ?? 0;
-        }
+        // A quién puede elegir cada uno vive en App\Services\AlcanceInformes, compartido con el
+        // informe de kilómetros para que los dos desplegables se comporten igual por
+        // construcción y no por copia.
+        $alcance = AlcanceInformes::para($project, $user, $isAdmin);
+        $userId  = AlcanceInformes::usuarioElegido($alcance, $request->input('user_id'));
 
         $year  = max(2020, min(2040, (int) $request->input('year',  now()->year)));
         $month = max(1,    min(12,   (int) $request->input('month', now()->month)));
 
-        return [$year, $month, $userId, $allUsuarios, $canSelect, $canSelectTodos];
+        return [$year, $month, $userId, $alcance['usuarios'], $alcance['canSelect'], $alcance['canSelectTodos']];
     }
 
 
