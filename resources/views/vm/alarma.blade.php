@@ -11,6 +11,24 @@
     ]"
     :project="$project">
 
+{{-- En la cabecera, con la misma forma que los de la ficha estándar del no-code. --}}
+<x-slot name="actions">
+    @if($puedeEditar)
+    <a href="{{ route('vm.alarma.nueva', $project->slug) }}"
+       class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+        </svg>
+        <span class="hidden sm:inline">Nuevo</span>
+    </a>
+    <a href="{{ route('vm.alarma.editar', [$project->slug, $alarma->id]) }}"
+       class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">
+        <i class="fa-solid fa-pen-to-square text-sm"></i>
+        <span class="hidden sm:inline">Editar</span>
+    </a>
+    @endif
+</x-slot>
+
 <style>
 .al-card{background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px;padding:1.1rem 1.25rem;margin-bottom:12px}
 .dark .al-card{background:#1a1a1a;border-color:rgba(255,255,255,.08)}
@@ -47,24 +65,6 @@
 </style>
 
 <div style="padding:0 0 3rem;">
-
-{{-- Mismos botones y misma forma que en la ficha estándar del no-code. --}}
-@if($puedeEditar)
-<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px">
-    <a href="{{ route('vm.alarma.nueva', $project->slug) }}"
-       class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
-        </svg>
-        <span class="hidden sm:inline">Nueva</span>
-    </a>
-    <a href="{{ route('vm.alarma.editar', [$project->slug, $alarma->id]) }}"
-       class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">
-        <i class="fa-solid fa-pen-to-square text-sm"></i>
-        <span class="hidden sm:inline">Editar</span>
-    </a>
-</div>
-@endif
 
 @if(session('status'))
     <div style="margin-bottom:1rem;padding:.7rem 1rem;border-radius:8px;background:#F1FAF4;

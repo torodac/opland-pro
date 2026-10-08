@@ -7,6 +7,19 @@
     ]"
     :project="$project">
 
+{{-- En la cabecera, como en el resto de las pantallas de Opland. --}}
+<x-slot name="actions">
+    @if($puedeEditar)
+    <a href="{{ route('vm.alarma.nueva', $project->slug) }}"
+       class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        Nuevo
+    </a>
+    @endif
+</x-slot>
+
 <style>
 .al-chips{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:1.25rem}
 .al-chip{display:block;background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px;
@@ -43,19 +56,6 @@
     @if(session('status'))
         <div style="margin-bottom:1rem;padding:.7rem 1rem;border-radius:8px;background:#F1FAF4;
                     border:0.5px solid #B7E0C4;color:#1B7F3B;font-size:13px">{{ session('status') }}</div>
-    @endif
-
-    {{-- El botón Nuevo, con la misma forma y el mismo sitio que en los listados estándar. --}}
-    @if($puedeEditar)
-        <div style="display:flex;justify-content:flex-end;margin-bottom:1rem">
-            <a href="{{ route('vm.alarma.nueva', $project->slug) }}"
-               class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                </svg>
-                Nuevo
-            </a>
-        </div>
     @endif
 
     {{-- Las tarjetas de empresa filtran; no son una pantalla intermedia. "Todas" primero, para
