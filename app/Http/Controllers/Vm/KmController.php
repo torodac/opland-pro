@@ -197,7 +197,12 @@ class KmController extends Controller
         ]))->setPaper('a4', 'portrait');
     }
 
-    /** Resumen del informe para la PWA: lo justo para pintarlo en el móvil. */
+    /**
+     * Resumen del informe para la PWA: lo justo para pintarlo en el móvil, que son el total y
+     * los días. El detalle día a día se quitó del cuadro (2026-10-08) y con él de la respuesta:
+     * enviarlo era mandar hasta treinta días con su trayecto en cada carga de pantalla para que
+     * nadie los leyera. Quien quiera el detalle tiene el PDF, que sale del mismo sitio.
+     */
     public function resumenParaPwa(int $userId, int $year, int $month): array
     {
         $data = $this->getInformeKmData($userId, $year, $month);
@@ -205,11 +210,6 @@ class KmController extends Controller
         return [
             'total_km'    => $data['total_km'],
             'dias_con_km' => count(array_filter($data['dias'], fn($d) => $d['km'] > 0)),
-            'dias'        => array_values(array_filter(array_map(fn($d) => $d['km'] > 0 ? [
-                'fecha'    => $d['fecha'],
-                'km'       => $d['km'],
-                'trayecto' => $d['trayecto'],
-            ] : null, $data['dias']))),
         ];
     }
 
