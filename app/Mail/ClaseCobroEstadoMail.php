@@ -36,12 +36,14 @@ class ClaseCobroEstadoMail extends Mailable
 
     public function envelope(): Envelope
     {
+        $marca = config('services.correo.clase_from_nombre');
+
         $asunto = match ($this->estado) {
             'Cobrado'  => $this->numeroRecibo
-                ? "Recibo {$this->numeroRecibo} — Academia Clase"
-                : 'Confirmación de cobro — Academia Clase',
-            'Anulado'  => 'Cobro anulado — Academia Clase',
-            default    => 'Cobro pendiente — Academia Clase',
+                ? "Recibo {$this->numeroRecibo} — {$marca}"
+                : "Confirmación de cobro — {$marca}",
+            'Anulado'  => "Cobro anulado — {$marca}",
+            default    => "Cobro pendiente — {$marca}",
         };
 
         // El remitente solo se fija cuando hay buzon propio configurado; sin el, Laravel usa

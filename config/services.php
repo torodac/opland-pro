@@ -98,7 +98,8 @@ return [
         'informe_fallos_to' => env('MAIL_INFORME_FALLOS_TO', 'trodriguez@opland.es'),
         'nf_from'           => env('MAIL_NF_FROM_ADDRESS', 'naturefitness@opland.es'),
         'clase_from'        => env('MAIL_CLASE_FROM_ADDRESS'),
-        'clase_from_nombre' => env('MAIL_CLASE_FROM_NAME', 'Academia Clase'),
+        // Con el que firman los correos del proyecto: asunto, cabecera, despedida y remitente.
+        'clase_from_nombre' => env('MAIL_CLASE_FROM_NAME', 'Al Salir de Clase VLC'),
     ],
 
 ];

@@ -29,7 +29,7 @@
 </style></head>
 <body>
   <div class="wrap">
-    <div class="top">Academia Clase</div>
+    <div class="top">{{ config('services.correo.clase_from_nombre') }}</div>
     <div class="estado" style="background:{{ $color }}">{{ $titulo }}</div>
     <div class="body">
       <p>Estimado/a <strong>{{ $pagador }}</strong>,</p>
@@ -70,7 +70,7 @@
       <br>
       <p>Si tiene alguna consulta, no dude en contactarnos.</p>
       <br>
-      <p>Atentamente,<br><strong>Academia Clase</strong></p>
+      <p>Atentamente,<br><strong>{{ config('services.correo.clase_from_nombre') }}</strong></p>
     </div>
     <div class="footer">Este mensaje ha sido generado automáticamente. Por favor no responda a este correo.</div>
   </div>

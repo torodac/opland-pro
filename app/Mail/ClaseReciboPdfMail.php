@@ -27,7 +27,7 @@ class ClaseReciboPdfMail extends Mailable
         $from = config('services.correo.clase_from');
 
         return new Envelope(
-            subject: "Factura {$num} — Academia Clase ({$mes})",
+            subject: "Factura {$num} — " . config('services.correo.clase_from_nombre') . " ({$mes})",
             from: $from
                 ? new \Illuminate\Mail\Mailables\Address($from, config('services.correo.clase_from_nombre'))
                 : null,

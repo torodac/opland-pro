@@ -4,6 +4,18 @@
 #cl-cesta-fab  { position:fixed; bottom:24px; right:24px; }
 #cl-cesta-badge { position:absolute; top:-4px; right:-4px; }
 .cl-forma-btn.sel { background:#f97316; color:#fff; border-color:#f97316; }
+
+/* Las variantes disabled: de Tailwind no estan en el CSS compilado del proyecto, asi que el
+   botón deshabilitado seguia pintandose naranja y parecia pulsable. Un selector por id gana
+   a .bg-orange-500 y a .hover\:bg-orange-600 sin necesidad de !important. */
+#cl-confirmar-btn:disabled,
+#cl-confirmar-btn:disabled:hover {
+  background:#e5e7eb; color:#9ca3af; cursor:not-allowed; box-shadow:none;
+}
+
+/* El carrito, en blanco: hereda el color del botón en vez de traer el suyo como hacia el
+   emoji. */
+#cl-cesta-fab svg { width:24px; height:24px; display:block; }
 </style>
 
 @php
@@ -161,9 +173,14 @@ function fmtC(float $v): string {
 
 {{-- Cesta flotante --}}
 <button id="cl-cesta-fab" onclick="abrirCesta()" style="display:none"
-        class="z-[200] bg-orange-500 hover:bg-orange-600 text-white rounded-full w-14 h-14 text-2xl shadow-lg shadow-orange-200 flex items-center justify-center transition-all hover:scale-105"
+        class="z-[200] bg-orange-500 hover:bg-orange-600 text-white rounded-full w-14 h-14 shadow-lg shadow-orange-200 flex items-center justify-center transition-all hover:scale-105"
         title="Cesta de cobros">
-  🛒
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <circle cx="9" cy="20" r="1.4"/>
+    <circle cx="18" cy="20" r="1.4"/>
+    <path d="M2.5 3h2.2l2.3 11.2a1.6 1.6 0 0 0 1.6 1.3h8.5a1.6 1.6 0 0 0 1.6-1.3L21 7H6"/>
+  </svg>
   <span id="cl-cesta-badge"
         class="bg-red-500 text-white rounded-full w-5 h-5 text-[10px] font-bold flex items-center justify-center">0</span>
 </button>
@@ -199,7 +216,7 @@ function fmtC(float $v): string {
         Cancelar
       </button>
       <button id="cl-confirmar-btn" onclick="confirmarCesta()" disabled
-              class="inline-flex items-center px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors disabled:bg-gray-200 disabled:text-gray-400 disabled:hover:bg-gray-200 disabled:cursor-not-allowed">
+              class="inline-flex items-center px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors">
         Confirmar cobro
       </button>
     </div>
