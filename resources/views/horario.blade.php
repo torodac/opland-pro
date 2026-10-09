@@ -33,7 +33,12 @@ $tipoLabels = \App\Services\VmAusenciaTipos::LABEL_HORARIO;
 
 .dept-block { margin-bottom:1.75rem; overflow-x:auto; }
 .dept-title { font-size:13px; font-weight:600; color:#374151; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
-.dept-estado { font-size:11px; font-weight:500; color:#9CA3AF; border:1px solid #E5E7EB; border-radius:6px; padding:2px 8px; }
+/* El botón de publicar va un 25% por debajo del .hor-btn general (13px/5px-12px): es una acción
+   de cada bloque, no de la cabecera, y a tamaño completo competía con el nombre del
+   departamento. La pastilla de estado, que ocupa su sitio para quien no puede publicar, se
+   iguala para que la fila no baile según quién mire. */
+.btn-publicar-dept { font-size:9.75px; padding:3.75px 9px; border-radius:5px; }
+.dept-estado { font-size:9.75px; font-weight:500; color:#9CA3AF; border:1px solid #E5E7EB; border-radius:5px; padding:3.75px 9px; }
 
 /* table-layout:fixed reparte a partes iguales todo lo que sobra tras la columna de usuario, que
    es la unica con ancho propio. Con 'auto' cada dia se ensanchaba segun lo que le tocara dentro
