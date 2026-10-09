@@ -182,6 +182,20 @@ td{padding:8px;font-size:13px;}
       </p>
       <p style="font-size:13px;font-weight:500;margin:0;">{{ $supervisadosNombres ? implode(' · ', $supervisadosNombres) : '—' }}</p>
     </div>
+    @if($deptsHorario->isNotEmpty())
+    <div>
+      <p style="font-size:11px;color:#888;margin:0 0 3px;display:flex;align-items:center;gap:5px;">
+        Publica horarios de
+        <span class="app-tooltip" style="pointer-events:auto;vertical-align:middle">
+          <i class="ti ti-info-circle" style="font-size:13px;opacity:.7;"></i>
+          <span class="app-tooltip-box">Podrá publicar y ocultar el cuadrante semanal de estos departamentos en la app del trabajador.</span>
+        </span>
+      </p>
+      <p style="font-size:13px;font-weight:500;margin:0;">
+        {{ $deptsHorario->whereIn('id', $publicaSel)->pluck('nombre')->implode(' · ') ?: '—' }}
+      </p>
+    </div>
+    @endif
   </div>
   {{-- MODO EDICIÓN --}}
   <div id="datos-edit" style="display:none;background:#fff;border:0.5px solid rgba(0,0,0,.1);border-radius:12px;padding:1rem 1.25rem;margin-bottom:12px;">
@@ -224,6 +238,32 @@ td{padding:8px;font-size:13px;}
         ])
         <p style="font-size:11px;opacity:.55;margin:4px 0 0;">
           Solo aparecen las personas que no supervisa nadie más. Para mover a alguien, quítalo primero de la lista de su responsable actual.
+        </p>
+      </div>
+      @endif
+
+      @if($deptsHorario->isNotEmpty() && $puedeEditarUsuarios)
+      {{-- Permiso de publicación del cuadrante. Va aquí, y no en el rol, para poder cubrir unas
+           vacaciones añadiendo un departamento a quien sustituye y quitándoselo al volver. --}}
+      <div class="form-row" style="grid-column:1/-1;">
+        <label class="form-label" style="display:flex;align-items:center;gap:5px;">
+          Publica horarios de
+          <span class="app-tooltip" style="pointer-events:auto;vertical-align:middle">
+            <i class="ti ti-info-circle" style="font-size:13px;opacity:.7;"></i>
+            <span class="app-tooltip-box">Podrá publicar y ocultar el cuadrante semanal de estos departamentos en la app del trabajador.</span>
+          </span>
+        </label>
+        <div style="display:flex;flex-wrap:wrap;gap:14px;padding:4px 0;">
+          @foreach($deptsHorario as $d)
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+            <input type="checkbox" class="u-publica" value="{{ $d->id }}"
+                   style="width:auto;margin:0;" {{ in_array((int) $d->id, $publicaSel, true) ? 'checked' : '' }}>
+            {{ $d->nombre }}
+          </label>
+          @endforeach
+        </div>
+        <p style="font-size:11px;opacity:.55;margin:4px 0 0;">
+          Dirección general y Dirección de RRHH publican todos los departamentos sin necesidad de marcarlos aquí.
         </p>
       </div>
       @endif
@@ -666,7 +706,15 @@ function leerSupervisados() {
                 .filter(n => !isNaN(n));
 }
 
-async function guardarSupervisados() {
+async function guardarPrivilegios() {
+    // Dos llamadas y no una: los dos campos conceden privilegios y tienen su propio endpoint,
+    // que exige permiso de EDICIÓN sobre usuarios. La ficha normal se conforma con poder ver.
+    const publica = Array.from(document.querySelectorAll('.u-publica:checked'))
+                         .map(c => parseInt(c.value, 10));
+    if (document.querySelector('.u-publica')) {
+        await ajax(BASE + '/publica-horarios', 'PATCH', { departamentos: publica });
+    }
+
     const r = await ajax(BASE + '/supervisados', 'PATCH', { supervisados: leerSupervisados() });
     if (r && r.error) { alert(r.error); return false; }
     return true;
@@ -688,7 +736,7 @@ async function guardarUsuario() {
     // "Supervisa a" primero: es lo unico que puede rechazarse (ya esta en otra lista, rol no
     // permitido...). Si falla, se avisa y no se guarda nada mas, para que el mensaje se vea
     // con el formulario todavia abierto en lugar de perderse en el recargado.
-    if (!await guardarSupervisados()) return;
+    if (!await guardarPrivilegios()) return;
 
     ajax(BASE + '/ficha', 'PATCH', {
         nombre:       document.getElementById('u-nombre').value,

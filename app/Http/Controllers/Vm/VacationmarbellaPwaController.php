@@ -1161,7 +1161,16 @@ class VacationmarbellaPwaController extends Controller
         // Cuadrante sin publicar: no se devuelven los días. Ocultar una semana tapa esa y todas
         // las posteriores (ver VmHorarioPublicacion), para poder ir montando el cuadrante sin que
         // el equipo vea borradores.
-        $visible = VmHorarioPublicacion::visible((int) $lunes->format('o'), (int) $lunes->format('W'));
+        //
+        // El muro es el de SU departamento: que Limpieza tenga abierta la semana 45 no abre la de
+        // Mantenimiento. Sin departamento asignado se aplica el muro más restrictivo de todos.
+        $miDepto = isset($user->id_departamento) && $user->id_departamento
+            ? (int) $user->id_departamento
+            : null;
+
+        $visible = VmHorarioPublicacion::visible(
+            (int) $lunes->format('o'), (int) $lunes->format('W'), $miDepto
+        );
 
         $dias = $visible
             ? $this->diasCuadrante([$user->id], $desde, $hasta, $lunes)[$user->id]
@@ -1175,7 +1184,7 @@ class VacationmarbellaPwaController extends Controller
             // devolviera también ausencias y festivos.
             'dias'          => array_values(array_filter($dias, fn ($d) => $d !== null)),
             'publicada'     => $visible,
-            'ultima_semana' => VmHorarioPublicacion::ultimaVisible(),
+            'ultima_semana' => VmHorarioPublicacion::ultimaVisible($miDepto),
         ]);
     }
 
@@ -1290,20 +1299,35 @@ class VacationmarbellaPwaController extends Controller
             ->orderBy('u.nombre')
             ->get(['u.id', 'u.nombre', 'u.id_departamento', 'd.nombre as departamento_nombre']);
 
-        // Mismo muro que en la agenda personal: si la semana no está publicada, el cuadrante del
-        // equipo sale vacío (ver VmHorarioPublicacion).
-        $visible = VmHorarioPublicacion::visible((int) $lunes->format('o'), (int) $lunes->format('W'));
+        // Un muro por departamento: cada coordinador publica el suyo, así que esta misma semana
+        // puede estar abierta en Limpieza y cerrada en Mantenimiento. Se resuelve por
+        // departamento y no para toda la pantalla.
+        $visiblePorDepto = $deptosVisibles->mapWithKeys(fn($d) => [
+            (int) $d->id => VmHorarioPublicacion::visible(
+                (int) $lunes->format('o'), (int) $lunes->format('W'), (int) $d->id
+            ),
+        ]);
+
+        // Solo se piden los días de quien puede verlos: para los demás ni siquiera se consultan.
+        $idsVisibles = $usuarios
+            ->filter(fn($u) => $visiblePorDepto[(int) $u->id_departamento] ?? false)
+            ->pluck('id')->all();
 
         // Mismas tres fuentes que la web: horarios, ausencias y festivos (ver diasCuadrante()).
-        $diasPorUsuario = $visible
-            ? $this->diasCuadrante($usuarios->pluck('id')->all(), $desde, $hasta, $lunes)
+        $diasPorUsuario = $idsVisibles
+            ? $this->diasCuadrante($idsVisibles, $desde, $hasta, $lunes)
             : [];
+
+        // Para la cabecera de la pantalla: la semana se da por publicada solo si lo está en todos
+        // los departamentos que se muestran.
+        $visible = $visiblePorDepto->isNotEmpty() && !$visiblePorDepto->contains(false);
 
         $grupos = [];
         foreach ($deptosVisibles as $dept) {
             $miembros = $usuarios->where('id_departamento', $dept->id)->values();
             if ($miembros->isEmpty()) continue;
             $grupos[$dept->nombre] = [];
+            $publicadaDepto = $visiblePorDepto[(int) $dept->id] ?? false;
             foreach ($miembros as $u) {
                 $dias = $diasPorUsuario[$u->id] ?? [];
                 if (!$dias) {
@@ -1312,9 +1336,10 @@ class VacationmarbellaPwaController extends Controller
                     }
                 }
                 $grupos[$dept->nombre][] = [
-                    'id'     => $u->id,
-                    'nombre' => $u->nombre,
-                    'dias'   => $dias,
+                    'id'        => $u->id,
+                    'nombre'    => $u->nombre,
+                    'dias'      => $dias,
+                    'publicada' => $publicadaDepto,
                 ];
             }
         }
@@ -1325,6 +1350,9 @@ class VacationmarbellaPwaController extends Controller
             'hasta'         => $hasta,
             'grupos'        => $grupos,
             'publicada'     => $visible,
+            // Por departamento, para que la app pueda avisar de cuál falta por publicar.
+            'publicada_por_departamento' => $deptosVisibles
+                ->mapWithKeys(fn($d) => [$d->nombre => $visiblePorDepto[(int) $d->id] ?? false]),
             'ultima_semana' => VmHorarioPublicacion::ultimaVisible(),
         ]);
     }

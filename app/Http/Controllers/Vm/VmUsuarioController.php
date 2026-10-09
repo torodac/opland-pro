@@ -59,6 +59,42 @@ class VmUsuarioController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /**
+     * Guarda los departamentos cuyo cuadrante puede publicar este usuario. Igual que
+     * "Supervisa a": concede un privilegio, asi que exige permiso de EDICION sobre la tabla y no
+     * solo de lectura -- authorize() de esta pantalla se conforma con poder ver.
+     */
+    public function updatePublicaHorarios(Request $request, Project $project, int $id)
+    {
+        abort_unless(auth()->user()?->canEditTable($project, 'usuarios'), 403);
+
+        $data = $request->validate([
+            'departamentos'   => 'present|array',
+            'departamentos.*' => 'integer',
+        ]);
+
+        // Solo departamentos que llevan cuadrante: guardar uno que no lo lleva seria un permiso
+        // sobre algo que no existe, y reaparecerIa el dia que ese departamento se hiciera visible.
+        $validos = DB::table('vm_departamentos')
+            ->where('visible_horarios', true)
+            ->where(fn($q) => $q->where('deleted', 0)->orWhereNull('deleted'))
+            ->pluck('id')->map(fn($v) => (int) $v)->all();
+
+        $ids = array_values(array_intersect(
+            array_unique(array_map('intval', $data['departamentos'])),
+            $validos
+        ));
+        sort($ids);
+
+        DB::table('vm_usuarios')->where('id', $id)->update([
+            'publica_horarios' => json_encode($ids),
+            'updateuser'       => auth()->id(),
+            'updatedat'        => now(),
+        ]);
+
+        return response()->json(['ok' => true, 'departamentos' => $ids]);
+    }
+
     private function authorize(Project $project): void
     {
         if (!auth()->user()->canViewTable($project, 'usuarios')) {
@@ -261,7 +297,17 @@ class VmUsuarioController extends Controller
                 ->orderBy('nombre')->pluck('nombre')->all()
             : [];
 
+        // Departamentos cuyo cuadrante puede publicar, y los que llevan cuadrante siquiera.
+        $publicaSel = array_map('intval', json_decode($usuario->publica_horarios ?? '[]', true) ?: []);
+        $deptsHorario = DB::table('vm_departamentos')
+            ->where('visible_horarios', true)
+            ->where(fn($q) => $q->where('deleted', 0)->orWhereNull('deleted'))
+            ->orderBy('nombre')
+            ->get(['id', 'nombre']);
+        $puedeEditarUsuarios = auth()->user()?->canEditTable($project, 'usuarios') ?? false;
+
         return view('vm.usuario', compact(
+            'publicaSel','deptsHorario','puedeEditarUsuarios',
             'supervisadosSel','supervisadosOpciones','campoSupervisados','supervisadosNombres',
             'project','usuario','contratos','ausencias','nominas',
             'bonus','ausenciasPorTipo','roles','departamentos','cargos','horarios','fichajes','tiposAusencia','festivos','descFestivos',

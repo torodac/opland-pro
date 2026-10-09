@@ -132,12 +132,16 @@ class HorarioController extends Controller
             'colUserMaxLen'  => $colUserMaxLen,
             'prevWeek'       => $weekStart->copy()->subWeek()->toDateString(),
             'nextWeek'       => $weekStart->copy()->addWeek()->toDateString(),
-            // Publicación del cuadrante: si esta semana está oculta, la PWA no deja pasar de aquí
-            // (ver VmHorarioPublicacion).
-            'semanaPublicada' => VmHorarioPublicacion::estaPublicada(
-                (int) $weekStart->isoFormat('GGGG'), (int) $weekStart->isoFormat('W')
-            ),
-            'puedePublicar'   => $isAdmin || $user->canEditTable($project, 'horarios'),
+            // Publicación del cuadrante, una por departamento: si esta semana está oculta para
+            // un departamento, su gente no pasa de aquí en la PWA (ver VmHorarioPublicacion).
+            // Se indexa por id de departamento para que la vista no consulte dentro del bucle.
+            'publicadaPorDept' => $departamentos->mapWithKeys(fn($d) => [
+                (int) $d->id => VmHorarioPublicacion::estaPublicada(
+                    (int) $weekStart->isoFormat('GGGG'), (int) $weekStart->isoFormat('W'), (int) $d->id
+                ),
+            ]),
+            // El permiso sale de la ficha del usuario, no del rol: ver VmPublicaHorarios.
+            'deptsQuePublica' => \App\Services\VmPublicaHorarios::departamentosDe($project, $user),
             'breadcrumb'      => [['label' => 'Horarios', 'url' => '']],
         ]);
     }
@@ -147,19 +151,28 @@ class HorarioController extends Controller
      */
     public function publicar(Request $request, Project $project)
     {
-        $user = auth()->user();
-        abort_unless($user->isProjectAdmin($project) || $user->canEditTable($project, 'horarios'), 403);
-
         $data = $request->validate([
-            'semana'    => 'required|date',
-            'publicado' => 'required|boolean',
+            'semana'       => 'required|date',
+            'departamento' => 'required|integer',
+            'publicado'    => 'required|boolean',
         ]);
+
+        $departamento = (int) $data['departamento'];
+
+        // El permiso se comprueba sobre ESTE departamento, no sobre la pantalla: un coordinador
+        // entra al planificador y ve los cuatro bloques, pero solo publica el suyo.
+        abort_unless(
+            \App\Services\VmPublicaHorarios::puede($project, auth()->user(), $departamento),
+            403,
+            'No puedes publicar el cuadrante de este departamento.'
+        );
 
         $lunes = Carbon::parse($data['semana'])->startOfWeek(Carbon::MONDAY);
 
         VmHorarioPublicacion::guardar(
             (int) $lunes->isoFormat('GGGG'),
             (int) $lunes->isoFormat('W'),
+            $departamento,
             (bool) $data['publicado'],
             auth()->id()
         );
@@ -167,7 +180,7 @@ class HorarioController extends Controller
         return response()->json([
             'ok'             => true,
             'publicado'      => (bool) $data['publicado'],
-            'ultima_visible' => VmHorarioPublicacion::ultimaVisible(),
+            'ultima_visible' => VmHorarioPublicacion::ultimaVisible($departamento),
         ]);
     }
 

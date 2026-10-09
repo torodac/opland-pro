@@ -33,6 +33,7 @@ $tipoLabels = \App\Services\VmAusenciaTipos::LABEL_HORARIO;
 
 .dept-block { margin-bottom:1.75rem; }
 .dept-title { font-size:13px; font-weight:600; color:#374151; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+.dept-estado { font-size:11px; font-weight:500; color:#9CA3AF; border:1px solid #E5E7EB; border-radius:6px; padding:2px 8px; }
 
 .hor-table { width:100%; border-collapse:collapse; font-size:12px; table-layout:auto; }
 .hor-table th { padding:5px 4px; text-align:center; font-size:11px; font-weight:600; color:#6b7280; background:#f9fafb; border:1px solid #e5e7eb; }
@@ -114,18 +115,6 @@ $pastBlocked = $isPastWeek && !($canEditPast ?? false);
 <div class="hor-nav">
     <h2>Horarios semanales</h2>
 
-    {{-- Publicación del cuadrante para la PWA. Ocultar una semana levanta un muro: el trabajador
-         no ve esa ni ninguna posterior, estén como estén. Las futuras nacen ocultas. --}}
-    @if($puedePublicar)
-    <button type="button" id="btn-publicar" class="hor-btn"
-            data-publicado="{{ $semanaPublicada ? 1 : 0 }}"
-            data-semana="{{ $weekStart->toDateString() }}"
-            style="{{ $semanaPublicada ? 'background:#e8f2e2;border-color:#7BBF50;color:#27500A;' : 'background:#fdf3d3;border-color:#e8b800;color:#8a6300;' }}"
-            title="{{ $semanaPublicada ? 'Visible en la app del trabajador. Pulsa para ocultarla.' : 'Oculta en la app del trabajador: no verá esta semana ni ninguna posterior. Pulsa para publicarla.' }}">
-        {{ $semanaPublicada ? 'Publicada' : '🚫 Oculta' }}
-    </button>
-    @endif
-
     <a href="?semana={{ $prevWeek }}" class="hor-btn">&#8592;</a>
     <span class="week-label">
         {{ $weekStart->isoFormat('D MMM') }} – {{ $weekEnd->isoFormat('D MMM YYYY') }}
@@ -134,37 +123,47 @@ $pastBlocked = $isPastWeek && !($canEditPast ?? false);
     <a href="?" class="hor-btn">Esta semana</a>
 </div>
 
-@if($puedePublicar)
+@if(!empty($deptsQuePublica))
 <script>
-document.getElementById('btn-publicar')?.addEventListener('click', async function () {
-    const btn = this;
-    const publicar = btn.dataset.publicado !== '1';
-    if (!publicar && !confirm('Al ocultar esta semana, en la app del trabajador dejará de verse esta y todas las posteriores, aunque estén publicadas.\n\n¿Continuar?')) return;
+// Un botón por departamento. El aviso al ocultar nombra el departamento, porque ocultar
+// Limpieza y ocultar Mantenimiento ya no es lo mismo.
+document.querySelectorAll('.btn-publicar-dept').forEach(function (btn) {
+    btn.addEventListener('click', async function () {
+        const publicar = btn.dataset.publicado !== '1';
+        const dept     = btn.dataset.deptNombre;
 
-    btn.disabled = true;
-    try {
-        const res = await fetch(@json(route('horario.publicar', $project->slug)), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json',
-                       'X-CSRF-TOKEN': @json(csrf_token()) },
-            body: JSON.stringify({ semana: btn.dataset.semana, publicado: publicar }),
-        });
-        if (!res.ok) throw new Error('http ' + res.status);
-        const data = await res.json();
+        if (!publicar && !confirm('Al ocultar esta semana en ' + dept + ', su equipo dejará de ver '
+            + 'en la app esta y todas las posteriores, aunque estén publicadas.\n\n¿Continuar?')) return;
 
-        btn.dataset.publicado = data.publicado ? '1' : '0';
-        btn.textContent = data.publicado ? 'Publicada' : '🚫 Oculta';
-        btn.style.cssText = data.publicado
-            ? 'background:#e8f2e2;border-color:#7BBF50;color:#27500A;'
-            : 'background:#fdf3d3;border-color:#e8b800;color:#8a6300;';
-        btn.title = data.publicado
-            ? 'Visible en la app del trabajador. Pulsa para ocultarla.'
-            : 'Oculta en la app del trabajador: no verá esta semana ni ninguna posterior. Pulsa para publicarla.';
-    } catch (e) {
-        alert('No se ha podido cambiar la publicación de la semana.');
-    } finally {
-        btn.disabled = false;
-    }
+        btn.disabled = true;
+        try {
+            const res = await fetch(@json(route('horario.publicar', $project->slug)), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json',
+                           'X-CSRF-TOKEN': @json(csrf_token()) },
+                body: JSON.stringify({
+                    semana: btn.dataset.semana,
+                    departamento: btn.dataset.dept,
+                    publicado: publicar,
+                }),
+            });
+            if (!res.ok) throw new Error('http ' + res.status);
+            const data = await res.json();
+
+            btn.dataset.publicado = data.publicado ? '1' : '0';
+            btn.textContent = data.publicado ? 'Publicada' : '🚫 Oculta';
+            btn.style.cssText = data.publicado
+                ? 'background:#e8f2e2;border-color:#7BBF50;color:#27500A;'
+                : 'background:#fdf3d3;border-color:#e8b800;color:#8a6300;';
+            btn.title = data.publicado
+                ? 'Visible en la app del trabajador. Pulsa para ocultarla.'
+                : 'Oculta en la app del trabajador: no verá esta semana ni ninguna posterior. Pulsa para publicarla.';
+        } catch (e) {
+            alert('No se ha podido cambiar la publicación de ' + dept + '.');
+        } finally {
+            btn.disabled = false;
+        }
+    });
 });
 </script>
 @endif
@@ -176,8 +175,32 @@ if ($usuarios->isEmpty()) continue;
 $deptLabel = $dept->nombre ?: 'Sin departamento';
 @endphp
 
+@php
+    // La publicación es de cada departamento: el coordinador abre lo suyo sin esperar a los
+    // demás. Quien no pueda publicar este departamento ve el estado, pero no el botón.
+    $deptPublicada = $publicadaPorDept[$dept->id] ?? true;
+    $deptPuede     = in_array((int) $dept->id, $deptsQuePublica, true);
+@endphp
+
 <div class="dept-block">
-    <div class="dept-title">{{ $deptLabel }}</div>
+    <div class="dept-title">
+        <span>{{ $deptLabel }}</span>
+        @if($deptPuede)
+        <button type="button" class="hor-btn btn-publicar-dept"
+                data-dept="{{ $dept->id }}"
+                data-dept-nombre="{{ $deptLabel }}"
+                data-publicado="{{ $deptPublicada ? 1 : 0 }}"
+                data-semana="{{ $weekStart->toDateString() }}"
+                style="{{ $deptPublicada ? 'background:#e8f2e2;border-color:#7BBF50;color:#27500A;' : 'background:#fdf3d3;border-color:#e8b800;color:#8a6300;' }}"
+                title="{{ $deptPublicada ? 'Visible en la app del trabajador. Pulsa para ocultarla.' : 'Oculta en la app del trabajador: no verá esta semana ni ninguna posterior. Pulsa para publicarla.' }}">
+            {{ $deptPublicada ? 'Publicada' : '🚫 Oculta' }}
+        </button>
+        @else
+        {{-- Sin permiso sobre este departamento se muestra el estado igualmente: saber si el
+             equipo ya ve la semana es útil aunque no puedas cambiarlo. --}}
+        <span class="dept-estado">{{ $deptPublicada ? 'Publicada' : 'Oculta' }}</span>
+        @endif
+    </div>
     <table class="hor-table">
         <thead>
             <tr>
