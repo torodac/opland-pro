@@ -31,16 +31,21 @@ $tipoLabels = \App\Services\VmAusenciaTipos::LABEL_HORARIO;
 .hor-btn:hover { background:#f9fafb; }
 .week-label { font-size:13px; font-weight:500; color:#6b7280; min-width:160px; text-align:center; }
 
-.dept-block { margin-bottom:1.75rem; }
+.dept-block { margin-bottom:1.75rem; overflow-x:auto; }
 .dept-title { font-size:13px; font-weight:600; color:#374151; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
 .dept-estado { font-size:11px; font-weight:500; color:#9CA3AF; border:1px solid #E5E7EB; border-radius:6px; padding:2px 8px; }
 
-.hor-table { width:100%; border-collapse:collapse; font-size:12px; table-layout:auto; }
+/* table-layout:fixed reparte a partes iguales todo lo que sobra tras la columna de usuario, que
+   es la unica con ancho propio. Con 'auto' cada dia se ensanchaba segun lo que le tocara dentro
+   -- un festivo con nombre largo, un turno con mas texto -- y la semana salia descuadrada.
+   min-width + el scroll del bloque evitan que, al estrecharse la ventana, los siete dias se
+   aplasten hasta no poder leerse. */
+.hor-table { width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; min-width:780px; }
 .hor-table th { padding:5px 4px; text-align:center; font-size:11px; font-weight:600; color:#6b7280; background:#f9fafb; border:1px solid #e5e7eb; }
 .hor-table th.col-user { text-align:left; padding-left:8px; white-space:nowrap; width:{{ $colUserMaxLen }}ch; }
 .hor-table th.th-fest { background:#ffe0e0; color:#cc0000; }
 .hor-table th.th-wk { color:#d1d5db; }
-.hor-table th .fest-badge { font-size:9px; font-weight:400; display:block; }
+.hor-table th .fest-badge { font-size:9px; font-weight:400; display:block; overflow-wrap:anywhere; }
 .hor-table td { border:1px solid #e5e7eb; padding:3px 4px; text-align:center; height:34px; vertical-align:middle; }
 .hor-table td.col-user { text-align:left; padding-left:8px; font-weight:500; background:#f9fafb; border-right:1px solid #d1d5db; white-space:nowrap; width:{{ $colUserMaxLen }}ch; }
 .hor-table td.cell-wk { background:#fafafa; }
