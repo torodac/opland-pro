@@ -634,6 +634,7 @@ class InformeImputacionesController extends Controller
             'he_min'    => $d['he_min'],
             'ajuste_he' => $d['ajuste_he'],
             'ht_min'    => $d['ht_min'],
+            'late_min'  => $d['late_min'],
             'tipo'      => $d['tipo']->nombre ?? null,
         ], $data['dias']);
 
@@ -800,6 +801,9 @@ class InformeImputacionesController extends Controller
         $usuario = DB::table('vm_usuarios')->where('id', $userId)->first();
         $sede    = $usuario->sede ?? '';
         $esTurno = VmHorasService::esDeptoTurno($userId);
+        // Recepcion cambia la columna de horas imputadas por el tiempo de late check-in: es el
+        // unico departamento que lo registra, y el unico cuya columna de tareas esta vacia.
+        $esRecepcion = VmHorasService::esRecepcion($userId);
 
         $mp  = str_pad($month, 2, '0', STR_PAD_LEFT);
         $ms  = "{$year}-{$mp}-01";
@@ -814,7 +818,8 @@ class InformeImputacionesController extends Controller
             ->where('deleted', 0)
             ->whereBetween('fecha_fichaje', [$ms, $me])
             ->get(['fecha_fichaje','hora_inicio','hora_fin','pausa_inicio','pausa_fin',
-                   'km','ajuste_he','ajuste_he_motivo'])
+                   'km','ajuste_he','ajuste_he_motivo',
+                   'late_checkin_ini','late_checkin_fin'])
             ->keyBy('fecha_fichaje');
 
         // Tipos de ausencia (valores fijos, sin tabla separada)
@@ -910,7 +915,8 @@ class InformeImputacionesController extends Controller
                 $isFestivo, $isFestTrab,
                 $isDescansoEf,
                 (int) ($f?->ajuste_he ?? 0),
-                $esTurno
+                $esTurno,
+                VmHorasService::lateCheckinMin($f)
             );
             $pausaResaltada = $contratoDia && $pMin !== null
                 && VmHorasService::pausaDeducible($pMin, (float) $contratoDia->horas_semana) > 0;
@@ -926,6 +932,11 @@ class InformeImputacionesController extends Controller
                 'he_min'          => $heMin,
                 'ajuste_he'       => (int) ($f?->ajuste_he ?? 0),
                 'ht_min'          => $htMin,
+                // Minutos de late check-in que suman a las horas extra, ya descontado el solape
+                // con la jornada fichada. Solo Recepcion los registra.
+                'late_min'        => VmHorasService::lateCheckinMin($f),
+                'late_ini'        => ($f && ($f->late_checkin_ini ?? null)) ? substr($f->late_checkin_ini, 0, 5) : null,
+                'late_fin'        => ($f && ($f->late_checkin_fin ?? null)) ? substr($f->late_checkin_fin, 0, 5) : null,
                 'km'              => $f ? (float) ($f->km ?? 0) : null,
                 'tipo'            => $tipoObj,
                 'aus'             => $aus,
@@ -947,6 +958,7 @@ class InformeImputacionesController extends Controller
         return [
             'usuario'          => $usuario,
             'es_turno'         => $esTurno,
+            'es_recepcion'     => $esRecepcion,
             'dias'             => $dias,
             'ajustes_anio'     => DB::table('vm_fichaje')
                 ->where('control_user', $userId)
@@ -1056,7 +1068,8 @@ class InformeImputacionesController extends Controller
             ->whereNotNull('hora_inicio')
             ->whereBetween('fecha_fichaje', ["{$year}-01-01", "{$year}-12-31"])
             ->get(['fecha_fichaje', 'hora_inicio', 'hora_fin',
-                   'pausa_inicio', 'pausa_fin', 'ajuste_he'])
+                   'pausa_inicio', 'pausa_fin', 'ajuste_he',
+                   'late_checkin_ini', 'late_checkin_fin'])
             ->groupBy(fn($f) => (int) substr($f->fecha_fichaje, 5, 2));
 
         $festivosYear = VmHorasService::festivosSet($sede, "{$year}-01-01", "{$year}-12-31");
@@ -1111,7 +1124,8 @@ class InformeImputacionesController extends Controller
                 $he = VmHorasService::calcularHeDia(
                     $tf, $pMin, null, $contratoDia,
                     $isFestivo, $isFestivo, $isDescansoEf,
-                    (int) ($f->ajuste_he ?? 0), $esTurno
+                    (int) ($f->ajuste_he ?? 0), $esTurno,
+                    VmHorasService::lateCheckinMin($f)
                 );
 
                 if ($he !== null) {

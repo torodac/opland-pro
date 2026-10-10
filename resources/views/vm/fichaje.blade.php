@@ -267,6 +267,22 @@ a.imp-row:hover{background:rgba(0,0,0,.03)}
         </div>
       </div>
     @endforeach
+
+      @if($esRecepcion)
+      {{-- Late check-in: tiempo atendido fuera de la jornada. Solo Recepcion. --}}
+      <div class="hor-cell" style="grid-column:span 2">
+        <div class="hor-lbl"><i class="ti ti-moon" style="font-size:10px"></i>Late check-in</div>
+        @if($fichaje->late_checkin_ini && $fichaje->late_checkin_fin)
+          <div class="hor-manual">{{ fmtTime($fichaje->late_checkin_ini) }} – {{ fmtTime($fichaje->late_checkin_fin) }}</div>
+        @else
+          <div class="hor-manual empty">—</div>
+        @endif
+        <div class="hor-auto-row">
+          <span class="hor-auto-lbl">Suma</span>
+          <span class="hor-auto-val">{{ $lateMin > 0 ? fmtMin2($lateMin) : '—' }}</span>
+        </div>
+      </div>
+      @endif
   </div>
 
   {{-- EDIT --}}
@@ -284,6 +300,26 @@ a.imp-row:hover{background:rgba(0,0,0,.03)}
         </div>
       @endforeach
     </div>
+    @if($esRecepcion)
+    {{-- Lo que no quepa fuera de la jornada ya fichada no vuelve a contarse: lo descuenta
+           VmHorasService::lateCheckinMin(). --}}
+    <div style="border-top:0.5px solid rgba(0,0,0,.06);padding-top:12px;margin-bottom:14px">
+      <div style="font-size:11px;color:#aaa;margin-bottom:8px;font-weight:500">LATE CHECK-IN</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+        @foreach ([['Inicio','late_checkin_ini'],['Fin','late_checkin_fin']] as [$lbl,$col])
+          <div>
+            <div style="font-size:11px;color:#999;margin-bottom:4px">{{ $lbl }}</div>
+            <input type="time" id="e-{{ $col }}" class="f-input f-time" value="{{ $fichaje->$col ? substr($fichaje->$col,0,5) : '' }}">
+          </div>
+        @endforeach
+      </div>
+      <div style="font-size:11px;opacity:.55;margin-top:6px">
+          Tiempo atendido fuera de la jornada. Se suma a las horas extra; si el tramo cae dentro
+        de lo ya fichado, esa parte no se cuenta dos veces.
+      </div>
+    </div>
+    @endif
+
     <div style="border-top:0.5px solid rgba(0,0,0,.06);padding-top:12px;margin-bottom:14px">
       <div style="font-size:11px;color:#aaa;margin-bottom:8px;font-weight:500">HORAS AUTOMÁTICAS (app)</div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
@@ -594,6 +630,8 @@ async function guardar() {
     observacion:     val('e-observacion')    || null,
     ajuste_he:        parseInt(val('e-ajuste_he_val') || '0', 10),
     ajuste_he_motivo: val('e-ajuste_he_motivo') || null,
+    late_checkin_ini: val('e-late_checkin_ini') || null,
+    late_checkin_fin: val('e-late_checkin_fin') || null,
   };
 
   const ajusteVal = parseInt(val('e-ajuste_he_val') || '0', 10);

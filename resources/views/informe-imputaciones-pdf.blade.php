@@ -231,7 +231,7 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                     <th class="col-dur">Pausa</th>
                     <th class="col-dur">Extras</th>
                     <th class="col-dur">Reales</th>
-                    <th class="col-dur">Tareas</th>
+                    <th class="col-dur">@if($es_recepcion)Late ch-in@else Tareas @endif</th>
                     <th class="col-km">Km</th>
                     <th class="col-tipo">Tipo</th>
                 </tr>
@@ -265,7 +265,7 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                 </td>
                 @php $efMin = ($dia['tf_min'] !== null && $dia['p_min'] !== null) ? $dia['tf_min'] - $dia['p_min'] : $dia['tf_min']; @endphp
                 <td>{{ $efMin !== null ? IC::fmtMin($efMin) : '' }}</td>
-                <td>{{ $dia['ht_min'] > 0 ? IC::fmtMin($dia['ht_min']) : '' }}</td>
+                <td>@if($es_recepcion){{ $dia['late_min'] > 0 ? IC::fmtMin($dia['late_min']) : '' }}@else{{ $dia['ht_min'] > 0 ? IC::fmtMin($dia['ht_min']) : '' }}@endif</td>
                 <td>{{ $dia['km'] !== null && $dia['km'] > 0 ? number_format($dia['km'], 1, ',', '') : ($dia['entrada'] ? '0,00' : '') }}</td>
                 <td>
                     @foreach($badges as $badge)

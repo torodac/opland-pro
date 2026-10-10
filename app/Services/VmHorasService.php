@@ -53,6 +53,23 @@ class VmHorasService
             ->value('vm_departamentos.visible_horarios');
     }
 
+    /**
+     * Departamento de Recepción. Es el único que atiende llegadas fuera de su jornada, así que es
+     * el único al que se le ofrecen los campos de late check-in y el único cuyo informe mensual
+     * cambia la columna de horas imputadas por ese tiempo.
+     *
+     * Se compara por NOMBRE y no por id fijo para que renombrar o recrear el departamento no
+     * cambie en silencio quién ve los campos; el nombre es lo que se ve en pantalla.
+     */
+    public static function esRecepcion(int $userId): bool
+    {
+        return DB::table('vm_usuarios')
+            ->join('vm_departamentos', 'vm_departamentos.id', '=', 'vm_usuarios.id_departamento')
+            ->where('vm_usuarios.id', $userId)
+            ->where('vm_departamentos.nombre', 'Recepción')
+            ->exists();
+    }
+
     // Descanso real de un día concreto: para personal de turnos, el que marque su horario
     // (vm_horarios.tipo = 'descanso'); para el resto, sábado y domingo por defecto (no tienen
     // horario, su semana laboral son los días entre semana).
@@ -177,6 +194,61 @@ class VmHorasService
      * Es la fuente de verdad única: tanto InformeImputacionesController
      * como VmUsuarioController deben delegar aquí.
      */
+    /**
+     * Minutos de late check-in de un fichaje que NO estan ya dentro de la jornada fichada.
+     *
+     * Recepcion atiende llegadas fuera de su horario y ese tiempo no lo recoge tfMin, que solo
+     * mide hora_fin - hora_inicio. Dos cuidados:
+     *
+     *  - El tramo suele cruzar la medianoche (23:30-00:30). Con fin < ini se le suman 24 h en vez
+     *    de dar un numero negativo.
+     *  - Si el tramo cae dentro del fichaje, esos minutos YA estan en tfMin y ya cuentan como
+     *    extra: sumarlos otra vez los pagaria dos veces. Se descuenta la parte solapada.
+     *
+     * Devuelve siempre minutos >= 0.
+     */
+    public static function lateCheckinMin(?object $f): int
+    {
+        $ini = $f->late_checkin_ini ?? null;
+        $fin = $f->late_checkin_fin ?? null;
+
+        // Con un solo extremo no hay tramo que medir.
+        if (!$ini || !$fin) {
+            return 0;
+        }
+
+        $lIni = self::hmsToMinutes($ini);
+        $lFin = self::hmsToMinutes($fin);
+        if ($lFin <= $lIni) {
+            $lFin += 1440;   // cruza medianoche
+        }
+
+        $total = $lFin - $lIni;
+
+        // Sin jornada fichada no hay nada con lo que solapar.
+        $jIni = ($f->hora_inicio ?? null) ? self::hmsToMinutes($f->hora_inicio) : null;
+        $jFin = ($f->hora_fin ?? null) ? self::hmsToMinutes($f->hora_fin) : null;
+        if ($jIni === null || $jFin === null) {
+            return $total;
+        }
+
+        if ($jFin <= $jIni) {
+            $jFin += 1440;
+        }
+
+        // Interseccion de los dos tramos, probando tambien el late check-in desplazado un dia
+        // atras: un tramo 00:00-01:00 de la madrugada siguiente no solapa con una jornada que
+        // acaba a las 23:00, pero uno 23:00-00:00 si lo hace con una que acaba a las 23:30.
+        $solape = 0;
+        foreach ([0, -1440] as $desfase) {
+            $a = max($lIni + $desfase, $jIni);
+            $b = min($lFin + $desfase, $jFin);
+            $solape = max($solape, max(0, $b - $a));
+        }
+
+        return max(0, $total - $solape);
+    }
+
     public static function calcularHeDia(
         ?int $tfMin,
         ?int $pMin,
@@ -186,7 +258,8 @@ class VmHorasService
         bool $isFestTrab,
         bool $isDescanso,
         int $ajusteMin = 0,
-        bool $esTurno = false
+        bool $esTurno = false,
+        int $lateMin = 0
     ): ?int {
         $isCompensacion = $tipoAusencia && self::categoriaAusencia($tipoAusencia) === 'C';
 
@@ -243,6 +316,13 @@ class VmHorasService
         // y además el saldo histórico sí lo sumaba, con lo que el mes no cuadraba con sus días).
         if ($ajusteMin !== 0) {
             $heMin = ($heMin ?? 0) + $ajusteMin;
+        }
+
+        // El late check-in, por lo mismo: es tiempo trabajado fuera de la jornada y cuenta aunque
+        // ese dia no haya fichaje ni contrato vigente. Llega ya descontado el solape con la
+        // jornada (ver lateCheckinMin), asi que aqui solo se suma.
+        if ($lateMin !== 0) {
+            $heMin = ($heMin ?? 0) + $lateMin;
         }
 
         return $heMin;
@@ -339,7 +419,8 @@ class VmHorasService
                 isset($festivosDia[$fecha]) && (bool) $f,
                 self::esDescansoEfectivo($fecha, $hor->tipo ?? null, $esTurno),
                 (int) ($f->ajuste_he ?? 0),
-                $esTurno
+                $esTurno,
+                self::lateCheckinMin($f)
             );
 
             $cur->modify('+1 day');
@@ -416,7 +497,8 @@ class VmHorasService
             ->where('fecha_fichaje', '<=', $hasta);
         if ($desde) $fichajesQuery->where('fecha_fichaje', '>=', $desde);
         $fichajes = $fichajesQuery->get(['fecha_fichaje', 'hora_inicio', 'hora_fin',
-                   'pausa_inicio', 'pausa_fin', 'ajuste_he']);
+                   'pausa_inicio', 'pausa_fin', 'ajuste_he',
+                   'late_checkin_ini', 'late_checkin_fin']);
 
         $festivosHist = self::festivosSet($sede, $desde ?: '2000-01-01', $hasta);
 
@@ -468,7 +550,8 @@ class VmHorasService
             $diaTotal = self::calcularHeDia(
                 $tf, $pMin, null, $contratoDia,
                 $isFestivo, $isFestivo, $isDescansoEf,
-                (int) ($f->ajuste_he ?? 0), $esTurno
+                (int) ($f->ajuste_he ?? 0), $esTurno,
+                self::lateCheckinMin($f)
             ) ?? 0;
 
             // Solo los FESTIVOS trabajados acumulan día compensable, y solo para el personal de

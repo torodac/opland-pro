@@ -99,6 +99,7 @@ $hist_extras_dias_fest   = $ud['hist_extras_dias_fest'];
 $hist_extras_horas_fest  = $ud['hist_extras_horas_fest'];
 $hist_extras_horas_resto = $ud['hist_extras_horas_resto'];
 $es_turno                = $ud['es_turno'];
+$es_recepcion            = $ud['es_recepcion'] ?? false;
 $is_liquidado     = $ud['is_liquidado'];
 $liquidado_fecha  = $ud['liquidado_fecha'];
 $sum_ep = array_sum(array_column($year_stats, 'ep'));
@@ -209,7 +210,7 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
             <table class="tbl-main">
                 <thead><tr>
                     <th class="col-dia">Día</th><th class="col-time">Inicio</th><th class="col-time">Fin</th><th class="col-dur">Jornada</th>
-                    <th class="col-dur">Pausa</th><th class="col-dur">Extras</th><th class="col-dur">Reales</th><th class="col-dur">Tareas</th><th class="col-km">Km</th><th class="col-tipo">Tipo</th>
+                    <th class="col-dur">Pausa</th><th class="col-dur">Extras</th><th class="col-dur">Reales</th><th class="col-dur">@if($es_recepcion)Late ch-in@else Tareas @endif</th><th class="col-km">Km</th><th class="col-tipo">Tipo</th>
                 </tr></thead>
                 <tbody>
                 @foreach($dias as $dia)
@@ -228,7 +229,7 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                     </td>
                     @php $efMin2 = ($dia['tf_min'] !== null && $dia['p_min'] !== null) ? $dia['tf_min'] - $dia['p_min'] : $dia['tf_min']; @endphp
                     <td>{{ $efMin2 !== null ? IC::fmtMin($efMin2) : '' }}</td>
-                    <td>{{ $dia['ht_min'] > 0 ? IC::fmtMin($dia['ht_min']) : '' }}</td>
+                    <td>@if($es_recepcion){{ $dia['late_min'] > 0 ? IC::fmtMin($dia['late_min']) : '' }}@else{{ $dia['ht_min'] > 0 ? IC::fmtMin($dia['ht_min']) : '' }}@endif</td>
                     <td>{{ $dia['km'] !== null && $dia['km'] > 0 ? number_format($dia['km'],1,',','') : ($dia['entrada'] ? '0,0' : '') }}</td>
                     <td>
                         @php

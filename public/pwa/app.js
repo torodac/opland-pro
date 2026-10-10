@@ -778,6 +778,7 @@ async function loadFichaje() {
 
   try {
     const data = await api('GET', '/fichaje/hoy');
+    state.esRecepcion = !!data.es_recepcion;
     state.fichajeHoy  = data.fichaje;
     state.tareasMin   = data.tareas_min ?? 0;
     state.ausencias   = data.ausencias  || [];
@@ -832,6 +833,21 @@ function editFormHtml(f, fecha) {
           ${inp('edit-pausa-fin-' + fecha, f?.pausa_fin)}
         </label>
       </div>
+      ${state.esRecepcion ? `
+      <div style="border-top:1px solid var(--border);padding-top:10px;margin-bottom:12px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:.04em">LATE CHECK-IN</div>
+        <div style="display:flex;gap:10px">
+          <label style="font-size:12px;color:var(--muted);flex:1">Desde
+            ${inp('edit-late-ini-' + fecha, f?.late_checkin_ini)}
+          </label>
+          <label style="font-size:12px;color:var(--muted);flex:1">Hasta
+            ${inp('edit-late-fin-' + fecha, f?.late_checkin_fin)}
+          </label>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.35">
+          Tiempo atendido fuera de tu jornada. Se suma a tus horas extra.
+        </div>
+      </div>` : ''}
       <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:12px">Observación
         <textarea id="edit-observacion-${fecha}" rows="2"
           style="display:block;width:100%;margin-top:4px;padding:7px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:15px;font-family:inherit;resize:vertical">${esc(f?.observacion || '')}</textarea>
@@ -973,6 +989,15 @@ function bindEditForm(fecha, esCrear = false) {
     const trayecto    = document.getElementById('edit-trayecto-'     + fecha).value.trim() || null;
     const kmVal       = document.getElementById('edit-km-'           + fecha).value;
     const km          = kmVal !== '' ? kmVal : null;
+    const lateIni     = document.getElementById('edit-late-ini-' + fecha)?.value || null;
+    const lateFin     = document.getElementById('edit-late-fin-' + fecha)?.value || null;
+
+    // Un tramo a medias no se puede medir. Se avisa aquí y además en el servidor.
+    if (!!lateIni !== !!lateFin) {
+      errEl.textContent = 'El late check-in necesita hora de inicio y de fin';
+      errEl.style.display = 'block';
+      return;
+    }
 
     const error = validarHorarioFichaje(horaInicio, horaFin, pausaInicio, pausaFin);
     if (error) {
@@ -993,6 +1018,10 @@ function bindEditForm(fecha, esCrear = false) {
         trayecto,
         km,
       };
+      if (state.esRecepcion) {
+        payload.late_checkin_ini = lateIni;
+        payload.late_checkin_fin = lateFin;
+      }
       if (esCrear) {
         await api('POST', '/fichaje/crear', payload);
       } else {

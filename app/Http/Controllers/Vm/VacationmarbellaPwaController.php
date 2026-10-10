@@ -792,6 +792,9 @@ class VacationmarbellaPwaController extends Controller
             'horarios'           => $horarios,
             'horas_contrato'     => $contrato ? (float) $contrato->horas_semana : null,
             'tareas_min'         => $tareasHoyMin,
+            // Solo Recepcion atiende llegadas fuera de jornada: el front pinta los dos campos
+            // de late check-in solo si esto viene a true.
+            'es_recepcion'       => \App\Services\VmHorasService::esRecepcion((int) $user->id),
             'pendientes_por_dia' => $pendientesPorDia,
             'imputado_por_dia'   => $imputadoPorDia,
         ]);
@@ -948,10 +951,22 @@ class VacationmarbellaPwaController extends Controller
             'observacion'  => 'nullable|string|max:500',
             'trayecto'     => 'nullable|string|max:255',
             'km'           => 'nullable|numeric|min:0|max:9999.99',
+            'late_checkin_ini' => 'nullable|date_format:H:i',
+            'late_checkin_fin' => 'nullable|date_format:H:i',
         ]);
 
+        // Un tramo a medias no se puede medir: o van los dos extremos o ninguno.
+        if ($request->has('late_checkin_ini') || $request->has('late_checkin_fin')) {
+            if ((bool) $request->input('late_checkin_ini') !== (bool) $request->input('late_checkin_fin')) {
+                return response()->json([
+                    'error' => 'El late check-in necesita hora de inicio y de fin.',
+                ], 422);
+            }
+        }
+
         $update = ['updateuser' => $user->admin_user_id, 'updatedat' => now()];
-        foreach (['hora_inicio', 'pausa_inicio', 'pausa_fin', 'hora_fin'] as $campo) {
+        foreach (['hora_inicio', 'pausa_inicio', 'pausa_fin', 'hora_fin',
+                  'late_checkin_ini', 'late_checkin_fin'] as $campo) {
             if ($request->has($campo)) {
                 $update[$campo] = $request->input($campo) ? $request->input($campo) . ':00' : null;
             }
@@ -993,7 +1008,14 @@ class VacationmarbellaPwaController extends Controller
             'observacion'  => 'nullable|string|max:500',
             'trayecto'     => 'nullable|string|max:255',
             'km'           => 'nullable|numeric|min:0|max:9999.99',
+            'late_checkin_ini' => 'nullable|date_format:H:i',
+            'late_checkin_fin' => 'nullable|date_format:H:i',
         ]);
+
+        // Un tramo a medias no se puede medir: o van los dos extremos o ninguno.
+        if ((bool) $request->input('late_checkin_ini') !== (bool) $request->input('late_checkin_fin')) {
+            return response()->json(['error' => 'El late check-in necesita hora de inicio y de fin.'], 422);
+        }
 
         $fecha = $request->input('fecha');
 
@@ -1045,6 +1067,8 @@ class VacationmarbellaPwaController extends Controller
             'observacion'   => $request->input('observacion') ?: null,
             'trayecto'      => $request->input('trayecto') ?: null,
             'km'            => $request->input('km') !== '' && $request->input('km') !== null ? $request->input('km') : null,
+            'late_checkin_ini' => $request->input('late_checkin_ini') ? $request->input('late_checkin_ini') . ':00' : null,
+            'late_checkin_fin' => $request->input('late_checkin_fin') ? $request->input('late_checkin_fin') . ':00' : null,
             'createuser'    => $user->admin_user_id, // admin_users.id, igual que el resto de la app
             'createdat'     => now(),
         ]);

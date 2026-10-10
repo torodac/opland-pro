@@ -445,7 +445,7 @@ function firmarPaso(url, confirmMsg) {
                         <th>Pausa</th>
                         <th>H. Extras</th>
                         <th>H. reales</th>
-                        <th>H. Tareas</th>
+                        <th>@if($es_recepcion)Late check-in@else H. Tareas @endif</th>
                         <th>Km</th>
                         <th>Tipo</th>
                     </tr>
@@ -489,7 +489,7 @@ function firmarPaso(url, confirmMsg) {
                     </td>
                     @php $efMin = ($dia['tf_min'] !== null && $dia['p_min'] !== null) ? $dia['tf_min'] - $dia['p_min'] : $dia['tf_min']; @endphp
                     <td>{{ $dia['is_festivo'] ? '' : ($efMin !== null ? IC::fmtMin($efMin) : '') }}</td>
-                    <td>{{ $dia['ht_min'] > 0 ? IC::fmtMin($dia['ht_min']) : '' }}</td>
+                    <td @if($es_recepcion && $dia['late_ini']) title="{{ $dia['late_ini'] }} – {{ $dia['late_fin'] }}" @endif>@if($es_recepcion){{ $dia['late_min'] > 0 ? IC::fmtMin($dia['late_min']) : '' }}@else{{ $dia['ht_min'] > 0 ? IC::fmtMin($dia['ht_min']) : '' }}@endif</td>
                     <td>{{ $dia['km'] !== null && $dia['km'] > 0 ? number_format($dia['km'], 1, ',', '') : ($dia['entrada'] ? '0,0' : '') }}</td>
                     <td>
                         <span style="display:flex;flex-direction:column;gap:2px;align-items:center;">

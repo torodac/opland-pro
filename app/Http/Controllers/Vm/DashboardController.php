@@ -689,6 +689,9 @@ class DashboardController extends Controller
                 isFestTrab:   $esFestivo, // festivo trabajado = vm_festivos, ya no depende de vm_fichaje.festivo
                 isDescanso:   VmHorasService::esDescansoEfectivo($hoy, $horario, VmHorasService::esDeptoTurno($user->id)),
                 esTurno:      VmHorasService::esDeptoTurno($user->id),
+                // Si no se pasara, la PWA ensenaria un numero de horas extra distinto al del
+                // informe mensual para el mismo dia.
+                lateMin:      VmHorasService::lateCheckinMin($fichaje),
             );
         }
 

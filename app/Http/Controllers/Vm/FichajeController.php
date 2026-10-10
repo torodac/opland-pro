@@ -514,7 +514,8 @@ class FichajeController extends Controller
             $isFestivo, // festivo trabajado = vm_festivos, ya no depende de vm_fichaje.festivo
             $isDescansoEf,
             (int) ($fichaje->ajuste_he ?? 0),
-            $esTurno
+            $esTurno,
+            VmHorasService::lateCheckinMin($fichaje)
         );
 
         // Badges del día: los mismos que el informe mensual, calculados con la misma cadena
@@ -556,11 +557,19 @@ class FichajeController extends Controller
             && $efectivasMin !== null
             && abs($efectivasMin - $totalImputado) > 30;
 
+        // Solo Recepcion atiende llegadas fuera de su jornada, asi que solo a ellos se les
+        // ofrecen los campos de late check-in.
+        $esRecepcion = VmHorasService::esRecepcion((int) $fichaje->control_user);
+
+        // Minutos que acaban sumando a las horas extra, ya descontado el solape con la jornada.
+        $lateMin = VmHorasService::lateCheckinMin($fichaje);
+
         return view('vm.fichaje', compact(
             'project', 'fichaje', 'usuario', 'usuarios',
             'imputaciones', 'totalImputado',
             'fichadoMin', 'esperadoMin', 'heMin', 'efectivasMin',
-            'puedeAjustar', 'puedeSinLimiteFecha', 'pendienteValidar', 'badgesDia'
+            'puedeAjustar', 'puedeSinLimiteFecha', 'pendienteValidar', 'badgesDia',
+            'esRecepcion', 'lateMin'
         ));
     }
 
@@ -630,8 +639,23 @@ class FichajeController extends Controller
             'observacion'      => 'nullable|string|max:1000',
             'ajuste_he'        => 'nullable|integer',
             'ajuste_he_motivo' => 'nullable|string|max:500',
+            // Tiempo extra dedicado a un late check-in. Se guarda el tramo; los minutos que
+            // suman a las horas extra los calcula VmHorasService::lateCheckinMin().
+            'late_checkin_ini' => 'nullable|date_format:H:i',
+            'late_checkin_fin' => 'nullable|date_format:H:i',
             'deleted'        => 'nullable|integer',
         ]);
+
+        // Un tramo a medias no se puede medir, asi que o van los dos o ninguno. Se valida en
+        // servidor y no solo en el cliente: el motivo del ajuste de horas extra solo se exige en
+        // JS y un PATCH directo se lo salta.
+        $lateIni = $data['late_checkin_ini'] ?? null;
+        $lateFin = $data['late_checkin_fin'] ?? null;
+        if ((bool) $lateIni !== (bool) $lateFin) {
+            return response()->json([
+                'error' => 'El late check-in necesita hora de inicio y de fin.',
+            ], 422);
+        }
 
         $puedeSinLimiteFecha = VmFichajePermisos::puedeSinLimiteFecha($project, (int) $data['control_user']);
 
