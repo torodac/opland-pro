@@ -242,10 +242,8 @@ $csrf         = csrf_token();
         <span>{{ $tarea->fecha_planificada ? \Carbon\Carbon::parse($tarea->fecha_planificada)->translatedFormat('j \d\e F Y') : 'Sin fecha' }}</span>
         @if ($tarea->breezeway_task_id ?? null)
         @php
-            // El departamento va en la ruta de Breezeway, y su nombre no es el nuestro:
-            // limpieza -> housekeeping, mantenimiento -> maintenance.
-            $bzwDepto = $tipo === 'limpieza' ? 'housekeeping' : 'maintenance';
-            $bzwUrl   = "https://app.breezeway.io/tasks/{$bzwDepto}?flyout=task_edit&taskId={$tarea->breezeway_task_id}";
+            // Breezeway resuelve la tarea por su id, sin necesidad de decirle el departamento.
+            $bzwUrl = "https://app.breezeway.io/task/{$tarea->breezeway_task_id}";
         @endphp
         <span style="display:flex;align-items:center;gap:4px;white-space:nowrap">
           <span style="font-size:11px;color:#9ca3af;font-variant-numeric:tabular-nums">Breezeway #{{ $tarea->breezeway_task_id }}</span>
