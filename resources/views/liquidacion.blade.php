@@ -68,6 +68,7 @@
             $impProp = $importesProp[$r->booking_id] ?? 0;
             $cc      = $comisionCanal[$r->booking_id] ?? null;
             $liq     = (bool) $r->liquidado;
+            $corregido = isset($conCorreccion[$r->booking_id]);
         @endphp
         <tr class="liq-row" data-id="{{ $r->id }}"
             style="border-bottom:1px solid #f1f5f9;transition:background .15s;">
@@ -98,6 +99,10 @@
             <td style="text-align:center;padding:9px 14px;">
                 @if($impProp > 0)
                     <span style="font-size:13px;font-weight:600;color:#111827;">{{ number_format($impProp, 2, ',', '.') }} €</span>
+                    @if($corregido)
+                        <span style="color:#d97706;font-weight:700;cursor:help;"
+                              title="Esta reserva tiene algún importe corregido en la novación. Esta planilla usa el importe de Icnea.">*</span>
+                    @endif
                 @endif
             </td>
             {{-- Total CC --}}

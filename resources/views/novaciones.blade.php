@@ -39,6 +39,17 @@ $year_max = now()->year + 1;
 .imp-importe  { min-width:80px; text-align:right; font-weight:600; color:#333; }
 .imp-importe.neg { color:#dc2626; }
 
+/* El importe corregido ocupa el hueco del importe, sin añadir una cuarta columna: una fila sin
+   corregir tiene que verse igual que antes de existir esta funcionalidad. El de Icnea solo
+   aparece, tachado y pequeño, cuando hay corrección. */
+.imp-input { width:74px; text-align:right; font-weight:600; font-size:.78rem; color:#333;
+             border:1px solid transparent; background:transparent; border-radius:5px; padding:1px 3px;
+             font-family:inherit; }
+.imp-input:hover, .imp-input:focus { border-color:#e2e8f0; background:#fff; outline:none; }
+.imp-input.neg { color:#dc2626; }
+.imp-orig { font-size:.68rem; color:#aaa; text-decoration:line-through; white-space:nowrap; }
+.imp-alerta { color:#d97706; font-weight:700; cursor:help; }
+
 /* Toggle */
 .toggle-wrap { position:relative; display:inline-block; width:36px; height:20px; flex-shrink:0; }
 .toggle-wrap input { opacity:0; width:0; height:0; }
@@ -324,6 +335,7 @@ const ROUTE_GASTOS_SAVE = "{{ route('novaciones.gastos.save',    $project->slug)
 const ROUTE_UPD_TAREA   = "{{ route('novaciones.update-tarea',   $project->slug) }}";
 const ROUTE_CRE_TAREA   = "{{ route('novaciones.create-tarea',  $project->slug) }}";
 const ROUTE_TAREA_FICHA = "{{ route('vm.tarea', ['project'=>$project->slug,'tipo'=>'__TIPO__','id'=>'__ID__']) }}";
+const ROUTE_UPD_NOVACION = "{{ route('novaciones.importe-novacion', $project->slug) }}";
 const CSRF              = "{{ csrf_token() }}";
 const PROP_ID           = {{ $prop_id }};
 const YEAR_SEL          = {{ $year }};
@@ -338,6 +350,17 @@ const TEXTOS_FIN      = ['cleaning_fee', 'booking_fee'];
 let currentBookingId = null;
 let importesData     = [];
 let porcHonorarios   = 0;
+// La reserva del panel abierto: hace falta para repintarlo tras corregir un importe.
+let reservaActual    = null;
+
+// El importe que manda en el cálculo: la corrección manual si la hay, si no el de Icnea.
+// Con || en vez de ?? una corrección a 0 ("anular esta línea") volvería al importado.
+const eff = i => parseFloat(i.importe_novacion ?? i.importe);
+
+// ¿Ha cambiado esta línea desde que se novó? importe_novado es la foto que dejó guardar().
+const cambiadaTrasNovar = i =>
+  i.importe_novado !== null && i.importe_novado !== undefined &&
+  Math.abs(eff(i) - parseFloat(i.importe_novado)) > 0.01;
 
 function abrirIcnea(url) {
   navigator.clipboard.writeText(url).then(() => {
@@ -373,6 +396,7 @@ async function loadImportes(bookingId) {
   const data = await res.json();
   importesData   = data.importes;
   porcHonorarios = data.porc_honorarios;
+  reservaActual  = data.reserva;
   renderPanel(data.reserva);
 }
 
@@ -441,7 +465,9 @@ function renderPanel(reserva) {
         <div class="calc-row" style="align-items:center;gap:8px;flex-wrap:wrap;">
           <span>IVA</span>
           <div class="iva-wrap">
-            <input type="number" id="iva-pct" value="10" min="0" max="100" step="0.1" oninput="recalcular()"> %
+            {{-- Si la reserva ya se novó se recupera el IVA con el que se calculó entonces. Antes
+                 volvía siempre al 10% y podía cambiar las cifras sin que nadie lo notara. --}}
+            <input type="number" id="iva-pct" value="${reserva.novacion_iva_pct ?? 10}" min="0" max="100" step="0.1" oninput="recalcular()"> %
           </div>
           <span class="neg" id="val-iva">—</span>
         </div>
@@ -486,15 +512,30 @@ function renderPanel(reserva) {
 }
 
 function importeRow(imp, label) {
-  const neg = parseFloat(imp.importe) < 0 ? ' neg' : '';
+  const icnea = parseFloat(imp.importe);
+  const corr  = (imp.importe_novacion === null || imp.importe_novacion === undefined)
+                ? null : parseFloat(imp.importe_novacion);
+  const neg   = eff(imp) < 0 ? ' neg' : '';
+
   if (imp.deleted) {
+    // Sin toggle ni edición: Icnea ya no la devuelve, así que no cuenta. Si tenía corrección se
+    // enseña igualmente, para que el dato no se vuelva invisible.
     return `
       <div class="imp-row" style="opacity:.5;" title="Icnea ya no devuelve esta línea — no cuenta en los totales">
         <span class="toggle-wrap"></span>
         <span class="imp-texto" style="text-decoration:line-through;color:#999;">${label}</span>
-        <span class="imp-importe${neg}" style="color:#999;">${fmt(imp.importe)}</span>
+        <span class="imp-importe${neg}" style="color:#999;">${fmt(eff(imp))}</span>
       </div>`;
   }
+
+  const aviso = cambiadaTrasNovar(imp)
+    ? `<span class="imp-alerta" title="Ha cambiado desde que se novó: ${fmt(imp.importe_novado)} → ${fmt(eff(imp))}">●</span>`
+    : '';
+
+  const origen = corr !== null
+    ? `<span class="imp-orig" title="Importe de Icnea${imp.importe_novacion_at ? ' · corregido el ' + fmtFecha(imp.importe_novacion_at) : ''}">${fmt(icnea)}</span>`
+    : '';
+
   return `
     <div class="imp-row">
       <label class="toggle-wrap">
@@ -502,12 +543,34 @@ function importeRow(imp, label) {
         <span class="toggle-slider"></span>
       </label>
       <span class="imp-texto">${label}</span>
-      <span class="imp-importe${neg}">${fmt(imp.importe)}</span>
+      ${aviso}${origen}
+      <input type="number" step="0.01" class="imp-input${neg}"
+             value="${corr !== null ? corr : ''}" placeholder="${fmt(icnea)}"
+             title="Importe para la novación. Vacío = se usa el de Icnea."
+             oninput="recalcularDesdeInput(${imp.id}, this.value)"
+             onchange="saveImporteNovacion(${imp.id}, this.value)">
     </div>`;
+}
+
+// dd/mm/aaaa a partir del timestamp que manda el servidor.
+function fmtFecha(ts) {
+  const d = new Date(String(ts).replace(' ', 'T'));
+  return isNaN(d) ? '' : d.toLocaleDateString('es-ES');
 }
 
 function comisionRow(imp, label) {
   if (!imp) return `<div class="com-row"><span class="com-texto">${label}</span><span class="com-importe" style="color:#ccc;">—</span></div>`;
+
+  // La comisión de canal viene de Icnea, así que también se puede corregir.
+  const icnea = parseFloat(imp.importe);
+  const corr  = (imp.importe_novacion === null || imp.importe_novacion === undefined)
+                ? null : parseFloat(imp.importe_novacion);
+  const aviso = cambiadaTrasNovar(imp)
+    ? `<span class="imp-alerta" title="Ha cambiado desde que se novó: ${fmt(imp.importe_novado)} → ${fmt(eff(imp))}">●</span>`
+    : '';
+  const origen = corr !== null
+    ? `<span class="imp-orig" title="Importe de Icnea">${fmt(icnea)}</span>` : '';
+
   return `
     <div class="com-row">
       <label class="toggle-wrap">
@@ -515,7 +578,12 @@ function comisionRow(imp, label) {
         <span class="toggle-slider"></span>
       </label>
       <span class="com-texto">${label}</span>
-      <span class="com-importe">${fmt(imp.importe)}</span>
+      ${aviso}${origen}
+      <input type="number" step="0.01" class="imp-input"
+             value="${corr !== null ? corr : ''}" placeholder="${fmt(icnea)}"
+             title="Importe para la novación. Vacío = se usa el de Icnea."
+             oninput="recalcularDesdeInput(${imp.id}, this.value)"
+             onchange="saveImporteNovacion(${imp.id}, this.value)">
     </div>`;
 }
 
@@ -598,7 +666,7 @@ function recalcular() {
   // Bruto = importes (sin comisiones) con propietario=1
   const bruto = importesData
     .filter(i => !TEXTOS_COMISION.includes(i.texto) && i.propietario && !i.deleted)
-    .reduce((s, i) => s + parseFloat(i.importe), 0);
+    .reduce((s, i) => s + eff(i), 0);
 
   const ivaAmt  = bruto - bruto / (1 + ivaPct);
   const baseIva = bruto / (1 + ivaPct);
@@ -616,7 +684,7 @@ function recalcular() {
       const input = document.getElementById(inputId);
       return input ? (parseFloat(input.value) || 0) : 0;
     }
-    return imp ? parseFloat(imp.importe) : 0;
+    return imp ? eff(imp) : 0;
   };
 
   const cc   = getComision('Comisión canal',  null,       'toggle-cc-inner');
@@ -625,7 +693,7 @@ function recalcular() {
 
   // Para CC el toggle está inline generado
   const ccImp = importesData.find(i => i.texto === 'Comisión canal');
-  const ccVal = ccImp && ccImp.propietario ? parseFloat(ccImp.importe) : 0;
+  const ccVal = ccImp && ccImp.propietario ? eff(ccImp) : 0;
 
   const toggleMgmt = document.getElementById('toggle-mgmt');
   const mgmtVal    = toggleMgmt && toggleMgmt.checked
@@ -958,6 +1026,38 @@ function toggleTarea(id, tabla, checkbox) {
   actualizarTotalesGastos();
 }
 
+// Mientras se teclea: mueve los totales sin ir al servidor. El guardado va en el onchange.
+function recalcularDesdeInput(id, valor) {
+  const imp = importesData.find(i => i.id === id);
+  if (!imp) return;
+  imp.importe_novacion = (valor === null || String(valor).trim() === '') ? null : parseFloat(valor);
+  recalcular();
+}
+
+async function saveImporteNovacion(id, valor) {
+  // Vacío y cero son cosas distintas: vacío retira la corrección, cero anula la línea.
+  const v = (valor === null || String(valor).trim() === '') ? null : parseFloat(valor);
+
+  const res = await fetch(ROUTE_UPD_NOVACION, {
+    method:'POST', headers:{'Content-Type':'application/json','X-CSRF-TOKEN':CSRF},
+    body: JSON.stringify({ id, importe_novacion: v }),
+  });
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok || data.error) {
+    alert(data.error || 'No se ha podido guardar el importe.');
+    loadImportes(currentBookingId);   // vuelve a lo que haya en la base
+    return;
+  }
+
+  const imp = importesData.find(i => i.id === id);
+  if (imp) {
+    imp.importe_novacion    = data.importe_novacion;
+    imp.importe_novacion_at = data.importe_novacion === null ? null : new Date().toISOString();
+  }
+  renderPanel(reservaActual);
+}
+
 async function guardarNovacion() {
   const btn = document.getElementById('btn-guardar');
   btn.disabled = true;
@@ -972,7 +1072,13 @@ async function guardarNovacion() {
 
   await fetch(ROUTE_GUARDAR, {
     method:'POST', headers:{'Content-Type':'application/json','X-CSRF-TOKEN':CSRF},
-    body: JSON.stringify({booking_id: currentBookingId, base_propietario: propNum, base_calculo: calcNum}),
+    // El IVA viaja para quedar guardado: sin él la novación no era reproducible.
+    body: JSON.stringify({
+      booking_id:       currentBookingId,
+      base_propietario: propNum,
+      base_calculo:     calcNum,
+      iva_pct:          parseFloat(document.getElementById('iva-pct')?.value ?? 10),
+    }),
   });
 
   btn.textContent = '✓ Guardado';

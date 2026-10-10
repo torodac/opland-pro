@@ -62,6 +62,7 @@
             $impProp  = $importesProp[$r->booking_id] ?? 0;
             $cc       = $comisionCanal[$r->booking_id] ?? null;
             $liq      = (bool) $r->liquidado;
+            $corregido = isset($conCorreccion[$r->booking_id]);
         @endphp
         <tr class="res-row">
             <td>
@@ -72,7 +73,7 @@
             </td>
             <td class="center">
                 @if($impProp > 0)
-                    <span class="amount">{{ number_format($impProp, 2, ',', '.') }} €</span>
+                    <span class="amount">{{ number_format($impProp, 2, ',', '.') }} €</span>@if($corregido)<span style="color:#d97706;font-weight:bold;">*</span>@endif
                 @endif
             </td>
             <td class="center">

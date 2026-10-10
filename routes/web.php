@@ -232,6 +232,9 @@ Route::middleware('auth')->group(function () {
         Route::get('novaciones/importes',         [NovacionesController::class, 'importes'])->name('novaciones.importes');
         Route::post('novaciones/toggle-importe',  [NovacionesController::class, 'toggleImporte'])->name('novaciones.toggle');
         Route::post('novaciones/update-importe',  [NovacionesController::class, 'updateImporte'])->name('novaciones.update-importe');
+        // Corrige el importe de una linea SIN tocar el que vino de Icnea. Endpoint aparte de
+        // update-importe, que escribe 'importe' de forma destructiva.
+        Route::post('novaciones/importe-novacion', [NovacionesController::class, 'updateImporteNovacion'])->name('novaciones.importe-novacion');
         Route::post('novaciones/comision-bancos', [NovacionesController::class, 'saveComisionBancos'])->name('novaciones.comision-bancos');
         Route::post('novaciones/guardar',         [NovacionesController::class, 'guardar'])->name('novaciones.guardar');
         Route::post('novaciones/sincronizar',     [NovacionesController::class, 'sincronizar'])->name('novaciones.sincronizar');

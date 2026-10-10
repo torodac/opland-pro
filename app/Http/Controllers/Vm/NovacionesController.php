@@ -11,6 +11,19 @@ use Illuminate\Support\Facades\DB;
 
 class NovacionesController extends Controller
 {
+    /**
+     * Líneas que no vienen de Icnea: las crea y las gobierna esta pantalla. No admiten importe
+     * corregido porque no hay original que preservar, y el cron las deja en paz (mismo listado en
+     * IcneaSyncImportesCommand::$textosProtegidos).
+     */
+    public const TEXTOS_PROPIOS = ['Management Fee', 'Comisión Bancos'];
+
+    /** Dos importes se consideran iguales por debajo de este céntimo, igual que en el snapshot. */
+    private const TOLERANCIA = 0.01;
+
+    public const MESES_ES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                             'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
     public function index(Request $request, Project $project)
     {
         $propiedades = DB::table('vm_propiedades')
@@ -97,7 +110,9 @@ class NovacionesController extends Controller
             ->where('booking_id', $bookingId)
             ->where('deleted', 0)
             ->where('texto', 'Comisión canal')
-            ->where('importe', '>', 0)
+            // El efectivo, no el de Icnea: si alguien corrige la comisión de canal a 0, esta
+            // reserva pasa a necesitar Management Fee igual que si Icnea no la hubiera mandado.
+            ->whereRaw('COALESCE(importe_novacion, importe) > 0')
             ->exists();
 
         if (!$tieneCC) {
@@ -105,7 +120,8 @@ class NovacionesController extends Controller
                 ->where('booking_id', $bookingId)
                 ->where('deleted', 0)
                 ->whereNotIn('texto', ['Management Fee', 'Comisión Bancos', 'Comisión canal'])
-                ->sum('importe');
+                ->selectRaw('COALESCE(SUM(COALESCE(importe_novacion, importe)), 0) as t')
+                ->value('t');
 
             $mgmtFee = round($totalReserva * 0.05, 2);
             $existsMgmt = DB::table('vm_reservas_importes')
@@ -148,7 +164,11 @@ class NovacionesController extends Controller
         $importes = DB::table('vm_reservas_importes')
             ->where('booking_id', $bookingId)
             ->orderBy('id')
-            ->get(['id', 'texto', 'importe', 'propietario', 'deleted']);
+            ->get([
+                'id', 'texto', 'importe', 'propietario', 'deleted',
+                // La corrección manual y la foto del momento de novar. Sin esto el JS no las ve.
+                'importe_novacion', 'importe_novacion_at', 'importe_novado', 'propietario_novado',
+            ]);
 
         $propiedad = DB::table('vm_propiedades')
             ->where('id', $reserva->id_propiedades ?? 0)
@@ -192,20 +212,89 @@ class NovacionesController extends Controller
         return response()->json(['id' => $id, 'importe' => $importe]);
     }
 
+    /**
+     * Corrige el importe de una línea SIN tocar el que vino de Icnea.
+     *
+     * Endpoint aparte de updateImporte() a propósito: aquel escribe "importe" de forma
+     * destructiva y lo usa el Management Fee. Compartirlos abriría la puerta a machacar por error
+     * el valor de Icnea, que es justo lo que esto existe para impedir.
+     */
+    public function updateImporteNovacion(Request $request, Project $project)
+    {
+        $id  = (int) $request->input('id');
+        $fila = DB::table('vm_reservas_importes')->where('id', $id)->first(['id', 'texto', 'importe']);
+
+        if (!$fila) {
+            return response()->json(['error' => 'Línea no encontrada'], 404);
+        }
+
+        // Management Fee y Comisión Bancos son líneas propias de VM: no vienen de Icnea, no hay
+        // original que preservar y su importe ya es el que teclea el usuario.
+        if (in_array($fila->texto, self::TEXTOS_PROPIOS, true)) {
+            return response()->json([
+                'error' => 'Esta línea es propia de VM y no viene de Icnea: edita su importe directamente.',
+            ], 422);
+        }
+
+        // Vacío y cero son cosas distintas: vacío retira la corrección, cero anula la línea.
+        // (float) sobre '' daría 0.0 y convertiría "sin corregir" en "corregido a cero".
+        $bruto = $request->input('importe_novacion');
+        $valor = ($bruto === null || $bruto === '') ? null : round((float) $bruto, 2);
+
+        DB::table('vm_reservas_importes')->where('id', $id)->update([
+            'importe_novacion'      => $valor,
+            'importe_novacion_user' => $valor === null ? null : auth()->id(),
+            'importe_novacion_at'   => $valor === null ? null : now(),
+            'updatedat'             => now(),
+        ]);
+
+        return response()->json([
+            'ok'               => true,
+            'id'               => $id,
+            'importe'          => (float) $fila->importe,
+            'importe_novacion' => $valor,
+        ]);
+    }
+
     public function guardar(Request $request, Project $project)
     {
         $bookingId       = $request->input('booking_id');
         $basePropietario = $request->input('base_propietario');
         $baseCalculo     = $request->input('base_calculo');
+        $ivaPct          = $request->input('iva_pct');
         $reserva         = DB::table('vm_reservas')->where('booking_id', $bookingId)->first();
         if (!$reserva) return response()->json(['error' => 'No encontrada'], 404);
 
-        DB::table('vm_reservas')->where('booking_id', $bookingId)->update([
-            'novacion'         => 1,
-            'base_propietario' => $basePropietario,
-            'base_calculo'     => $baseCalculo,
-            'updatedat'        => now(),
-        ]);
+        $porcHonorarios = DB::table('vm_propiedades')
+            ->where('id', $reserva->id_propiedades ?? 0)
+            ->value('porc_honorarios');
+
+        // Se guarda CON QUÉ se calculó, no solo el resultado. Hasta ahora solo quedaban las dos
+        // cifras finales: ni las líneas, ni los toggles, ni el IVA, de modo que una novación no
+        // era reproducible y tampoco se podía detectar que Icnea cambiara algo después.
+        DB::transaction(function () use ($bookingId, $basePropietario, $baseCalculo, $ivaPct, $porcHonorarios) {
+            DB::table('vm_reservas')->where('booking_id', $bookingId)->update([
+                'novacion'                 => 1,
+                'base_propietario'         => $basePropietario,
+                'base_calculo'             => $baseCalculo,
+                'novacion_iva_pct'         => $ivaPct === null || $ivaPct === '' ? null : (float) $ivaPct,
+                'novacion_porc_honorarios' => $porcHonorarios === null ? null : (float) $porcHonorarios,
+                'novacion_at'              => now(),
+                'novacion_user'            => auth()->id(),
+                'updatedat'                => now(),
+            ]);
+
+            // La foto de cada línea: cuánto valía el efectivo y cómo estaba su toggle. Las ya
+            // borradas se dejan fuera: no entraron en el cálculo.
+            DB::table('vm_reservas_importes')
+                ->where('booking_id', $bookingId)
+                ->where('deleted', 0)
+                ->update([
+                    'importe_novado'     => DB::raw('COALESCE(importe_novacion, importe)'),
+                    'propietario_novado' => DB::raw('propietario'),
+                    'updatedat'          => now(),
+                ]);
+        });
 
         return response()->json(['ok' => true, 'base_propietario' => $basePropietario]);
     }
@@ -228,11 +317,19 @@ class NovacionesController extends Controller
         $resultadoMesActual = $this->reconciliarMes($propId, $year, $month);
         $this->marcarSincronizado($propId, $hasta);
 
+        $tareasCreadas = [];
+
+        // El mes en curso también se comprueba: una reserva ya novada de este mes puede haber
+        // cambiado en Icnea aunque el mes no esté documentado todavía.
+        $tareaActual = $this->comprobarCambiosNovadas($propId, $year, $month);
+        if ($tareaActual && ($tareaActual['creada'] ?? false)) {
+            $tareasCreadas[] = ['year' => $year, 'month' => $month] + $tareaActual;
+        }
+
         // 6 meses anteriores — se resincronizan siempre de paso, y por cada uno cuyos
         // subtotales ya documentados (vm_novaciones_documentos) dejen de coincidir con los
         // recién recalculados, se abre una tarea de revisión para Contabilidad.
         $erroresAnteriores = 0;
-        $tareasCreadas = [];
         $yAct = $year;
         $mAct = $month;
         for ($i = 0; $i < 6; $i++) {
@@ -241,9 +338,14 @@ class NovacionesController extends Controller
             $this->marcarSincronizado($propId, Carbon::create($yAct, $mAct)->endOfMonth()->toDateString());
             $erroresAnteriores += $resultadoMes['errores'];
 
-            $tarea = $this->comprobarDiferenciaYCrearTarea($propId, $yAct, $mAct);
-            if ($tarea && ($tarea['creada'] ?? false)) {
-                $tareasCreadas[] = ['year' => $yAct, 'month' => $mAct] + $tarea;
+            // Dos avisos distintos: uno mira si los totales ya documentados dejaron de cuadrar;
+            // el otro, si alguna reserva novada ha cambiado desde que se novó, que es lo que al
+            // primero se le escapa (compara cifras materializadas, que no se mueven).
+            foreach ([$this->comprobarDiferenciaYCrearTarea($propId, $yAct, $mAct),
+                      $this->comprobarCambiosNovadas($propId, $yAct, $mAct)] as $tarea) {
+                if ($tarea && ($tarea['creada'] ?? false)) {
+                    $tareasCreadas[] = ['year' => $yAct, 'month' => $mAct] + $tarea;
+                }
             }
         }
 
@@ -483,6 +585,26 @@ class NovacionesController extends Controller
             return null;
         }
 
+        $propiedad = DB::table('vm_propiedades')->where('id', $propId)->value('nombre');
+        $mesLabel  = self::MESES_ES[$month] . '-' . $year;
+
+        return $this->crearTareaRevision(
+            $propId, $year, $month,
+            "Revisar novación {$mesLabel} de {$propiedad}",
+            "Los importes ya documentados de la novación de {$mesLabel} para {$propiedad} han "
+            . "cambiado tras sincronizar con Icnea. Revisar antes de dar por buena la novación anterior."
+        );
+    }
+
+    /**
+     * Abre una tarea "Revisión Novación" para Contabilidad, si no hay ya una viva de esa
+     * propiedad+mes. Compartido por los dos avisos: el de totales documentados y el de importes
+     * cambiados desde la novación -- una misma revisión cubre el mes entero.
+     *
+     * Desde el cron no hay sesión, así que createuser queda a NULL.
+     */
+    private function crearTareaRevision(int $propId, int $year, int $month, string $nombre, string $descripcion): ?array
+    {
         $fechaFin = Carbon::create($year, $month)->endOfMonth()->toDateString();
 
         $yaExiste = DB::table('vm_tareas_sscc')
@@ -497,20 +619,14 @@ class NovacionesController extends Controller
             return ['creada' => false, 'motivo' => 'ya_existe'];
         }
 
-        $propiedad = DB::table('vm_propiedades')->where('id', $propId)->value('nombre');
-        $deptContabilidad = DB::table('vm_departamentos')->where('nombre', 'Adm/Finanzas')->value('id');
-        $meses_es = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
-                     'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-        $mesLabel = $meses_es[$month] . '-' . $year;
-
         $idTarea = DB::table('vm_tareas_sscc')->insertGetId([
-            'nombre'            => "Revisar novación {$mesLabel} de {$propiedad}",
-            'descripcion'       => "Los importes ya documentados de la novación de {$mesLabel} para {$propiedad} han cambiado tras sincronizar con Icnea. Revisar antes de dar por buena la novación anterior.",
+            'nombre'            => $nombre,
+            'descripcion'       => $descripcion,
             'Tipo'              => 'Revisión Novación',
             'estado'            => 'Nueva',
             'fecha_planificada' => $fechaFin,
             'id_propiedades'    => $propId,
-            'id_departamento'   => $deptContabilidad,
+            'id_departamento'   => DB::table('vm_departamentos')->where('nombre', 'Adm/Finanzas')->value('id'),
             'hidden'            => 0,
             'deleted'           => 0,
             'blocked'           => 0,
@@ -520,6 +636,106 @@ class NovacionesController extends Controller
         ]);
 
         return ['creada' => true, 'id' => $idTarea];
+    }
+
+    /**
+     * Qué ha cambiado en una reserva desde que se novó.
+     *
+     * Compara el estado actual de sus líneas contra la foto que dejó guardar() en *_novado. No
+     * recalcula la base del propietario: eso exigiría portar a PHP la fórmula que vive en el
+     * JavaScript del panel y mantener dos copias de la misma cuenta. Comparar las ENTRADAS
+     * detecta lo mismo -- que algo se movió respecto a lo novado -- sin duplicar nada.
+     *
+     * @return array<int, string> Descripción de cada diferencia; vacío si no hay ninguna.
+     */
+    private function cambiosDesdeLaNovacion(string $bookingId): array
+    {
+        $lineas = DB::table('vm_reservas_importes')
+            ->where('booking_id', $bookingId)
+            ->get(['texto', 'importe', 'importe_novacion', 'importe_novado',
+                   'propietario', 'propietario_novado', 'deleted']);
+
+        $euros  = fn($v) => number_format((float) $v, 2, ',', '.') . ' €';
+        $cambios = [];
+
+        foreach ($lineas as $l) {
+            $estabaAlNovar = $l->importe_novado !== null;
+            $efectivo      = (float) ($l->importe_novacion ?? $l->importe);
+
+            if ($estabaAlNovar && $l->deleted) {
+                $cambios[] = "«{$l->texto}»: Icnea ya no la devuelve (valía " . $euros($l->importe_novado) . ').';
+                continue;
+            }
+
+            if ($l->deleted) {
+                continue;   // ya estaba borrada al novar: nada que contar
+            }
+
+            if (!$estabaAlNovar) {
+                if (!in_array($l->texto, self::TEXTOS_PROPIOS, true)) {
+                    $cambios[] = "«{$l->texto}»: línea nueva de " . $euros($efectivo) . ', no estaba al novar.';
+                }
+                continue;
+            }
+
+            if (abs($efectivo - (float) $l->importe_novado) > self::TOLERANCIA) {
+                $cambios[] = "«{$l->texto}»: " . $euros($l->importe_novado) . ' → ' . $euros($efectivo) . '.';
+            }
+
+            if ($l->propietario_novado !== null && (int) $l->propietario !== (int) $l->propietario_novado) {
+                $cambios[] = "«{$l->texto}»: " . ((int) $l->propietario ? 'se ha incluido en' : 'se ha excluido de')
+                           . ' el cálculo.';
+            }
+        }
+
+        return $cambios;
+    }
+
+    /**
+     * Abre una tarea de revisión si alguna reserva ya novada de esta propiedad+mes ha cambiado
+     * desde que se novó.
+     *
+     * Esto es lo que comprobarDiferenciaYCrearTarea() NO ve: aquella compara totales ya
+     * materializados (base_propietario), que no se mueven aunque Icnea cambie un importe.
+     */
+    public function comprobarCambiosNovadas(int $propId, int $year, int $month): ?array
+    {
+        $mp    = str_pad($month, 2, '0', STR_PAD_LEFT);
+        $desde = "{$year}-{$mp}-01";
+        $hasta = Carbon::create($year, $month)->endOfMonth()->toDateString();
+
+        $reservas = DB::table('vm_reservas')
+            ->where('id_propiedades', $propId)
+            ->whereBetween('check_out_date', [$desde, $hasta])
+            ->where('novacion', 1)
+            // Solo las que tienen foto. Las novadas antes de que esto existiera no la tienen, y
+            // sin ella TODAS sus lineas pareceran "nuevas": se avisaria de un cambio que no ha
+            // habido. Volveran a vigilarse la proxima vez que se guarde su novacion.
+            ->whereNotNull('novacion_at')
+            ->whereNotIn('booking_status', ['cancelled'])
+            ->get(['booking_id', 'guest_name']);
+
+        $detalle = [];
+        foreach ($reservas as $r) {
+            foreach ($this->cambiosDesdeLaNovacion((string) $r->booking_id) as $cambio) {
+                $detalle[] = "Reserva {$r->booking_id}" . ($r->guest_name ? " ({$r->guest_name})" : '') . " — {$cambio}";
+            }
+        }
+
+        if (!$detalle) {
+            return null;
+        }
+
+        $propiedad = DB::table('vm_propiedades')->where('id', $propId)->value('nombre');
+        $mesLabel  = self::MESES_ES[$month] . '-' . $year;
+
+        return $this->crearTareaRevision(
+            $propId, $year, $month,
+            "Revisar novación {$mesLabel} de {$propiedad}: han cambiado importes",
+            "Estas reservas ya novadas de {$mesLabel} para {$propiedad} han cambiado desde que se "
+            . "novaron:\n\n- " . implode("\n- ", $detalle)
+            . "\n\nRevisar si procede rehacer la novación."
+        );
     }
 
     private function tareaRevisionPendiente(int $propId, int $year, int $month): ?object

@@ -195,9 +195,15 @@ class IcneaSyncImportesCommand extends Command
         $novacionesController = new NovacionesController();
         $tareasCreadas = 0;
         foreach ($combosNovacion as [$propId, $year, $month]) {
-            $resultado = $novacionesController->comprobarDiferenciaYCrearTarea($propId, $year, $month);
-            if ($resultado && ($resultado['creada'] ?? false)) {
-                $tareasCreadas++;
+            // Dos avisos distintos. El primero mira si los totales ya documentados dejaron de
+            // cuadrar. El segundo, si alguna reserva ya novada ha cambiado desde que se novo, que
+            // es justo lo que al primero se le escapa: compara base_propietario y base_calculo,
+            // cifras ya materializadas que no se mueven aunque Icnea cambie un importe.
+            foreach ([$novacionesController->comprobarDiferenciaYCrearTarea($propId, $year, $month),
+                      $novacionesController->comprobarCambiosNovadas($propId, $year, $month)] as $resultado) {
+                if ($resultado && ($resultado['creada'] ?? false)) {
+                    $tareasCreadas++;
+                }
             }
         }
         if ($tareasCreadas > 0) {

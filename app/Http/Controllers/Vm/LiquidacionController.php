@@ -53,6 +53,17 @@ class LiquidacionController extends Controller
             ->where('deleted', 0)
             ->pluck('importe', 'booking_id');
 
+        // Reservas con algun importe corregido en Novaciones. Esta planilla sigue usando el
+        // importe de Icnea -- decision expresa -- asi que se marcan para que nadie compare las dos
+        // pantallas y concluya que una esta mal.
+        $conCorreccion = DB::table('vm_reservas_importes')
+            ->whereIn('booking_id', $bookingIds)
+            ->whereNotNull('importe_novacion')
+            ->where('deleted', 0)
+            ->distinct()
+            ->pluck('booking_id')
+            ->flip();
+
         $byPropiedad = $reservas->groupBy('propiedad');
 
         $meses = [
@@ -65,6 +76,7 @@ class LiquidacionController extends Controller
             'byPropiedad'   => $byPropiedad,
             'importesProp'  => $importesProp,
             'comisionCanal' => $comisionCanal,
+            'conCorreccion' => $conCorreccion,
             'anio'          => $anio,
             'mes'           => $mes,
             'meses'         => $meses,
@@ -95,11 +107,15 @@ class LiquidacionController extends Controller
         $bookingIds    = $reservas->pluck('booking_id');
         $importesProp  = DB::table('vm_reservas_importes')->whereIn('booking_id', $bookingIds)->where('propietario', 1)->where('deleted', 0)->groupBy('booking_id')->selectRaw('booking_id, SUM(importe) as total')->pluck('total', 'booking_id');
         $comisionCanal = DB::table('vm_reservas_importes')->whereIn('booking_id', $bookingIds)->where('texto', 'Comisión canal')->where('deleted', 0)->pluck('importe', 'booking_id');
+        // Misma marca que en la pantalla: la planilla usa el importe de Icnea, no el corregido.
+        $conCorreccion = DB::table('vm_reservas_importes')->whereIn('booking_id', $bookingIds)
+            ->whereNotNull('importe_novacion')->where('deleted', 0)
+            ->distinct()->pluck('booking_id')->flip();
         $byPropiedad   = $reservas->groupBy('propiedad');
 
         $meses = [1=>'Enero',2=>'Febrero',3=>'Marzo',4=>'Abril',5=>'Mayo',6=>'Junio',7=>'Julio',8=>'Agosto',9=>'Septiembre',10=>'Octubre',11=>'Noviembre',12=>'Diciembre'];
 
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('liquidacion-pdf', compact('byPropiedad', 'importesProp', 'comisionCanal', 'anio', 'mes', 'meses'))
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('liquidacion-pdf', compact('byPropiedad', 'importesProp', 'comisionCanal', 'conCorreccion', 'anio', 'mes', 'meses'))
             ->setPaper('a4', 'portrait');
 
         return $pdf->download("liquidacion_{$anio}_{$mes}.pdf");
