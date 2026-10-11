@@ -174,6 +174,9 @@ Route::middleware('auth')->group(function () {
             ->where('id', '[0-9]+')->name('vm.dev-fianza');
         Route::post('dev-fianzas/{id}/conforme', [\App\Http\Controllers\Vm\DevFianzasController::class, 'conforme'])
             ->where('id', '[0-9]+')->name('vm.dev-fianza.conforme');
+        // Marca una foto para el informe de la estancia. Va por id de FOTO, no de reserva.
+        Route::post('dev-fianzas/foto/{id}/informe', [\App\Http\Controllers\Vm\DevFianzasController::class, 'marcarFoto'])
+            ->where('id', '[0-9]+')->name('vm.dev-fianza.foto-informe');
         Route::post('dev-fianzas/{id}/retener', [\App\Http\Controllers\Vm\DevFianzasController::class, 'retener'])
             ->where('id', '[0-9]+')->name('vm.dev-fianza.retener');
         // Alarmas de las propiedades. Pantalla aparte de la ficha de la propiedad porque lleva

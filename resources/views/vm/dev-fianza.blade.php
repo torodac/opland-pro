@@ -28,6 +28,21 @@
         background:rgba(255,255,255,.15);color:#fff;font-size:30px;line-height:1;cursor:pointer;
         display:flex;align-items:center;justify-content:center;padding:0 0 4px}
 .df-nav:hover{background:rgba(255,255,255,.3)}
+
+/* El escudo va ENCIMA de la foto, no al lado: lo que se decide es sobre esa imagen, y una
+   columna aparte obligaria a emparejarla con la vista. Sin marcar queda translucido para no
+   tapar la foto; marcado, verde y solido, de modo que las elegidas se cuentan de un vistazo. */
+.df-foto{position:relative;border-radius:8px;overflow:hidden;border:0.5px solid rgba(0,0,0,.08);cursor:zoom-in}
+.df-foto.marcada{border-color:#16a34a;box-shadow:0 0 0 2px rgba(22,163,74,.35)}
+.df-escudo{position:absolute;top:6px;right:6px;width:28px;height:28px;border:0;border-radius:50%;
+           display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;
+           background:rgba(0,0,0,.42);color:#fff;font-size:15px;line-height:1;
+           transition:background .12s,color .12s,transform .12s}
+.df-escudo:hover{background:rgba(0,0,0,.65);transform:scale(1.08)}
+.df-escudo.on{background:#16a34a;color:#fff}
+.df-escudo[disabled]{cursor:default;opacity:.85}
+.df-escudo[disabled]:hover{transform:none;background:rgba(0,0,0,.42)}
+.df-escudo.on[disabled]:hover{background:#16a34a}
 .df-nav[disabled]{opacity:.2;cursor:default}
 </style>
 
@@ -177,16 +192,36 @@
   <div class="df-title">
     <i class="ti ti-camera"></i>Fotos de la limpieza de salida
     @if($fotos->count())<span style="color:#bbb;font-weight:400">{{ $fotos->count() }}</span>@endif
+    {{-- Cuantas van al informe: es el dato que se mira al preparar el reporte. --}}
+    <span id="df-marcadas-wrap" style="margin-left:auto;font-size:11px;font-weight:500;color:#16a34a;
+          text-transform:none;letter-spacing:0;{{ $fotos->where('informe_estancia', 1)->count() ? '' : 'display:none' }}">
+      <i class="ti ti-shield-check"></i>
+      <span id="df-marcadas">{{ $fotos->where('informe_estancia', 1)->count() }}</span> para el informe
+    </span>
   </div>
 
   @if($fotos->count())
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">
       @foreach($fotos as $foto)
-        @php $url = asset('storage/' . $foto->file_foto); @endphp
-        <div style="border-radius:8px;overflow:hidden;border:0.5px solid rgba(0,0,0,.08);cursor:zoom-in"
+        @php
+            $url     = asset('storage/' . $foto->file_foto);
+            $marcada = (bool) ($foto->informe_estancia ?? 0);
+        @endphp
+        <div class="df-foto {{ $marcada ? 'marcada' : '' }}" id="foto-{{ $foto->id }}"
              onclick="ampliar({{ $loop->index }})" title="{{ $foto->tarea_nombre }}">
           <img src="{{ $url }}" alt="Foto de la limpieza" loading="lazy"
                style="width:100%;aspect-ratio:1;object-fit:cover;display:block">
+          {{-- stopPropagation: sin esto, pulsar el escudo abriria tambien el visor. --}}
+          <button type="button" class="df-escudo {{ $marcada ? 'on' : '' }}"
+                  id="escudo-{{ $foto->id }}"
+                  onclick="event.stopPropagation(); marcarFoto({{ $foto->id }})"
+                  {{ $puedeEditar ? '' : 'disabled' }}
+                  title="{{ $puedeEditar
+                      ? ($marcada ? 'Se usará en el informe de la estancia. Pulsa para quitarla.'
+                                  : 'Marcar para el informe de la estancia.')
+                      : ($marcada ? 'Se usará en el informe de la estancia' : 'No seleccionada para el informe') }}">
+            <i class="ti ti-shield-check"></i>
+          </button>
         </div>
       @endforeach
     </div>
@@ -284,6 +319,36 @@ document.addEventListener('keydown', function (e) {
     if (e.key === 'ArrowRight') { e.preventDefault(); mover(1); }
     if (e.key === 'Escape')     { cerrarVisor(); }
 });
+// Marca o desmarca una foto para el informe de la estancia. El contador de arriba se mueve
+// con ella, para no tener que recorrer la rejilla contando escudos verdes.
+async function marcarFoto(id) {
+  const btn = document.getElementById('escudo-' + id);
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+
+  try {
+    const r = await fetch(@json(route('vm.dev-fianza.foto-informe', [$project->slug, '__ID__'])).replace('__ID__', id), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_DF, 'Accept': 'application/json' },
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) { alert(j.error || 'No se ha podido marcar la foto.'); return; }
+
+    btn.classList.toggle('on', j.marcada);
+    document.getElementById('foto-' + id)?.classList.toggle('marcada', j.marcada);
+    btn.title = j.marcada
+      ? 'Se usará en el informe de la estancia. Pulsa para quitarla.'
+      : 'Marcar para el informe de la estancia.';
+
+    const cont = document.getElementById('df-marcadas');
+    const n = Math.max(0, parseInt(cont.textContent, 10) + (j.marcada ? 1 : -1));
+    cont.textContent = n;
+    document.getElementById('df-marcadas-wrap').style.display = n ? '' : 'none';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 async function conforme() {
     if (!confirm('¿Aprobar la devolución completa de la fianza?')) return;
 

@@ -82,7 +82,9 @@ class DevFianzasController extends Controller
                 ->whereIn('f.id_tareas_limpieza', $ids)
                 ->where(fn($x) => $x->where('f.deleted', 0)->orWhereNull('f.deleted'))
                 ->orderBy('f.createdat')
-                ->get(['f.id', 'f.file_foto', 'f.nombre', 'f.createdat', 't.id as tarea_id', 't.nombre as tarea_nombre'])
+                ->get(['f.id', 'f.file_foto', 'f.nombre', 'f.createdat',
+                       'f.informe_estancia', 'f.informe_estancia_at',
+                       't.id as tarea_id', 't.nombre as tarea_nombre'])
             : collect();
 
         return view('vm.dev-fianza', [
@@ -93,6 +95,31 @@ class DevFianzasController extends Controller
             'fotos'       => $fotos,
             'puedeEditar' => Auth::user()?->canEditTable($project, 'dev_fianzas_default') ?? false,
         ]);
+    }
+
+    /**
+     * Marca o desmarca una foto para el informe de la estancia que se entrega al propietario.
+     *
+     * Exige permiso de EDICIÓN como las otras dos acciones de esta pantalla: aunque no mueva
+     * dinero, decide qué acaba en un documento que ve el propietario.
+     */
+    public function marcarFoto(Request $request, Project $project, int $id)
+    {
+        abort_unless(Auth::user()?->canEditTable($project, 'dev_fianzas_default'), 403);
+
+        $foto = DB::table('vm_fotos')->where('id', $id)->first(['id', 'informe_estancia']);
+        abort_unless($foto, 404);
+
+        $marcada = !((int) ($foto->informe_estancia ?? 0));
+
+        DB::table('vm_fotos')->where('id', $id)->update([
+            'informe_estancia'      => $marcada ? 1 : 0,
+            'informe_estancia_user' => $marcada ? Auth::id() : null,
+            'informe_estancia_at'   => $marcada ? now() : null,
+            'updatedat'             => now(),
+        ]);
+
+        return response()->json(['ok' => true, 'marcada' => $marcada]);
     }
 
     /** Aprobar la devolución completa. */
