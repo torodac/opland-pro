@@ -78,6 +78,10 @@ class IcneaSyncReservationsCommand extends Command
                     'guest_phone'           => $r['guest_phone'] ?? null,
                     'guest_language'        => $r['guest_language'] ?? null,
                     'checkin_status'        => $r['checkin_status'] ?? null,
+                    // El canal viene relleno siempre: en las directas trae el nombre de la propia
+                    // agencia, y en las de portal, ademas, el localizador externo.
+                    'channel'               => trim($r['channel'] ?? '') ?: null,
+                    'channel_booking_id'    => trim($r['channel_booking_id'] ?? '') ?: null,
                     'icnea_updatedat'       => now(),
                     'createuser'            => 1,
                     'createdat'             => $this->date($r['booking_date'] ?? null) ?? now()->toDateString(),
@@ -160,6 +164,7 @@ class IcneaSyncReservationsCommand extends Command
             'booking_status', 'check_in_date', 'check_out_date', 'checkin_status',
             'number_of_adults', 'number_of_children', 'number_of_infants',
             'guest_name', 'guest_email', 'guest_phone',
+            'channel', 'channel_booking_id',
         ];
 
         // Icnea puede mover una reserva de villa, y hasta ahora eso no llegaba: la propiedad se
@@ -256,27 +261,20 @@ class IcneaSyncReservationsCommand extends Command
                 ? trim(($existing->trace ? $existing->trace . "\n" : '') . implode("\n", $lineas))
                 : $existing->trace;
 
-            $datos = [
-                'booking_status'     => $temp->booking_status,
-                'check_in_date'      => $temp->check_in_date,
-                'check_out_date'     => $temp->check_out_date,
-                'checkin_status'     => $temp->checkin_status,
-                'number_of_adults'   => $temp->number_of_adults,
-                'number_of_children' => $temp->number_of_children,
-                'number_of_infants'  => $temp->number_of_infants,
-                'guest_name'         => $temp->guest_name,
-                'guest_email'        => $temp->guest_email,
-                'guest_phone'        => $temp->guest_phone,
-                'trace'              => $trace,
-                'icnea_updatedat'    => now(),
-                'updateuser'         => 1,
-                'updatedat'          => $now,
-            ];
-            if ($puedeTocarPropiedad) {
-                $datos['icnea_lodging_id']      = $temp->icnea_lodging_id;
-                $datos['id_propiedades']        = $temp->id_propiedades;
-                $datos['vm_propiedades_nombre'] = $temp->vm_propiedades_nombre;
+            // Se escribe EXACTAMENTE lo que se compara, derivandolo de la misma lista. Antes
+            // eran dos listas separadas que decian ser la misma: al anadir el canal a la de
+            // comparar, el merge detectaba el cambio, lo anunciaba por consola y no lo guardaba.
+            // $camposComparar ya incluye los de propiedad solo cuando se pueden tocar.
+            $datos = [];
+            foreach ($camposComparar as $campo) {
+                $datos[$campo] = $temp->$campo;
             }
+            $datos += [
+                'trace'           => $trace,
+                'icnea_updatedat' => now(),
+                'updateuser'      => 1,
+                'updatedat'       => $now,
+            ];
 
             DB::table('vm_reservas')->where('booking_id', $temp->booking_id)->update($datos);
             $actualizadas++;
