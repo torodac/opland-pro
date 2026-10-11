@@ -42,7 +42,7 @@
                 <th style="text-align:left;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Huésped</th>
                 <th style="text-align:left;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Propiedad</th>
                 <th style="text-align:right;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Fianza</th>
-                <th style="text-align:center;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Coment.</th>
+                <th style="text-align:left;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Canal</th>
                 <th style="text-align:center;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Fotos</th>
                 <th style="text-align:left;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Estado</th>
             </tr>
@@ -72,8 +72,11 @@
                 <td style="padding:8px 12px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap">
                     {{ $fmt($f->fianza) }}
                 </td>
-                <td style="padding:8px 12px;font-size:13px;text-align:center;color:{{ $f->n_comentarios ? '#222' : '#ccc' }}">
-                    {{ $f->n_comentarios }}
+                {{-- El canal viene relleno siempre: en las directas trae el nombre de la propia
+                     agencia, asi que un hueco aqui significa que esa reserva es anterior a que
+                     empezaramos a guardarlo, no que no tenga canal. --}}
+                <td style="padding:8px 12px;font-size:13px;white-space:nowrap;color:{{ $f->channel ? '#222' : '#ccc' }}">
+                    {{ $f->channel ?: '—' }}
                 </td>
                 <td style="padding:8px 12px;font-size:13px;text-align:center;color:{{ $f->n_fotos ? '#222' : '#ccc' }}">
                     {{ $f->n_fotos }}
