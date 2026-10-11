@@ -229,6 +229,12 @@ class DevFianzasController extends Controller
                   WHERE t.id_reservas = r.id AND t.\"Tipo\" IN ({$tipos})
                     AND COALESCE(t.estado, '') NOT IN ({$excluidos})
                     AND COALESCE(t.deleted, 0) = 0) AS n_tareas,
+                (SELECT count(*) FROM vm_tareas_comentarios c
+                   JOIN vm_tareas_limpieza t ON t.id = c.id_tarea
+                  WHERE c.tipo = 'limpieza' AND COALESCE(c.deleted, 0) = 0
+                    AND t.id_reservas = r.id AND t.\"Tipo\" IN ({$tipos})
+                    AND COALESCE(t.estado, '') NOT IN ({$excluidos})
+                    AND COALESCE(t.deleted, 0) = 0) AS n_comentarios,
                 (SELECT count(*) FROM vm_fotos f
                    JOIN vm_tareas_limpieza t ON t.id = f.id_tareas_limpieza
                   WHERE COALESCE(f.deleted, 0) = 0

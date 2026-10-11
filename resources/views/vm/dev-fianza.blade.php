@@ -83,10 +83,6 @@
     {{-- Segunda fila: primero la evidencia (comentarios y fotos) y luego el dinero, que es el
          orden en que se mira para decidir. --}}
     <div class="df-cell">
-      <p class="df-lbl">Comentarios</p>
-      <p class="df-val">{{ $comentarios->count() }}</p>
-    </div>
-    <div class="df-cell">
       <p class="df-lbl">Fotos</p>
       <p class="df-val">{{ $fotos->count() }}</p>
     </div>

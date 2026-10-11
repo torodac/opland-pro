@@ -7,6 +7,35 @@
 //
 // Se conservan los nombres originales para no tocar las llamadas de las vistas.
 
+// ── Canales de reserva ───────────────────────────────────────────────────────
+
+// Icono del canal que manda Icnea. Se compara en minusculas y por coincidencia parcial porque
+// el mismo portal llega con grafias distintas: "AirBNB iCal" y "AirBnb-Online" son Airbnb, y
+// "Web" y "VACATION MARBELLA" son las dos reservas directas, que llevan el logo de la casa.
+// Devuelve null si el canal no se reconoce, para que la vista caiga en el nombre en texto en
+// vez de dejar el hueco vacio.
+if (!function_exists('iconoCanal')) {
+    function iconoCanal(?string $canal): ?string
+    {
+        if (!$canal) {
+            return null;
+        }
+
+        $c = mb_strtolower($canal);
+
+        return match (true) {
+            str_contains($c, 'airbnb') || str_contains($c, 'airb&b') => asset('img/canales/airbnb.png'),
+            str_contains($c, 'booking')                              => asset('img/canales/booking.png'),
+            str_contains($c, 'vrbo')                                 => asset('img/canales/vrbo.png'),
+            str_contains($c, 'marriott')                             => asset('img/canales/marriott.png'),
+            // Directas: web propia y mostrador. Reutiliza el logo del proyecto en vez de
+            // duplicarlo, para que cambiarlo en un sitio valga para los dos.
+            $c === 'web' || str_contains($c, 'vacation marbella')    => asset('projects/vm/logo.png'),
+            default                                                  => null,
+        };
+    }
+}
+
 // ── Formato de tiempo ────────────────────────────────────────────────────────
 
 // vm/fichaje.blade.php

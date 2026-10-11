@@ -42,7 +42,8 @@
                 <th style="text-align:left;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Huésped</th>
                 <th style="text-align:left;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Propiedad</th>
                 <th style="text-align:right;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Fianza</th>
-                <th style="text-align:left;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Canal</th>
+                <th style="text-align:center;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Canal</th>
+                <th style="text-align:center;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Coment.</th>
                 <th style="text-align:center;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Fotos</th>
                 <th style="text-align:left;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Estado</th>
             </tr>
@@ -72,11 +73,23 @@
                 <td style="padding:8px 12px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap">
                     {{ $fmt($f->fianza) }}
                 </td>
-                {{-- El canal viene relleno siempre: en las directas trae el nombre de la propia
-                     agencia, asi que un hueco aqui significa que esa reserva es anterior a que
-                     empezaramos a guardarlo, no que no tenga canal. --}}
-                <td style="padding:8px 12px;font-size:13px;white-space:nowrap;color:{{ $f->channel ? '#222' : '#ccc' }}">
-                    {{ $f->channel ?: '—' }}
+                {{-- El canal, como logo. El title lleva el nombre, porque los logos de portales
+                     poco frecuentes no todo el mundo los reconoce. Un canal sin icono cae al
+                     nombre en texto en vez de dejar el hueco, y un hueco de verdad significa que
+                     la reserva es anterior a que empezaramos a guardar el canal. --}}
+                <td style="padding:8px 12px;text-align:center;white-space:nowrap">
+                    @php $iconoCanal = iconoCanal($f->channel); @endphp
+                    @if($iconoCanal)
+                        <img src="{{ $iconoCanal }}" alt="{{ $f->channel }}" title="{{ $f->channel }}"
+                             style="height:20px;width:auto;max-width:56px;object-fit:contain;vertical-align:middle">
+                    @elseif($f->channel)
+                        <span style="font-size:12px;color:#666">{{ $f->channel }}</span>
+                    @else
+                        <span style="color:#ccc">—</span>
+                    @endif
+                </td>
+                <td style="padding:8px 12px;font-size:13px;text-align:center;color:{{ $f->n_comentarios ? '#222' : '#ccc' }}">
+                    {{ $f->n_comentarios }}
                 </td>
                 <td style="padding:8px 12px;font-size:13px;text-align:center;color:{{ $f->n_fotos ? '#222' : '#ccc' }}">
                     {{ $f->n_fotos }}
