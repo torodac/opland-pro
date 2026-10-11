@@ -30,19 +30,23 @@
 .df-nav:hover{background:rgba(255,255,255,.3)}
 
 /* El escudo va ENCIMA de la foto, no al lado: lo que se decide es sobre esa imagen, y una
-   columna aparte obligaria a emparejarla con la vista. Sin marcar queda translucido para no
-   tapar la foto; marcado, verde y solido, de modo que las elegidas se cuentan de un vistazo. */
+   columna aparte obligaria a emparejarla con la vista.
+   Es la propia silueta del escudo, sin pastilla ni circulo detras: apagado, blanco translucido;
+   encendido, amarillo solido. La sombra proyectada no es adorno -- sin ella la silueta clara
+   desaparece sobre una foto clara, que en fotos de limpieza son la mayoria. */
 .df-foto{position:relative;border-radius:8px;overflow:hidden;border:0.5px solid rgba(0,0,0,.08);cursor:zoom-in}
-.df-foto.marcada{border-color:#16a34a;box-shadow:0 0 0 2px rgba(22,163,74,.35)}
-.df-escudo{position:absolute;top:6px;right:6px;width:28px;height:28px;border:0;border-radius:50%;
-           display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;
-           background:rgba(0,0,0,.42);color:#fff;font-size:15px;line-height:1;
-           transition:background .12s,color .12s,transform .12s}
-.df-escudo:hover{background:rgba(0,0,0,.65);transform:scale(1.08)}
-.df-escudo.on{background:#16a34a;color:#fff}
-.df-escudo[disabled]{cursor:default;opacity:.85}
-.df-escudo[disabled]:hover{transform:none;background:rgba(0,0,0,.42)}
-.df-escudo.on[disabled]:hover{background:#16a34a}
+.df-foto.marcada{border-color:#F5B301;box-shadow:0 0 0 2px rgba(245,179,1,.4)}
+.df-escudo{position:absolute;top:7px;right:7px;border:0;background:none;padding:2px;
+           cursor:pointer;line-height:0;font-size:19px;
+           color:rgba(255,255,255,.62);
+           filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));
+           transition:color .14s,transform .14s,filter .14s}
+.df-escudo:hover{color:rgba(255,255,255,.95);transform:scale(1.12)}
+.df-escudo.on{color:#F5B301;filter:drop-shadow(0 1px 3px rgba(0,0,0,.5))}
+.df-escudo.on:hover{color:#FFC72C}
+.df-escudo[disabled]{cursor:default}
+.df-escudo[disabled]:hover{transform:none;color:rgba(255,255,255,.62)}
+.df-escudo.on[disabled]:hover{color:#F5B301}
 .df-nav[disabled]{opacity:.2;cursor:default}
 </style>
 
@@ -193,9 +197,9 @@
     <i class="ti ti-camera"></i>Fotos de la limpieza de salida
     @if($fotos->count())<span style="color:#bbb;font-weight:400">{{ $fotos->count() }}</span>@endif
     {{-- Cuantas van al informe: es el dato que se mira al preparar el reporte. --}}
-    <span id="df-marcadas-wrap" style="margin-left:auto;font-size:11px;font-weight:500;color:#16a34a;
+    <span id="df-marcadas-wrap" style="margin-left:auto;font-size:11px;font-weight:500;color:#B07D00;
           text-transform:none;letter-spacing:0;{{ $fotos->where('informe_estancia', 1)->count() ? '' : 'display:none' }}">
-      <i class="ti ti-shield-check"></i>
+      <i class="fa-solid fa-shield" style="color:#F5B301"></i>
       <span id="df-marcadas">{{ $fotos->where('informe_estancia', 1)->count() }}</span> para el informe
     </span>
   </div>
@@ -220,7 +224,7 @@
                       ? ($marcada ? 'Se usará en el informe de la estancia. Pulsa para quitarla.'
                                   : 'Marcar para el informe de la estancia.')
                       : ($marcada ? 'Se usará en el informe de la estancia' : 'No seleccionada para el informe') }}">
-            <i class="ti ti-shield-check"></i>
+            <i class="fa-solid fa-shield"></i>
           </button>
         </div>
       @endforeach
