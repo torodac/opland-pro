@@ -47,6 +47,8 @@
 .df-escudo[disabled]{cursor:default}
 .df-escudo[disabled]:hover{transform:none;color:rgba(255,255,255,.62)}
 .df-escudo.on[disabled]:hover{color:#F5B301}
+/* En el visor la imagen es grande, asi que el escudo tambien: a 19px se perdia. */
+.df-escudo-visor{top:12px;right:12px;font-size:27px}
 .df-nav[disabled]{opacity:.2;cursor:default}
 </style>
 
@@ -243,8 +245,15 @@
   <button type="button" id="df-prev" onclick="event.stopPropagation(); mover(-1)"
           title="Anterior (←)" class="df-nav" style="left:16px">‹</button>
 
-  <div onclick="event.stopPropagation()" style="display:flex;flex-direction:column;align-items:center;gap:8px">
+  <div onclick="event.stopPropagation()" style="position:relative;display:flex;flex-direction:column;align-items:center;gap:8px">
     <img id="df-lightbox-img" src="" alt="" style="max-width:82vw;max-height:82vh;border-radius:8px">
+    {{-- El mismo escudo que en la rejilla: la decision se toma mirando la foto grande, que es
+         donde de verdad se ve si sirve para el informe. --}}
+    <button type="button" id="df-escudo-visor" class="df-escudo df-escudo-visor"
+            onclick="event.stopPropagation(); marcarFoto(DF_FOTOS[dfIdx].id)"
+            {{ $puedeEditar ? '' : 'disabled' }}>
+      <i class="fa-solid fa-shield"></i>
+    </button>
     <div style="color:#fff;font-size:12px;text-align:center;text-shadow:0 1px 3px rgba(0,0,0,.6)">
       <span id="df-contador"></span>
       <span id="df-tarea" style="opacity:.75"></span>
@@ -283,10 +292,17 @@
 const CSRF_DF = '{{ csrf_token() }}';
 const BASE_DF = '{{ url($project->slug . "/dev-fianzas/" . $reserva->id) }}';
 
-const DF_FOTOS = @json($fotos->map(fn($f) => [
-    'url'   => asset('storage/' . $f->file_foto),
-    'tarea' => $f->tarea_nombre,
-])->values());
+@php
+    // El array se arma aqui y no dentro de @json: esa directiva empareja parentesis a mano y un
+    // array multilinea con casts la despista, cortando la expresion y generando PHP invalido.
+    $dfFotosJs = $fotos->map(fn($f) => [
+        'id'      => $f->id,
+        'url'     => asset('storage/' . $f->file_foto),
+        'tarea'   => $f->tarea_nombre,
+        'marcada' => (bool) ($f->informe_estancia ?? 0),
+    ])->values();
+@endphp
+const DF_FOTOS = @json($dfFotosJs);
 
 let dfIdx = 0;
 
@@ -296,6 +312,7 @@ function pintarVisor() {
     document.getElementById('df-lightbox-img').src = f.url;
     document.getElementById('df-contador').textContent = (dfIdx + 1) + ' / ' + DF_FOTOS.length;
     document.getElementById('df-tarea').textContent = f.tarea ? ' · ' + f.tarea : '';
+    pintarEscudoVisor();
     // Sin ciclo: con una sola foto las dos flechas quedan desactivadas y se ve que no hay más.
     document.getElementById('df-prev').disabled = dfIdx === 0;
     document.getElementById('df-next').disabled = dfIdx === DF_FOTOS.length - 1;
@@ -325,9 +342,33 @@ document.addEventListener('keydown', function (e) {
 });
 // Marca o desmarca una foto para el informe de la estancia. El contador de arriba se mueve
 // con ella, para no tener que recorrer la rejilla contando escudos verdes.
+const PUEDE_MARCAR = @json((bool) $puedeEditar);
+
+function tituloEscudo(marcada) {
+  if (!PUEDE_MARCAR) {
+    return marcada ? 'Se usará en el informe de la estancia' : 'No seleccionada para el informe';
+  }
+  return marcada
+    ? 'Se usará en el informe de la estancia. Pulsa para quitarla.'
+    : 'Marcar para el informe de la estancia.';
+}
+
+// El escudo del visor no tiene estado propio: lo toma de la foto que se esté mostrando.
+function pintarEscudoVisor() {
+  const btn = document.getElementById('df-escudo-visor');
+  const f   = DF_FOTOS[dfIdx];
+  if (!btn || !f) return;
+  btn.classList.toggle('on', !!f.marcada);
+  btn.title = tituloEscudo(!!f.marcada);
+}
+
 async function marcarFoto(id) {
+  // Desde el visor se pulsa el escudo grande, pero el que manda el estado es el de la rejilla:
+  // es el unico que existe siempre y el que lleva el bloqueo mientras va la peticion.
   const btn = document.getElementById('escudo-' + id);
-  if (!btn || btn.disabled) return;
+  if (!btn || !PUEDE_MARCAR) return;
+  if (btn.dataset.enviando === '1') return;
+  btn.dataset.enviando = '1';
   btn.disabled = true;
 
   try {
@@ -340,9 +381,13 @@ async function marcarFoto(id) {
 
     btn.classList.toggle('on', j.marcada);
     document.getElementById('foto-' + id)?.classList.toggle('marcada', j.marcada);
-    btn.title = j.marcada
-      ? 'Se usará en el informe de la estancia. Pulsa para quitarla.'
-      : 'Marcar para el informe de la estancia.';
+    btn.title = tituloEscudo(j.marcada);
+
+    // El estado vive en DF_FOTOS: es lo que lee el visor al cambiar de foto, asi que si no se
+    // actualiza aqui, pasar a la siguiente y volver mostraria el escudo como estaba al cargar.
+    const f = DF_FOTOS.find(x => x.id === id);
+    if (f) f.marcada = j.marcada;
+    pintarEscudoVisor();
 
     const cont = document.getElementById('df-marcadas');
     const n = Math.max(0, parseInt(cont.textContent, 10) + (j.marcada ? 1 : -1));
@@ -350,6 +395,7 @@ async function marcarFoto(id) {
     document.getElementById('df-marcadas-wrap').style.display = n ? '' : 'none';
   } finally {
     btn.disabled = false;
+    btn.dataset.enviando = '0';
   }
 }
 
