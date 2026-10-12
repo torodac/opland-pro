@@ -362,13 +362,6 @@ const cambiadaTrasNovar = i =>
   i.importe_novado !== null && i.importe_novado !== undefined &&
   Math.abs(eff(i) - parseFloat(i.importe_novado)) > 0.01;
 
-function abrirIcnea(url) {
-  navigator.clipboard.writeText(url).then(() => {
-    const btn = document.getElementById('icnea-btn');
-    if (btn) { btn.title = '¡URL copiada!'; setTimeout(() => btn.title = 'Copiar enlace de Icnea', 1500); }
-  });
-}
-
 function fmt(v) {
   const n = parseFloat(v);
   if (isNaN(n)) return '— €';
@@ -420,8 +413,8 @@ function renderPanel(reserva) {
         <div style="font-size:.95rem;font-weight:700;color:#222;">${reserva.guest_name}</div>
         <div style="font-size:.78rem;color:#888;">#${reserva.booking_id} &bull; ${fmtDate(reserva.check_in_date)} → ${fmtDate(reserva.check_out_date)}</div>
       </div>
-      <a id="icnea-btn" href="javascript:void(0)" onclick="abrirIcnea('${icneaUrl}')"
-         title="Copiar enlace de Icnea"
+      <a id="icnea-btn" href="${icneaUrl}" target="_blank" rel="noopener"
+         title="Abrir esta reserva en Icnea"
          style="display:inline-flex;align-items:center;text-decoration:none;cursor:pointer;
                 background:#fff;border:1px solid #e2e8f0;border-radius:4px;
                 padding:2px 5px;transition:box-shadow .15s;flex-shrink:0;margin-left:10px;"
