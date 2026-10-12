@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Http\Controllers\Vm\DevFianzasController;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -102,6 +103,7 @@ class BreezewaySyncTasksCommand extends Command
         $imputacionesCreadas = 0;
         $imputacionesActualizadas = 0;
         $fotosDescargadas = 0;
+        $vinculadas = 0;        // incidencias atadas a su limpieza de origen
         $pendientesVistos = []; // breezeway_id => ['nombre'=>..., 'count'=>n]
         $errores = 0;
 
@@ -117,8 +119,13 @@ class BreezewaySyncTasksCommand extends Command
 
             foreach ($tasks as $task) {
                 $dept = $task['type_department'] ?? null;
-                if (!in_array($dept, ['housekeeping', 'maintenance'], true)) {
-                    continue; // inspection / safety fuera de alcance
+                // "inspection" entra desde el 2026-10-12: ahi es donde Breezeway deja buena parte
+                // de las incidencias que reporta quien limpia ("el sofa esta manchado"), y esas
+                // son la evidencia con la que se decide una fianza. Medido antes de abrirlo: unas
+                // 46 tareas en total, frente a las 3.358 que ya hay, asi que no inunda nada.
+                // "safety" sigue fuera: no se ha visto ninguna y no hay caso de uso.
+                if (!in_array($dept, ['housekeeping', 'maintenance', 'inspection'], true)) {
+                    continue;
                 }
 
                 $tableName = $dept === 'housekeeping' ? 'vm_tareas_limpieza' : 'vm_tareas_mantenimiento';
@@ -197,9 +204,28 @@ class BreezewaySyncTasksCommand extends Command
                     $data['id_reservas'] = $reserva;
                 }
 
+                if ($tableName === 'vm_tareas_mantenimiento') {
+                    // reported_issue es un booleano "esto es una incidencia", no una lista: en una
+                    // tarea normal vale false. Es lo unico que distingue un desperfecto anotado
+                    // sobre la marcha de una tarea planificada.
+                    $data['reported_issue']         = !empty($task['reported_issue']) ? 1 : 0;
+                    $data['departamento_breezeway'] = $dept;
+                    // La hora de Breezeway, no la nuestra: createdat guarda cuando la importamos,
+                    // horas despues, y con esa no se puede deducir de que limpieza salio.
+                    $data['breezeway_createdat']    = $task['created_at'] ?? null;
+                }
+
                 $tipo = self::TEMPLATE_TIPO[$task['template_id'] ?? null] ?? null;
                 if ($tipo !== null) {
                     $data['Tipo'] = $tipo;
+                }
+
+                // Tipo por departamento, solo si la plantilla no lo ha fijado ya: asi un Checkout
+                // no se pisa con un Reparacion. Los dos valores son los que ya tiene declarado el
+                // desplegable del no-code (opt:Reparación,Revisión); inventar otro crearia un
+                // valor fuera de la lista que el select no sabria mostrar.
+                if (!isset($data['Tipo']) && $tableName === 'vm_tareas_mantenimiento') {
+                    $data['Tipo'] = $dept === 'inspection' ? 'Revisión' : 'Reparación';
                 }
 
                 $existente = DB::table($tableName)->where('breezeway_task_id', $task['id'])->first(['id', 'blocked']);
@@ -224,6 +250,15 @@ class BreezewaySyncTasksCommand extends Command
                     $data['createdat']  = now();
                     $tareaId = DB::table($tableName)->insertGetId($data);
                     $creadas++;
+                }
+
+                // ── De que limpieza salio esta incidencia ────────────────────
+                // Breezeway SI modela esta relacion (parent_task_id), pero solo la manda por
+                // webhooks: por la API REST que usamos no llega ninguna de las dos claves
+                // (comprobado en el payload real y en su documentacion). Asi que se deduce, y se
+                // marca como deducida para poder sustituirla el dia que haya webhooks.
+                if ($tableName === 'vm_tareas_mantenimiento' && !empty($data['reported_issue'])) {
+                    $vinculadas += $this->deducirLimpiezaDeOrigen($tareaId, $prop->id, $data['breezeway_createdat'] ?? null);
                 }
 
                 // Fotos de las dos tablas. Housekeeping estuvo fuera a propósito hasta el
@@ -367,13 +402,13 @@ class BreezewaySyncTasksCommand extends Command
             'errores'     => $errores,
         ]);
 
-        $this->info("Resultado: {$creadas} creadas, {$actualizadas} actualizadas, {$bloqueadas} bloqueadas (sin tocar), {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$descartadas} descartadas, " . ($ocultarActivo ? "{$ocultadas} ocultadas" : 'ocultado en pausa') . ", {$errores} errores de propiedad.");
+        $this->info("Resultado: {$creadas} creadas, {$actualizadas} actualizadas, {$bloqueadas} bloqueadas (sin tocar), {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$vinculadas} incidencias vinculadas, {$descartadas} descartadas, " . ($ocultarActivo ? "{$ocultadas} ocultadas" : 'ocultado en pausa') . ", {$errores} errores de propiedad.");
         \App\Services\SaludIntegraciones::comprobar(
             'breezeway:sync-tasks', count($propiedades), count($propiedades) - $errores,
             'Las tareas de limpieza y mantenimiento dejan de llegar, y con ellas sus imputaciones de tiempo.'
         );
 
-        Log::info("BreezewaySyncTasks: {$creadas} creadas, {$actualizadas} actualizadas, {$bloqueadas} bloqueadas (sin tocar), {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$descartadas} descartadas, " . ($ocultarActivo ? "{$ocultadas} ocultadas" : 'ocultado en pausa') . ", {$errores} errores.");
+        Log::info("BreezewaySyncTasks: {$creadas} creadas, {$actualizadas} actualizadas, {$bloqueadas} bloqueadas (sin tocar), {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$vinculadas} incidencias vinculadas, {$descartadas} descartadas, " . ($ocultarActivo ? "{$ocultadas} ocultadas" : 'ocultado en pausa') . ", {$errores} errores.");
     }
 
     // Tareas que quedaron con control_user vacío por asignados sin mapear en su momento (marcadas en
@@ -585,6 +620,52 @@ class BreezewaySyncTasksCommand extends Command
         }
 
         return $descartadas;
+    }
+
+    // Ata una incidencia a la limpieza de salida de la que salio. Devuelve 1 si la escribe.
+    //
+    // Breezeway modela esta relacion con parent_task_id, pero solo la manda por webhooks: por la
+    // API REST no llega (comprobado en el payload real -- 33 claves, ninguna es esa -- y en su
+    // documentacion). Asi que se deduce: misma propiedad, limpieza de salida planificada el dia
+    // en que se reporto la incidencia.
+    //
+    // Si hay cero o varias candidatas NO se escribe nada. Una incidencia suelta es mejor que una
+    // atada a la estancia equivocada: esta pantalla decide sobre el dinero de un huesped.
+    private function deducirLimpiezaDeOrigen(int $incidenciaId, int $propiedadId, ?string $creadaEn): int
+    {
+        if (!$creadaEn) {
+            return 0;
+        }
+
+        // Si ya tiene vinculo y NO es deducido, viene de un dato real o de una correccion a mano:
+        // no se toca. Un vinculo deducido si se recalcula, por si la limpieza llego despues.
+        $actual = DB::table('vm_tareas_mantenimiento')->where('id', $incidenciaId)
+            ->first(['id_tareas_limpieza', 'vinculo_deducido']);
+        if ($actual && $actual->id_tareas_limpieza && !$actual->vinculo_deducido) {
+            return 0;
+        }
+
+        $dia = substr($creadaEn, 0, 10);
+
+        $candidatas = DB::table('vm_tareas_limpieza')
+            ->where('id_propiedades', $propiedadId)
+            ->whereDate('fecha_planificada', $dia)
+            ->whereIn('Tipo', DevFianzasController::TIPOS_SALIDA)
+            ->whereNotIn(DB::raw("COALESCE(estado, '')"), DevFianzasController::ESTADOS_EXCLUIDOS)
+            ->where(fn($q) => $q->where('deleted', 0)->orWhereNull('deleted'))
+            ->pluck('id');
+
+        if ($candidatas->count() !== 1) {
+            return 0;
+        }
+
+        DB::table('vm_tareas_mantenimiento')->where('id', $incidenciaId)->update([
+            'id_tareas_limpieza' => $candidatas->first(),
+            'vinculo_deducido'   => 1,
+            'updatedat'          => now(),
+        ]);
+
+        return 1;
     }
 
     // Descarga a vm_fotos las fotos de Breezeway que aun no se hayan importado para esta tarea
