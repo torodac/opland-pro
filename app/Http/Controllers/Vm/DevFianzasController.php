@@ -21,7 +21,9 @@ class DevFianzasController extends Controller
     // detalle: la fianza se captura en la pasada de icnea:sync-importes de las 06:00 y los
     // comentarios llegan a las 22:00, así que el día del checkout la información está a medias.
     // Exclusivo: la primera salida que entra es la del 1 de octubre.
-    private const ANTES_DE = '2026-09-30';
+    // Pública por lo mismo que TIPOS_SALIDA: el dashboard aplica este mismo corte a las
+    // limpiezas sin reserva, y dos fechas sueltas acabarían separándose.
+    public const ANTES_DE = '2026-09-30';
 
     // "Las de salida": son las limpiezas que ven cómo queda la casa. Las de mantenimiento quedan
     // fuera de esta pantalla por decisión expresa -- además, vm_tareas_mantenimiento no tiene

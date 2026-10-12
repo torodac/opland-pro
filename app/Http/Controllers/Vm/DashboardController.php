@@ -230,12 +230,20 @@ class DashboardController extends Controller
         // fila lleva el enlace directo a la tarea en Breezeway.
         //
         // Las descartadas quedan fuera: esas limpiezas no se hicieron, así que no les falta nada.
+        //
+        // Y se acota a lo que de verdad es accionable:
+        //  - Mismo corte de fecha que Dev. fianzas (ANTES_DE, exclusivo: entra el 1 de octubre),
+        //    porque solo esas reservas están pendientes de decidir. Lo anterior ya está cerrado.
+        //  - Solo las importadas de Breezeway: una tarea creada a mano en Opland no tiene nada
+        //    que enlazar allí, así que listarla sería pedir algo imposible.
         $limpiezasSinReserva = DB::table('vm_tareas_limpieza as t')
             ->leftJoin('vm_propiedades as p', 'p.id', '=', 't.id_propiedades')
             ->where(fn($q) => $q->where('t.deleted', 0)->orWhereNull('t.deleted'))
             ->whereIn('t.Tipo', DevFianzasController::TIPOS_SALIDA)
             ->whereNull('t.id_reservas')
             ->whereNotIn(DB::raw("COALESCE(t.estado, '')"), DevFianzasController::ESTADOS_EXCLUIDOS)
+            ->whereNotNull('t.breezeway_task_id')
+            ->where('t.fecha_planificada', '>', DevFianzasController::ANTES_DE)
             ->orderByDesc('t.fecha_planificada')
             ->get(['t.id', 't.nombre', 't.fecha_planificada', 't.estado',
                    't.breezeway_task_id', 'p.nombre as propiedad']);
