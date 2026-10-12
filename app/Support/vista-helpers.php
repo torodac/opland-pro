@@ -7,6 +7,28 @@
 //
 // Se conservan los nombres originales para no tocar las llamadas de las vistas.
 
+// ── Estado de la fianza ──────────────────────────────────────────────────────
+
+// Los colores del estado de la fianza, en un solo sitio porque se pintan en dos pantallas (el
+// listado y la ficha de devolucion) y dos mapas separados acabarian diciendo cosas distintas
+// sobre si una fianza esta devuelta o pendiente.
+//
+// Devuelve [fondo, texto]. Un estado desconocido sale en gris en vez de romper la vista: es
+// preferible un color raro a una pantalla en blanco cuando alguien anada un estado nuevo.
+if (!function_exists('colorEstadoFianza')) {
+    function colorEstadoFianza(?string $estado): array
+    {
+        return match ($estado) {
+            'Vigente'         => ['#F1F3F5', '#555'],      // aun no hay nada que decidir
+            'Pte. evaluación' => ['#E7F0FB', '#1A4F8A'],   // azul: te toca mirarla
+            'Pte. devolución' => ['#FDF6E3', '#8A6400'],   // amarillo: hay que devolver
+            'Pte. retención'  => ['#FBE9E9', '#9B1C1C'],   // rojo: se le descuenta algo al huesped
+            'Devuelta'        => ['#E7F6EC', '#1B7F3B'],   // verde: cerrada
+            default           => ['#F1F3F5', '#888'],
+        };
+    }
+}
+
 // ── Canales de reserva ───────────────────────────────────────────────────────
 
 // Icono del canal que manda Icnea. Se compara en minusculas y por coincidencia parcial porque
