@@ -104,6 +104,7 @@ class BreezewaySyncTasksCommand extends Command
         $imputacionesActualizadas = 0;
         $fotosDescargadas = 0;
         $vinculadas = 0;        // incidencias atadas a su limpieza de origen
+        $deducidas = 0;         // limpiezas de salida atadas a su reserva por deduccion
         $pendientesVistos = []; // breezeway_id => ['nombre'=>..., 'count'=>n]
         $errores = 0;
 
@@ -195,12 +196,40 @@ class BreezewaySyncTasksCommand extends Command
                 if ($estado !== null) {
                     $data['estado'] = $estado;
                 }
+                // El Tipo se resuelve antes que la reserva: la deduccion de abajo solo aplica a
+                // las limpiezas de salida, y para saber si lo es hace falta tenerlo ya puesto.
+                $tipo = self::TEMPLATE_TIPO[$task['template_id'] ?? null] ?? null;
+                if ($tipo !== null) {
+                    $data['Tipo'] = $tipo;
+                }
+
                 if ($tableName === 'vm_tareas_limpieza') {
                     $reserva = null;
                     $extId = $task['linked_reservation']['external_reservation_id'] ?? null;
                     if ($extId) {
                         $reserva = DB::table('vm_reservas')->where('booking_id', $extId)->value('id');
                     }
+
+                    // Si Breezeway no enlazo la tarea a su reserva (pasa en 1 de cada 8), se
+                    // deduce: misma propiedad y checkout a +-1 dia de la fecha planificada, con
+                    // una UNICA reserva candidata no cancelada.
+                    //
+                    // Medido contra las 965 que Breezeway SI enlazo: acierta en 794, falla en 15
+                    // y no deduce en 156. Ensanchar la ventana empeora las cosas (a +-2 dias las
+                    // inequivocas bajan y las ambiguas pasan de 0 a 18), porque los casos unicos
+                    // empiezan a competir con el checkout siguiente.
+                    //
+                    // Con cero o varias candidatas NO se escribe nada, y de esas avisa por correo
+                    // el comando vm:avisar-limpiezas-sin-reserva. Elegir entre varias seria
+                    // decidir una fianza con la evidencia de otra estancia.
+                    if (!$reserva && !empty($data['fecha_planificada'])
+                        && in_array($data['Tipo'] ?? null, DevFianzasController::TIPOS_SALIDA, true)) {
+                        $reserva = $this->deducirReserva($prop->id, (string) $data['fecha_planificada']);
+                        if ($reserva) {
+                            $deducidas++;
+                        }
+                    }
+
                     $data['id_reservas'] = $reserva;
                 }
 
@@ -215,10 +244,6 @@ class BreezewaySyncTasksCommand extends Command
                     $data['breezeway_createdat']    = $task['created_at'] ?? null;
                 }
 
-                $tipo = self::TEMPLATE_TIPO[$task['template_id'] ?? null] ?? null;
-                if ($tipo !== null) {
-                    $data['Tipo'] = $tipo;
-                }
 
                 // Tipo por departamento, solo si la plantilla no lo ha fijado ya: asi un Checkout
                 // no se pisa con un Reparacion. Los dos valores son los que ya tiene declarado el
@@ -402,13 +427,13 @@ class BreezewaySyncTasksCommand extends Command
             'errores'     => $errores,
         ]);
 
-        $this->info("Resultado: {$creadas} creadas, {$actualizadas} actualizadas, {$bloqueadas} bloqueadas (sin tocar), {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$vinculadas} incidencias vinculadas, {$descartadas} descartadas, " . ($ocultarActivo ? "{$ocultadas} ocultadas" : 'ocultado en pausa') . ", {$errores} errores de propiedad.");
+        $this->info("Resultado: {$creadas} creadas, {$actualizadas} actualizadas, {$bloqueadas} bloqueadas (sin tocar), {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$vinculadas} incidencias vinculadas, {$deducidas} reservas deducidas, {$descartadas} descartadas, " . ($ocultarActivo ? "{$ocultadas} ocultadas" : 'ocultado en pausa') . ", {$errores} errores de propiedad.");
         \App\Services\SaludIntegraciones::comprobar(
             'breezeway:sync-tasks', count($propiedades), count($propiedades) - $errores,
             'Las tareas de limpieza y mantenimiento dejan de llegar, y con ellas sus imputaciones de tiempo.'
         );
 
-        Log::info("BreezewaySyncTasks: {$creadas} creadas, {$actualizadas} actualizadas, {$bloqueadas} bloqueadas (sin tocar), {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$vinculadas} incidencias vinculadas, {$descartadas} descartadas, " . ($ocultarActivo ? "{$ocultadas} ocultadas" : 'ocultado en pausa') . ", {$errores} errores.");
+        Log::info("BreezewaySyncTasks: {$creadas} creadas, {$actualizadas} actualizadas, {$bloqueadas} bloqueadas (sin tocar), {$huerfanasResueltas} huérfanas resueltas, {$imputacionesCreadas} imputaciones creadas, {$imputacionesActualizadas} imputaciones corregidas, {$fotosDescargadas} fotos, {$vinculadas} incidencias vinculadas, {$deducidas} reservas deducidas, {$descartadas} descartadas, " . ($ocultarActivo ? "{$ocultadas} ocultadas" : 'ocultado en pausa') . ", {$errores} errores.");
     }
 
     // Tareas que quedaron con control_user vacío por asignados sin mapear en su momento (marcadas en
@@ -620,6 +645,26 @@ class BreezewaySyncTasksCommand extends Command
         }
 
         return $descartadas;
+    }
+
+    // La reserva de una limpieza de salida que Breezeway no enlazo. Devuelve el id, o null.
+    //
+    // Ventana de +-1 dia alrededor de la fecha planificada, y SOLO si hay una unica candidata no
+    // cancelada. Las canceladas se excluyen porque Breezeway a veces sigue apuntando a una
+    // reserva cancelada que luego se rehizo: en esos casos la deduccion acierta mas que el dato.
+    private function deducirReserva(int $propiedadId, string $fechaPlanificada): ?int
+    {
+        $candidatas = DB::table('vm_reservas')
+            ->where('id_propiedades', $propiedadId)
+            ->whereBetween('check_out_date', [
+                date('Y-m-d', strtotime($fechaPlanificada . ' -1 day')),
+                date('Y-m-d', strtotime($fechaPlanificada . ' +1 day')),
+            ])
+            ->where(fn($q) => $q->where('deleted', 0)->orWhereNull('deleted'))
+            ->where('booking_status', '<>', 'cancelled')
+            ->pluck('id');
+
+        return $candidatas->count() === 1 ? (int) $candidatas->first() : null;
     }
 
     // Ata una incidencia a la limpieza de salida de la que salio. Devuelve 1 si la escribe.

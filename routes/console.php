@@ -49,6 +49,12 @@ Schedule::command('breezeway:sync-comentarios')->dailyAt('22:00')->withoutOverla
 // icnea:sync-pro (07:00, cron de sistema) y breezeway:sync-properties (07:15).
 Schedule::command('admin:informe-fallos-diario')->dailyAt('07:45')->withoutOverlapping();
 
+// Avisa de las limpiezas de salida que se han quedado sin reserva asociada, que es lo que deja a
+// una fianza sin comentarios ni fotos que mirar. A las 08:00, después de que el sync horario de
+// Breezeway haya tenido toda la noche para enlazar lo enlazable. Solo envía si hay algo: un
+// correo fijo que casi siempre llega vacío se aprende a ignorar, y este avisa de dinero.
+Schedule::command('vm:avisar-limpiezas-sin-reserva')->dailyAt('08:00')->withoutOverlapping();
+
 // Cierra automáticamente los fichajes del día anterior que siguen abiertos
 Schedule::call(function () {
     // Se ejecuta a las 08:00 — procesa fichajes del día anterior
