@@ -247,13 +247,13 @@ $csrf         = csrf_token();
         @endphp
         <span style="display:flex;align-items:center;gap:4px;white-space:nowrap">
           <span style="font-size:11px;color:#9ca3af;font-variant-numeric:tabular-nums">Breezeway #{{ $tarea->breezeway_task_id }}</span>
-          <button type="button" id="bzw-copiar"
-                  data-url="{{ $bzwUrl }}"
-                  title="Copiar el enlace a esta tarea en Breezeway"
-                  style="background:none;border:0;padding:2px;cursor:pointer;display:inline-flex;align-items:center;line-height:0;opacity:.75">
+          {{-- Abre en otra pestaña: desde aquí se va a Breezeway a mirar algo puntual y luego se
+               vuelve a esta ficha, así que perder la página sería perder el sitio. --}}
+          <a href="{{ $bzwUrl }}" target="_blank" rel="noopener"
+             title="Abrir esta tarea en Breezeway"
+             style="padding:2px;display:inline-flex;align-items:center;line-height:0;opacity:.75">
             <img src="{{ asset('img/breezeway.svg') }}" alt="Breezeway" style="width:15px;height:15px;display:block">
-          </button>
-          <span id="bzw-copiado" style="font-size:11px;color:#16a34a;display:none">Copiado</span>
+          </a>
         </span>
         @endif
       </div>
@@ -743,38 +743,6 @@ async function fotoRenombrarGuardar() {
   btn.disabled = false; btn.textContent = 'Guardar';
 }
 
-// ── Copiar el enlace de la tarea en Breezeway ────────────────────────────────
-// navigator.clipboard necesita contexto seguro; en producción lo hay, pero si fallara se cae
-// al textarea + execCommand para no dejar el botón sin hacer nada.
-document.addEventListener('DOMContentLoaded', function () {
-    const btn = document.getElementById('bzw-copiar');
-    if (!btn) return;
-
-    btn.addEventListener('click', async function () {
-        const url = btn.dataset.url;
-        let ok = false;
-        try {
-            await navigator.clipboard.writeText(url);
-            ok = true;
-        } catch (e) {
-            const ta = document.createElement('textarea');
-            ta.value = url;
-            ta.style.position = 'fixed';
-            ta.style.opacity = '0';
-            document.body.appendChild(ta);
-            ta.select();
-            try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
-            ta.remove();
-        }
-        const aviso = document.getElementById('bzw-copiado');
-        if (aviso) {
-            aviso.textContent = ok ? 'Copiado' : 'No se pudo copiar';
-            aviso.style.color = ok ? '#16a34a' : '#dc2626';
-            aviso.style.display = 'inline';
-            setTimeout(() => { aviso.style.display = 'none'; }, 1800);
-        }
-    });
-});
 </script>
 
 </div>{{-- /max-width --}}
