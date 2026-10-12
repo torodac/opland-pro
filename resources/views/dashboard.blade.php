@@ -496,6 +496,49 @@
   </div>
 @endif
 
+@if($verLimpSinImp)
+{{-- Limpiezas de salida sin reserva asociada. Se arregla en Breezeway, no aquí, así que la
+     columna que importa de verdad es la del enlace. --}}
+<div class="db-card" style="margin-bottom:12px;">
+  <p class="db-title"><i class="ti ti-link-off"></i> Limpiezas de salida sin reserva asociada <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Limpiezas de salida (o de salida y entrada) que en Breezeway no están enlazadas a ninguna reserva. Sin ese enlace, la reserva aparece en Dev. fianzas sin comentarios ni fotos. Se corrige en Breezeway, con el botón «Enlace reserva» de la tarea.</span></span></p>
+  @if($limpiezasSinReserva->isEmpty())
+    <p class="empty">Sin pendientes</p>
+  @else
+  <table class="db-table">
+    <thead><tr><th>Tarea</th><th>Propiedad</th><th>Planificada</th><th>Estado</th><th>Breezeway</th></tr></thead>
+    <tbody>
+      @foreach($limpiezasSinReserva as $t)
+      <tr>
+        <td><a target="_blank" rel="noopener" href="{{ route('vm.tarea', [$project->slug, 'limpieza', $t->id]) }}" style="color:#111827;font-weight:600;text-decoration:none;">{{ $t->nombre }}</a></td>
+        <td style="color:#888;">{{ $t->propiedad ?: '—' }}</td>
+        <td style="color:#888;white-space:nowrap;">
+          {{-- Sin fecha no se puede ni buscar a qué estancia pertenece: se marca en vez de dejarlo en blanco. --}}
+          @if($t->fecha_planificada)
+            {{ \Carbon\Carbon::parse($t->fecha_planificada)->translatedFormat('d M Y') }}
+          @else
+            <span style="color:#c1c5cb;">Sin fecha</span>
+          @endif
+        </td>
+        <td style="color:#888;">{{ $t->estado ?: '—' }}</td>
+        <td>
+          @if($t->breezeway_task_id)
+            <a target="_blank" rel="noopener"
+               href="https://app.breezeway.io/task/{{ $t->breezeway_task_id }}"
+               title="Abrir esta tarea en Breezeway para enlazarla a su reserva"
+               style="color:#185FA5;text-decoration:none;white-space:nowrap;">#{{ $t->breezeway_task_id }}</a>
+          @else
+            {{-- Sin id de Breezeway la tarea se creó a mano en Opland: no hay nada que enlazar allí. --}}
+            <span style="color:#c1c5cb;">Creada en Opland</span>
+          @endif
+        </td>
+      </tr>
+      @endforeach
+    </tbody>
+  </table>
+  @endif
+</div>
+@endif
+
 @if($verInformesPendientes)
 @php $pasoLabels = ['aprueba' => 'Supervisor', 'rrhh' => 'RRHH', 'coordinador' => 'Coordinador', 'trabajador' => 'Trabajador', 'direccion' => 'Dirección']; @endphp
   {{-- Informes mensuales pendientes de alguna firma --}}

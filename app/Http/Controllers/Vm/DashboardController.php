@@ -220,6 +220,26 @@ class DashboardController extends Controller
             ->get(['t.id', 't.nombre', 't.control_user', 't.fecha_planificada', 'p.nombre as propiedad'])
             ->map($resolverResponsables);
 
+        // ── Limpiezas de salida sin reserva asociada ─────────────────────────
+        // El vínculo tarea→reserva lo pone Breezeway (linked_reservation); cuando la tarea se
+        // crea sin enlazar, aquí llega vacío y la reserva se queda sin evidencia: en Dev. fianzas
+        // aparece sin comentarios ni fotos, y hoy eso solo se descubre abriendo la ficha y
+        // viéndola en blanco. Este bloque lo saca a la luz.
+        //
+        // El arreglo es en Breezeway (botón "Enlace reserva" de la tarea), no aquí: por eso cada
+        // fila lleva el enlace directo a la tarea en Breezeway.
+        //
+        // Las descartadas quedan fuera: esas limpiezas no se hicieron, así que no les falta nada.
+        $limpiezasSinReserva = DB::table('vm_tareas_limpieza as t')
+            ->leftJoin('vm_propiedades as p', 'p.id', '=', 't.id_propiedades')
+            ->where(fn($q) => $q->where('t.deleted', 0)->orWhereNull('t.deleted'))
+            ->whereIn('t.Tipo', DevFianzasController::TIPOS_SALIDA)
+            ->whereNull('t.id_reservas')
+            ->whereNotIn(DB::raw("COALESCE(t.estado, '')"), DevFianzasController::ESTADOS_EXCLUIDOS)
+            ->orderByDesc('t.fecha_planificada')
+            ->get(['t.id', 't.nombre', 't.fecha_planificada', 't.estado',
+                   't.breezeway_task_id', 'p.nombre as propiedad']);
+
         // ── Personas de Breezeway sin usuario mapeado en Opland ──────────────
         $breezewayPendientes = DB::table('vm_breezeway_pendientes')
             ->where('deleted', 0)
@@ -508,7 +528,7 @@ class DashboardController extends Controller
         return view('dashboard', compact(
             'project',
             'conciliaciones',
-            'tareasLimpieza', 'tareasMantPisc', 'breezewayPendientes',
+            'tareasLimpieza', 'tareasMantPisc', 'breezewayPendientes', 'limpiezasSinReserva',
             'incidenciasFichaje', 'incidenciasAusencias', 'desviaciones', 'recordatoriosSscc',
             'conflictosAusencias', 'informesPendientes',
             'usuariosFichaje', 'puedeFicharSinLimite', 'fechaMinimaFichaje',

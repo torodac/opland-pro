@@ -26,12 +26,14 @@ class DevFianzasController extends Controller
     // "Las de salida": son las limpiezas que ven cómo queda la casa. Las de mantenimiento quedan
     // fuera de esta pantalla por decisión expresa -- además, vm_tareas_mantenimiento no tiene
     // id_reservas, así que no habría forma fiable de atarlas a la reserva.
-    private const TIPOS_SALIDA = ['Checkout', 'Limpieza salida'];
+    // Pública porque el dashboard lista justo estas mismas tareas cuando les falta la reserva:
+    // si cada sitio mantuviera su propia lista, acabarían diciendo cosas distintas.
+    public const TIPOS_SALIDA = ['Checkout', 'Limpieza salida'];
 
     // Una limpieza descartada no se hizo, así que no dice nada del estado en que quedó la casa:
     // ni ella ni sus comentarios ni sus fotos cuentan aquí. "Cancelada" es otro valor posible del
     // campo, pero hoy no hay ninguna tarea con él.
-    private const ESTADOS_EXCLUIDOS = ['Descartada'];
+    public const ESTADOS_EXCLUIDOS = ['Descartada'];
 
     public const ESTADO_APROBADA = 'Aprobada devolución';
     public const ESTADO_RETENER  = 'Aplicar retención';
