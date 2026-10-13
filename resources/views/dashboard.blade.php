@@ -16,6 +16,13 @@
 .dark .db-table td { border-color:rgba(255,255,255,.04); }
 .db-table tr:last-child td { border-bottom:none; }
 .badge-sm   { font-size:10px; padding:1px 6px; border-radius:4px; white-space:nowrap; }
+/* Visé de "dar por bueno". Va junto a la casuística, no con los botones de navegación de la
+   derecha: resuelve la fila en vez de llevarte a otro sitio, y mezclarlo con ellos descuadraba
+   esa columna. Naranja para que destaque sobre el gris del texto. */
+.db-vise    { border:0; background:none; cursor:pointer; color:#D97706; font-size:14px;
+              line-height:1; padding:0 4px; margin-left:6px; vertical-align:middle; }
+.db-vise:hover { color:#92400E; }
+.db-vise[disabled] { color:#D1D5DB; cursor:default; }
 /* Listados largos: 10 filas visibles y scroll para el resto (la altura exacta la fija el JS
    del final, porque hay filas de doble altura -- las de badges apilados). El max-height de
    aquí es el respaldo por si ese JS no llega a ejecutarse. */
@@ -285,19 +292,25 @@
               <span class="badge-sm" style="background:#EFF6FF;color:#1E40AF;padding:1px 6px;margin-left:4px;">próximo</span>
             @endif
           </td>
-          <td style="color:#6b7280;">{{ implode(', ', $casos) }}</td>
+          {{-- El visé va pegado a la casuística, no con los botones de navegación: es la acción
+               que RESUELVE la fila, no otro sitio al que ir. --}}
+          <td style="color:#6b7280;">
+            {{ implode(', ', $casos) }}
+            @if($a->fichaje_id)
+            <button class="db-vise"
+                    title="Dar el fichaje por bueno: deja de aparecer como incidencia"
+                    onclick="validarFichaje(this, {{ $a->fichaje_id }})">&check;</button>
+            @endif
+          </td>
           <td style="white-space:nowrap;text-align:right;">
-            <a target="_blank" rel="noopener" href="{{ route('horario', $project->slug) }}?semana={{ $lunes }}"
-               class="badge-sm" style="background:#EFF6FF;color:#1E40AF;text-decoration:none;padding:3px 8px;"
-               title="Ver el horario de esa semana">Horario</a>
             @if($a->fichaje_id)
             <a target="_blank" rel="noopener" href="{{ route('vm.fichaje_form', [$project->slug, $a->fichaje_id]) }}"
                class="badge-sm" style="background:#EAF3DE;color:#27500A;text-decoration:none;padding:3px 8px;"
                title="Abrir el fichaje de ese día">Fichaje</a>
-            <button class="badge-sm" style="background:#F5F3FF;color:#5B21B6;border:none;cursor:pointer;padding:3px 8px;border-radius:4px;"
-                    title="Dar el fichaje por bueno: deja de aparecer como incidencia"
-                    onclick="validarFichaje(this, {{ $a->fichaje_id }})">Validar</button>
             @endif
+            <a target="_blank" rel="noopener" href="{{ route('horario', $project->slug) }}?semana={{ $lunes }}"
+               class="badge-sm" style="background:#EFF6FF;color:#1E40AF;text-decoration:none;padding:3px 8px;"
+               title="Ver el horario de esa semana">Horario</a>
             @foreach($a->ausencias as $aus)
             <a target="_blank" rel="noopener" href="{{ route('ficha', [$project->slug, 'ausencias', $aus['id']]) }}"
                class="badge-sm" style="background:#FEF3C7;color:#92400E;text-decoration:none;padding:3px 8px;"
@@ -354,20 +367,21 @@
               <a target="_blank" rel="noopener" href="{{ route('vm.usuario', [$project->slug, $c->id_usuario]) }}" style="color:#185FA5;text-decoration:none;font-weight:500;">{{ $c->usuario }}</a>
             </td>
             <td style="white-space:nowrap;font-size:12px;">{{ \Carbon\Carbon::parse($c->fecha)->translatedFormat('d M Y') }}</td>
-            <td style="color:#6b7280;">{{ implode(', ', $casuisticas) }}</td>
+            {{-- El visé va pegado a la casuística, no con los botones de navegación: es la
+                 accion que RESUELVE la fila, no otro sitio al que ir. --}}
+            <td style="color:#6b7280;">
+              {{ implode(', ', $casuisticas) }}
+              @if($c->fichaje_id)
+              <button class="db-vise"
+                      title="Dar el fichaje por bueno: deja de aparecer como incidencia"
+                      onclick="validarFichaje(this, {{ $c->fichaje_id }})">&check;</button>
+              @endif
+            </td>
             <td style="white-space:nowrap;text-align:right;">
-              <a target="_blank" rel="noopener" href="{{ $horarioUrl }}"
-                 class="badge-sm" style="background:#EFF6FF;color:#1E40AF;text-decoration:none;padding:3px 8px;"
-                 title="Ver el horario de esa semana">Horario</a>
               @if($c->fichaje_id)
               <a target="_blank" rel="noopener" href="{{ route('vm.fichaje_form', [$project->slug, $c->fichaje_id]) }}"
                  class="badge-sm" style="background:#EAF3DE;color:#27500A;text-decoration:none;padding:3px 8px;"
                  title="Abrir el fichaje de ese día">Fichaje</a>
-              {{-- Validar = "lo he mirado y está bien". A partir de ahí el fichaje deja de
-                   generar incidencia, igual que ya ocurría en "Fichaje vs imputaciones". --}}
-              <button class="badge-sm" style="background:#F5F3FF;color:#5B21B6;border:none;cursor:pointer;padding:3px 8px;border-radius:4px;"
-                      title="Dar el fichaje por bueno: deja de aparecer como incidencia"
-                      onclick="validarFichaje(this, {{ $c->fichaje_id }})">Validar</button>
               {{-- Crear fichaje solo se ofrece cuando la incidencia es un turno sin fichar: en un
                    conflicto de horario contra ausencia, dar de alta un fichaje no arregla nada. --}}
               @elseif($c->sin_fichaje && $puedeCrearFichaje)
@@ -375,6 +389,9 @@
                       title="Crear el fichaje de ese día"
                       onclick="abrirFichajeNuevo({ usuario: {{ $c->id_usuario }}, fecha: '{{ $c->fecha }}', onGuardado: () => this.closest('tr').remove() })">Fichaje</button>
               @endif
+              <a target="_blank" rel="noopener" href="{{ $horarioUrl }}"
+                 class="badge-sm" style="background:#EFF6FF;color:#1E40AF;text-decoration:none;padding:3px 8px;"
+                 title="Ver el horario de esa semana">Horario</a>
               {{-- Con la casuística en texto llano, este botón es la única vía a la ausencia que
                    provoca el conflicto: si ese día ya tiene una, la abre en vez de crear otra. --}}
               {{-- Los días de este bloque no tienen ausencia por definición (si la tuvieran
@@ -643,6 +660,9 @@ async function validarConciliacion(btn) {
 }
 
 async function validarFichaje(btn, fichajeId) {
+    // Se guarda el contenido original en vez de reponer la palabra "Validar": el mismo botón es
+    // un visé en los bloques de incidencias y un botón con texto en el de desviaciones.
+    const original = btn.innerHTML;
     btn.disabled = true;
     btn.textContent = '…';
 
@@ -651,7 +671,7 @@ async function validarFichaje(btn, fichajeId) {
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_DB, 'Accept': 'application/json' },
         body: JSON.stringify({ id: fichajeId }),
     });
-    if (!r) { btn.disabled = false; btn.textContent = 'Validar'; return; }
+    if (!r) { btn.disabled = false; btn.innerHTML = original; return; }
     const data = await r.json();
 
     if (data.ok) {
@@ -664,7 +684,7 @@ async function validarFichaje(btn, fichajeId) {
         else { btn.closest('tr').remove(); }
     } else {
         btn.disabled = false;
-        btn.textContent = 'Validar';
+        btn.innerHTML = original;
         alert('Error al validar');
     }
 }
