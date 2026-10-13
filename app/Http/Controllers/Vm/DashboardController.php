@@ -350,8 +350,15 @@ class DashboardController extends Controller
                 ->whereColumn('a.fecha_fin', '>=', 'h.fecha')
                 ->where('a.deleted', 0)
             )
-            ->whereNotIn('h.tipo', ['turno', 'descanso'])
-            ->where('h.fecha', '<', $hoy)
+            // Turno y descanso ya NO se excluyen (2026-10-13). Un turno planificado sobre un día
+            // de vacaciones es justo el caso que más cuesta ver a ojo: en el cuadrante parece un
+            // turno normal, y hasta ahora no lo listaba ningún panel.
+            //
+            // Y se miran también los días que están por venir, acotados a lo que alcanza el
+            // planificador. Lo pasado hay que corregirlo; lo de la semana que viene se puede
+            // evitar, que es cuando esto vale de verdad.
+            ->whereBetween('h.fecha', [date('Y-m-d', strtotime($hoy . ' -120 days')),
+                                       date('Y-m-d', strtotime($hoy . ' +42 days'))])
             ->get(['u.id as id_usuario', 'u.nombre as usuario', 'h.fecha', 'h.tipo as horario_tipo',
                    'a.id as ausencia_id', 'a.tipo as ausencia_tipo']);
 
@@ -391,6 +398,9 @@ class DashboardController extends Controller
             'fichaje_id'       => $fichajeId,
             'ausencias'        => [],
             'horario_distinto' => null,   // ['horario' => tipo del cuadrante, 'ausencia' => tipo registrado]
+            // Lo que aún no ha pasado se puede evitar; lo pasado solo se puede corregir. La vista
+            // los separa para que no se mezcle lo urgente con lo que ya no tiene arreglo.
+            'futuro'           => $r->fecha >= $hoy,
         ];
         foreach ($rawAusencia as $r) {
             $key = $r->id_usuario . '_' . $r->fecha;
@@ -413,8 +423,14 @@ class DashboardController extends Controller
             }
         }
 
-        $incidenciasAusencias = collect(array_values($ausenciasMap))
-            ->sortByDesc('fecha')->values()->take(50);
+        // Primero lo que está por venir, de lo más inmediato en adelante: es lo que todavía da
+        // tiempo a evitar. Después lo pasado, de más reciente a más antiguo, que solo se puede
+        // corregir.
+        $todasAus   = collect(array_values($ausenciasMap));
+        $proximas   = $todasAus->where('futuro', true)->sortBy('fecha')->values();
+        $yaPasadas  = $todasAus->where('futuro', false)->sortByDesc('fecha')->values();
+
+        $incidenciasAusencias = $proximas->concat($yaPasadas)->take(50);
 
         // ── Conflictos de ausencias: dos o más ausencias el mismo día ─────────
         // El alta de ausencias ya valida solapes (AusenciaController::validarFechas), así que

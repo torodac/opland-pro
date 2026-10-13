@@ -248,13 +248,14 @@
        registrada contra el cuadrante, no el fichaje contra el cuadrante. --}}
   @if($verAusenciasSin)
   <div class="db-card" style="margin-bottom:12px;">
-    <p class="db-title"><i class="ti ti-calendar-question"></i> Incidencias de ausencias en Horario <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Días pasados en los que el problema está en la ausencia. Los revisa RRHH. Dos casos:<br><br>&bull; <b>Fichaje en &lt;ausencia&gt;</b> — fichó un día que tiene una ausencia registrada (vacaciones, baja...). O el fichaje sobra, o la ausencia no debería cubrir ese día.<br>&bull; <b>Horario dice X y la ausencia es Y</b> — el cuadrante y la ausencia registrada se contradicen: por ejemplo, el Horario marca "Baja" y la ausencia que cubre ese día es "Comp. festivo". Una de las dos está mal y hay que decidir cuál.<br><br>El segundo caso no es lo mismo que "Ausencias en Horario no registradas por RRHH": allí no existe ninguna ausencia detrás del horario; aquí existe, pero no coincide. Y solo se revisan los departamentos que aparecen en el planificador.<br><br>Lo que no cuadra entre el fichaje y el turno o el descanso va al bloque "Incidencias de fichajes con turnos y descansos del Horario", que resuelve Operaciones.</span></span></p>
+    <p class="db-title"><i class="ti ti-calendar-question"></i> Incidencias de ausencias en Horario <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Días en los que el problema está en la ausencia. Los revisa RRHH. Dos casos:<br><br>&bull; <b>Fichaje en &lt;ausencia&gt;</b> — fichó un día que tiene una ausencia registrada (vacaciones, baja...). O el fichaje sobra, o la ausencia no debería cubrir ese día.<br>&bull; <b>Horario dice X y la ausencia es Y</b> — el cuadrante y la ausencia registrada se contradicen. Incluye el caso de un <b>Turno o un Descanso planificado sobre un día de ausencia</b>, que en el cuadrante parece un día normal y es el más difícil de ver a ojo.<br><br>Se muestran también los días que aún no han llegado, separados arriba: esos todavía se pueden evitar.<br><br>No es lo mismo que "Ausencias en Horario no registradas por RRHH": allí no existe ninguna ausencia detrás del horario; aquí existe, pero no coincide. Y solo se revisan los departamentos que aparecen en el planificador.<br><br>Lo que no cuadra entre el fichaje y el turno o el descanso va al bloque "Incidencias de fichajes con turnos y descansos del Horario", que resuelve Operaciones.</span></span></p>
     @if($incidenciasAusencias->isEmpty())
       <p class="empty">Sin incidencias</p>
     @else
     <table class="db-table">
       <thead><tr><th>Empleado</th><th>Fecha</th><th>Casuística</th><th></th></tr></thead>
       <tbody>
+        @php $yaPasadasPintado = false; @endphp
         @foreach($incidenciasAusencias as $a)
         @php
           $a = (object) $a;
@@ -268,11 +269,22 @@
           }
           $lunes = \Carbon\Carbon::parse($a->fecha)->startOfWeek(\Carbon\Carbon::MONDAY)->toDateString();
         @endphp
+        {{-- Separador entre lo que aun se puede evitar y lo que ya solo se puede corregir. Se
+             pinta una sola vez, al cruzar de las proximas a las pasadas. --}}
+        @if(!$a->futuro && !$yaPasadasPintado)
+        @php $yaPasadasPintado = true; @endphp
+        <tr><td colspan="4" style="padding:6px 8px;font-size:11px;color:#9ca3af;background:rgba(0,0,0,.015);">Ya pasados</td></tr>
+        @endif
         <tr>
           <td>
             <a target="_blank" rel="noopener" href="{{ route('vm.usuario', [$project->slug, $a->id_usuario]) }}" style="color:#185FA5;text-decoration:none;font-weight:500;">{{ $a->usuario }}</a>
           </td>
-          <td style="white-space:nowrap;font-size:12px;">{{ \Carbon\Carbon::parse($a->fecha)->translatedFormat('d M Y') }}</td>
+          <td style="white-space:nowrap;font-size:12px;">
+            {{ \Carbon\Carbon::parse($a->fecha)->translatedFormat('d M Y') }}
+            @if($a->futuro)
+              <span class="badge-sm" style="background:#EFF6FF;color:#1E40AF;padding:1px 6px;margin-left:4px;">próximo</span>
+            @endif
+          </td>
           <td style="color:#6b7280;">{{ implode(', ', $casos) }}</td>
           <td style="white-space:nowrap;text-align:right;">
             <a target="_blank" rel="noopener" href="{{ route('horario', $project->slug) }}?semana={{ $lunes }}"
