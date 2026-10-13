@@ -275,7 +275,7 @@
         @php $yaPasadasPintado = true; @endphp
         <tr><td colspan="4" style="padding:6px 8px;font-size:11px;color:#9ca3af;background:rgba(0,0,0,.015);">Ya pasados</td></tr>
         @endif
-        <tr>
+        <tr @if($a->fichaje_id) data-fid="{{ $a->fichaje_id }}" @endif>
           <td>
             <a target="_blank" rel="noopener" href="{{ route('vm.usuario', [$project->slug, $a->id_usuario]) }}" style="color:#185FA5;text-decoration:none;font-weight:500;">{{ $a->usuario }}</a>
           </td>
@@ -294,6 +294,9 @@
             <a target="_blank" rel="noopener" href="{{ route('vm.fichaje_form', [$project->slug, $a->fichaje_id]) }}"
                class="badge-sm" style="background:#EAF3DE;color:#27500A;text-decoration:none;padding:3px 8px;"
                title="Abrir el fichaje de ese día">Fichaje</a>
+            <button class="badge-sm" style="background:#F5F3FF;color:#5B21B6;border:none;cursor:pointer;padding:3px 8px;border-radius:4px;"
+                    title="Dar el fichaje por bueno: deja de aparecer como incidencia"
+                    onclick="validarFichaje(this, {{ $a->fichaje_id }})">Validar</button>
             @endif
             @foreach($a->ausencias as $aus)
             <a target="_blank" rel="noopener" href="{{ route('ficha', [$project->slug, 'ausencias', $aus['id']]) }}"
@@ -344,7 +347,9 @@
             if ($c->sin_fichaje) $casuisticas[] = 'Turno sin fichaje';
             if ($c->descanso)    $casuisticas[] = 'Fichaje en descanso';
           @endphp
-          <tr>
+          {{-- data-fid: validar quita la fila de los dos bloques a la vez, porque un mismo
+               fichaje puede estar listado en los dos. --}}
+          <tr @if($c->fichaje_id) data-fid="{{ $c->fichaje_id }}" @endif>
             <td>
               <a target="_blank" rel="noopener" href="{{ route('vm.usuario', [$project->slug, $c->id_usuario]) }}" style="color:#185FA5;text-decoration:none;font-weight:500;">{{ $c->usuario }}</a>
             </td>
@@ -358,6 +363,11 @@
               <a target="_blank" rel="noopener" href="{{ route('vm.fichaje_form', [$project->slug, $c->fichaje_id]) }}"
                  class="badge-sm" style="background:#EAF3DE;color:#27500A;text-decoration:none;padding:3px 8px;"
                  title="Abrir el fichaje de ese día">Fichaje</a>
+              {{-- Validar = "lo he mirado y está bien". A partir de ahí el fichaje deja de
+                   generar incidencia, igual que ya ocurría en "Fichaje vs imputaciones". --}}
+              <button class="badge-sm" style="background:#F5F3FF;color:#5B21B6;border:none;cursor:pointer;padding:3px 8px;border-radius:4px;"
+                      title="Dar el fichaje por bueno: deja de aparecer como incidencia"
+                      onclick="validarFichaje(this, {{ $c->fichaje_id }})">Validar</button>
               {{-- Crear fichaje solo se ofrece cuando la incidencia es un turno sin fichar: en un
                    conflicto de horario contra ausencia, dar de alta un fichaje no arregla nada. --}}
               @elseif($c->sin_fichaje && $puedeCrearFichaje)
@@ -645,7 +655,13 @@ async function validarFichaje(btn, fichajeId) {
     const data = await r.json();
 
     if (data.ok) {
-        btn.closest('tr').remove();
+        // Un mismo fichaje puede estar listado en varios bloques a la vez (desviaciones,
+        // incidencias de fichaje, incidencias de ausencias). Se quitan todas sus filas, no solo
+        // aquella desde la que se ha pulsado: dejar las otras daria a entender que siguen
+        // pendientes hasta recargar la pagina.
+        const filas = document.querySelectorAll('tr[data-fid="' + fichajeId + '"]');
+        if (filas.length) { filas.forEach(tr => tr.remove()); }
+        else { btn.closest('tr').remove(); }
     } else {
         btn.disabled = false;
         btn.textContent = 'Validar';
