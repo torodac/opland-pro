@@ -543,22 +543,16 @@ class DevFianzasController extends Controller
                 -- Se mira al pintar en vez de copiarse a la reserva: así no hay dos sitios
                 -- diciendo cosas distintas sobre si el dinero se ha movido o no.
                 --
-                -- Cuentan los DOS estados de cierre, 'Finalizada' y 'Completada', por coherencia
-                -- con el panel de recordatorios SSCC (DashboardController:498), que ya daba las
-                -- dos por cerradas antes de que esto existiera. Aceptar solo la primera crearía
-                -- un hueco raro: una tarea en 'Completada' desaparece del dashboard de quien
-                -- tiene que hacerla, mientras la fianza seguiría pendiente de devolver sin que
-                -- nadie entendiera por qué.
-                --
-                -- OJO: no hay histórico que lo confirme -- no se ha cerrado nunca una tarea SSCC
-                -- (las 5 que existen están en 'Nueva'). Si en el flujo real 'Completada' y
-                -- 'Finalizada' significan cosas distintas, esto marcaría la fianza como devuelta
-                -- antes de tiempo, que es el error caro de los dos.
+                -- 'Completada' es el cierre, igual que en limpieza y mantenimiento. Hubo un
+                -- segundo valor, 'Finalizada', que solo existía en esta tabla y que se retiró el
+                -- 2026-10-13: tener dos formas de decir lo mismo obligaba a que cada consulta se
+                -- acordara de aceptar las dos, y la que no se acordara se equivocaría en
+                -- silencio sobre si una fianza ya está devuelta.
                 --
                 -- Cancelada y Descartada no cuentan: ahí no se ha movido ningún dinero.
                 (SELECT count(*) FROM vm_tareas_sscc s
                   WHERE s.id_reservas = r.id AND COALESCE(s.deleted, 0) = 0
-                    AND s.estado IN ('Finalizada', 'Completada')) AS sscc_finalizada
+                    AND s.estado = 'Completada') AS sscc_finalizada
             ");
     }
 

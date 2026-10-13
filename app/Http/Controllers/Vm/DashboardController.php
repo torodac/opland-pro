@@ -130,7 +130,13 @@ class DashboardController extends Controller
     }
 
     // Botón "Hecho" del recordatorio SSCC: la marca como propia (control_user = yo) y la
-    // pasa a Finalizada, sin tocar imputaciones/fichaje -- no repercute en el informe mensual.
+    // pasa a Completada, sin tocar imputaciones/fichaje -- no repercute en el informe mensual.
+    //
+    // Escribía "Finalizada" hasta el 2026-10-13. Esa palabra no existía en ningún otro sitio del
+    // sistema: se eligió aquí y seis días después se añadió al desplegable para que la lista
+    // cuadrase con lo que este botón ya guardaba. Dos formas de decir "hecho" obligaban a que
+    // cada consulta se acordara de aceptar las dos, y la que no se acordara se equivocaría en
+    // silencio. Ahora se cierra como en limpieza y mantenimiento: Completada.
     public function marcarSsccHecho(Request $request, Project $project, int $id)
     {
         $user = $this->vmUsuarioActual();
@@ -143,7 +149,7 @@ class DashboardController extends Controller
             ->where('deleted', 0)
             ->update([
                 'control_user' => json_encode([$user->id]),
-                'estado'       => 'Finalizada',
+                'estado'       => 'Completada',
                 'updateuser'   => auth()->id(),
                 'updatedat'    => now(),
             ]);
@@ -495,7 +501,7 @@ class DashboardController extends Controller
             $recordatoriosSscc = DB::table('vm_tareas_sscc')
                 ->where('deleted', 0)
                 ->where('hidden', 0)
-                ->whereNotIn('estado', ['Finalizada', 'Completada', 'Cancelada', 'Descartada'])
+                ->whereNotIn('estado', ['Completada', 'Cancelada', 'Descartada'])
                 ->orderBy('fecha_planificada')
                 ->get(['id', 'nombre', 'fecha_planificada', 'control_user', 'id_rol', 'id_departamento'])
                 ->filter(function ($t) use ($vmUsuario) {
