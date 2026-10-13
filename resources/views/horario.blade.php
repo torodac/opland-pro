@@ -265,14 +265,16 @@ $deptLabel = $dept->nombre ?: 'Sin departamento';
                     //
                     // Una celda con ausencia y SIN horario se muestra con la ausencia pintada,
                     // pero sigue siendo EDITABLE: dejarla en solo lectura bloqueaba la operativa
-                    // de los coordinadores, que necesitan poder planificar encima. Ahí el
-                    // amarillo sale siempre, porque no hay horario con el que pueda coincidir.
+                    // de los coordinadores, que necesitan poder planificar encima. Esa NO va en
+                    // amarillo: no hay conflicto, solo una ausencia que aún no se ha planificado,
+                    // y es el caso normal -- pintarla llevaba el aviso de 6 celdas a 55, que es
+                    // tanto como apagarlo.
                     $editable  = !$pastBlocked;
                     $mismoTipo = $ausencia && $horario && ($tipoLabels[$horario->tipo] ?? null) === $ausencia;
                     $tdCls  = 'cell-' . ($editable ? 'edit' : 'readonly');
                     $tdCls .= $isWk   ? ' cell-wk'   : '';
                     $tdCls .= $isFest ? ' cell-fest'  : '';
-                    $tdCls .= ($ausencia && !$mismoTipo) ? ' cell-ausencia' : '';
+                    $tdCls .= ($horario && $ausencia && !$mismoTipo) ? ' cell-ausencia' : '';
                 @endphp
                 @if($editable)
                     <td class="{{ $tdCls }}"
@@ -486,10 +488,10 @@ function renderCell(td, tipo, hi, hf) {
     td.classList.remove('cell-readonly');
     td.onclick = () => openPop(td);
 
-    // Amarillo cuando hay ausencia y el horario no la refleja. Sin horario tampoco la refleja,
-    // asi que tambien sale: el aviso es "aqui hay una ausencia que el cuadrante no recoge".
+    // Amarillo solo cuando hay un horario que CONTRADICE la ausencia. Una ausencia sin horario
+    // no es un conflicto, es lo normal, y pintarla vaciaba de significado el aviso.
     const mismo = ausencia && tipo && LABELS[tipo] === ausencia;
-    td.classList.toggle('cell-ausencia', !!(ausencia && !mismo));
+    td.classList.toggle('cell-ausencia', !!(ausencia && tipo && !mismo));
     if (ausencia) td.title = 'Ausencia registrada: ' + ausencia;
     else td.removeAttribute('title');
 }
