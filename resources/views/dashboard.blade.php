@@ -18,11 +18,15 @@
 .badge-sm   { font-size:10px; padding:1px 6px; border-radius:4px; white-space:nowrap; }
 /* Visé de "dar por bueno". Va junto a la casuística, no con los botones de navegación de la
    derecha: resuelve la fila en vez de llevarte a otro sitio, y mezclarlo con ellos descuadraba
-   esa columna. Naranja para que destaque sobre el gris del texto. */
-.db-vise    { border:0; background:none; cursor:pointer; color:#D97706; font-size:14px;
-              line-height:1; padding:0 4px; margin-left:6px; vertical-align:middle; }
-.db-vise:hover { color:#92400E; }
-.db-vise[disabled] { color:#D1D5DB; cursor:default; }
+   esa columna. Círculo naranja con el visé en blanco, para que se distinga de un vistazo de los
+   badges rectangulares de navegación: aquello lleva a otro sitio, esto cierra la incidencia.
+   width = height y el line-height centran el símbolo sin depender de la fuente. */
+.db-vise    { border:0; cursor:pointer; background:#F97316; color:#fff;
+              width:18px; height:18px; border-radius:50%; padding:0;
+              font-size:11px; line-height:18px; text-align:center;
+              display:inline-block; margin-left:8px; vertical-align:middle; }
+.db-vise:hover { background:#C2410C; }
+.db-vise[disabled] { background:#E5E7EB; color:#9CA3AF; cursor:default; }
 /* Listados largos: 10 filas visibles y scroll para el resto (la altura exacta la fija el JS
    del final, porque hay filas de doble altura -- las de badges apilados). El max-height de
    aquí es el respaldo por si ese JS no llega a ejecutarse. */
