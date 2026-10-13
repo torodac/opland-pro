@@ -479,7 +479,11 @@ class DashboardController extends Controller
         $verFichajeVsImput = $isAdmin || in_array($rolId, [10, 5, 2]);   // Dir.Op, Coord.mant, Coord.limp
         // Las incidencias de fichaje contra el cuadrante las corrige Operaciones; las de ausencia
         // contra el cuadrante, RRHH ($verAusenciasSin). Por eso van en dos bloques distintos.
-        $verIncidenciasFichaje = $verFichajeVsImput;
+        //
+        // RRHH (11) se añade el 2026-10-13: dos de los tres casos del bloque salen de los turnos
+        // y descansos del cuadrante (turno planificado sin fichaje, y fichaje en día de
+        // descanso), y eso es materia suya tanto como de Operaciones.
+        $verIncidenciasFichaje = $verFichajeVsImput || $rolId === 11;
         $verInformesPendientes = $isAdmin || in_array($rolId, [11, 3, 10]); // Dir.RRHH, Dir.gral (todos) / Dir.Op (su equipo)
 
         // ── Próximas ausencias del usuario actual ────────────────────────────

@@ -403,6 +403,12 @@ class InformeImputacionesController extends Controller
                 if ($d['horario_tipo'] === 'descanso') { $diasDescanso++; continue; }
                 if ($d['tipo']) continue;
                 if ($d['entrada']) continue;   // fichó: el hueco lo resolvió la realidad
+                // Un festivo sin turno no es un hueco de planificación: es que ese día no se
+                // trabaja. Señalarlo convertía cada puente en un aviso que nadie podía resolver.
+                if ($d['is_festivo']) continue;
+                // Fuera del contrato tampoco hay nada que planificar: antes del alta o después
+                // de la baja, el mes entero de quien entra a mitad salía marcado como pendiente.
+                if (!($d['en_contrato'] ?? true)) continue;
                 $diasSinAsignar++;
             }
         }
@@ -947,6 +953,9 @@ class InformeImputacionesController extends Controller
                 'pausa_resaltada' => $pausaResaltada,
                 'horario_tipo'    => $hor ? $hor->tipo : null,
                 'es_descanso_efectivo' => $isDescansoEf,
+                // Si ese día estaba dentro de algún contrato suyo. Antes de la fecha de alta o
+                // después de la baja no hay nada que planificar, así que tampoco hay hueco.
+                'en_contrato'     => $contratoDia !== null,
             ];
         }
 

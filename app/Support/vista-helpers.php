@@ -126,9 +126,13 @@ function tipoColor($nombre, $map = [])
 }
 
 // horario.blade.php -- celda del cuadrante
-function horarioCellHtml($h, bool $isFest = false): string
+function horarioCellHtml($h, bool $isFest = false, ?string $ausencia = null): string
 {
     if (!$h) {
+        // Sin horario, lo que se pinta es el motivo por el que ese dia esta como esta. La
+        // ausencia manda sobre el festivo porque es lo especifico de esa persona; que ademas sea
+        // festivo se sigue viendo en el fondo de la celda.
+        if ($ausencia) return ausenciaCellHtml($ausencia);
         if ($isFest) return '<span class="hc hc-festivo">Día festivo</span>';
         return '<div class="hce"></div>';
     }
@@ -161,7 +165,7 @@ function ausenciaCellHtml(string $tipo): string
     elseif (str_contains($t, 'baja'))   $cls = 'hc-baja';
     elseif (str_contains($t, 'asunto')) $cls = 'hc-asuntos';
     elseif (str_contains($t, 'absent')) $cls = 'hc-absentismo';
-    return "<span class=\"hc aus-readonly {$cls}\" title=\"Ausencia registrada\">{$tipo}</span>";
+    return "<span class=\"hc aus-badge {$cls}\" title=\"Ausencia registrada\">{$tipo}</span>";
 }
 
 // ── Contratos (vm/usuario.blade.php) ─────────────────────────────────────────

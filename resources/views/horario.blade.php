@@ -80,7 +80,9 @@ td.cell-edit:hover .hce { border-color:#93C5FD; background:#EFF6FF; }
 .hc-asuntos     { background:#D1FAE5; color:#065F46; }
 .hc-absentismo  { background:#FEE2E2; color:#991B1B; }
 .hc-festivo     { background:#ffe0e0; color:#cc0000; }
-.aus-readonly   { opacity:0.75; cursor:default; }
+/* Marca de ausencia. Solo distingue visualmente la ausencia de un horario: la celda sigue
+   siendo editable, asi que no lleva cursor:default, que daria a entender lo contrario. */
+.aus-badge      { opacity:0.8; }
 .cell-readonly .hc { opacity:0.7; }
 td.cell-readonly { background:#fafafa; cursor:default; }
 
@@ -257,29 +259,22 @@ $deptLabel = $dept->nombre ?: 'Sin departamento';
                     $ausencia = $ausenciasMap[$u->id][$ds] ?? null;
                     $horario  = $horariosMap[$u->id . '_' . $ds] ?? null;
                     // Si hay horario (turno/descanso/...), tiene prioridad de visualización sobre
-                    // la ausencia y sigue siendo editable/borrable -- la ausencia solo se señala
-                    // con el mismo amarillo de conflicto del informe mensual, y solo si de verdad
-                    // discrepan (horario="vacaciones" + ausencia="Vacaciones" no avisa de nada).
-                    // Si NO hay horario puesto ese día pero sí hay ausencia, no hay nada que
-                    // priorizar: se muestra la ausencia tal cual, en solo lectura (no tiene sentido
-                    // dejar fichar un horario debajo de una ausencia ya registrada sin más contexto).
-                    $mostrarSoloAusencia = $ausencia && !$horario;
-                    $editable  = !$pastBlocked && !$mostrarSoloAusencia;
+                    // la ausencia -- la ausencia se señala con el mismo amarillo de conflicto del
+                    // informe mensual, y solo si de verdad discrepan (horario="vacaciones" +
+                    // ausencia="Vacaciones" no avisa de nada).
+                    //
+                    // Una celda con ausencia y SIN horario se muestra con la ausencia pintada,
+                    // pero sigue siendo EDITABLE: dejarla en solo lectura bloqueaba la operativa
+                    // de los coordinadores, que necesitan poder planificar encima. Ahí el
+                    // amarillo sale siempre, porque no hay horario con el que pueda coincidir.
+                    $editable  = !$pastBlocked;
                     $mismoTipo = $ausencia && $horario && ($tipoLabels[$horario->tipo] ?? null) === $ausencia;
                     $tdCls  = 'cell-' . ($editable ? 'edit' : 'readonly');
                     $tdCls .= $isWk   ? ' cell-wk'   : '';
                     $tdCls .= $isFest ? ' cell-fest'  : '';
-                    $tdCls .= ($horario && $ausencia && !$mismoTipo) ? ' cell-ausencia' : '';
+                    $tdCls .= ($ausencia && !$mismoTipo) ? ' cell-ausencia' : '';
                 @endphp
-                @if($mostrarSoloAusencia)
-                    <td class="{{ $tdCls }}"
-                        id="cell-{{ $u->id }}-{{ $ds }}"
-                        data-uid="{{ $u->id }}"
-                        data-fecha="{{ $ds }}"
-                        data-nombre="{{ $u->nombre }}"
-                        data-ausencia="{{ $ausencia }}"
-                        data-tipo="" data-hi="" data-hf="">{!! ausenciaCellHtml($ausencia) !!}</td>
-                @elseif($editable)
+                @if($editable)
                     <td class="{{ $tdCls }}"
                         id="cell-{{ $u->id }}-{{ $ds }}"
                         data-uid="{{ $u->id }}"
@@ -291,15 +286,15 @@ $deptLabel = $dept->nombre ?: 'Sin departamento';
                         data-hf="{{ $horario?->hora_fin   ? substr($horario->hora_fin,0,5)   : '' }}"
                         onclick="openPop(this)"
                         @if($ausencia) title="Ausencia registrada: {{ $ausencia }}" @endif>
-                        {!! horarioCellHtml($horario, $isFest) !!}
+                        {!! horarioCellHtml($horario, $isFest, $ausencia) !!}
                     </td>
                 @else
                     <td class="{{ $tdCls }}"
                         data-ausencia="{{ $ausencia }}">
                         @if($isPastWeek)
-                            <span class="app-tooltip">{!! horarioCellHtml($horario, $isFest) !!}<span class="app-tooltip-box">Semana pasada — solo lectura</span></span>
+                            <span class="app-tooltip">{!! horarioCellHtml($horario, $isFest, $ausencia) !!}<span class="app-tooltip-box">Semana pasada — solo lectura</span></span>
                         @else
-                            {!! horarioCellHtml($horario, $isFest) !!}
+                            {!! horarioCellHtml($horario, $isFest, $ausencia) !!}
                         @endif
                     </td>
                 @endif
@@ -448,8 +443,15 @@ function qLab()  { document.querySelectorAll('#pop-days .day-box:not([data-fixed
 function qAll()  { document.querySelectorAll('#pop-days .day-box:not([data-fixed])').forEach(d => d.classList.add('checked')); }
 function qNone() { document.querySelectorAll('#pop-days .day-box:not([data-fixed])').forEach(d => d.classList.remove('checked')); }
 
-function cellHtml(tipo, hi, hf) {
-    if (!tipo) return '<div class="hce"></div>';
+// Espejo de horarioCellHtml() del servidor. Tiene que conocer el festivo y la ausencia: sin eso,
+// al borrar el horario de un dia festivo la celda se reconstruia vacia y la marca "Dia festivo"
+// desaparecia hasta recargar la pagina -- que es, literalmente, quitar la condicion de festivo.
+function cellHtml(tipo, hi, hf, isFest, ausencia) {
+    if (!tipo) {
+        if (ausencia) return ausenciaBadgeHtml(ausencia);
+        if (isFest)   return '<span class="hc hc-festivo">Día festivo</span>';
+        return '<div class="hce"></div>';
+    }
     if (tipo === 'turno') {
         const t = (hi||'?').slice(0,5) + '–' + (hf||'?').slice(0,5);
         return `<span class="hc hc-turno">${t}</span>`;
@@ -465,37 +467,29 @@ function ausenciaBadgeHtml(tipo) {
     else if (t.includes('baja'))       cls = 'hc-baja';
     else if (t.includes('asunto'))     cls = 'hc-asuntos';
     else if (t.includes('absent'))     cls = 'hc-absentismo';
-    return `<span class="hc aus-readonly ${cls}" title="Ausencia registrada">${tipo}</span>`;
+    return `<span class="hc aus-badge ${cls}" title="Ausencia registrada">${tipo}</span>`;
 }
 
 // Reconstruye una celda tras guardar/borrar su horario, con la misma prioridad que en el
-// servidor (ver el bucle de celdas en PHP más arriba): sin horario y con ausencia -> ausencia en
-// solo lectura; con horario -> el horario manda, amarillo solo si el tipo no coincide con la
-// ausencia real.
+// servidor (ver el bucle de celdas en PHP más arriba): con horario, el horario manda; sin él se
+// pinta la ausencia o el festivo. La celda sigue SIEMPRE editable -- dejarla en solo lectura
+// cuando había una ausencia bloqueaba la operativa de los coordinadores.
 function renderCell(td, tipo, hi, hf) {
     const ausencia = td.dataset.ausencia || '';
+    const isFest   = td.classList.contains('cell-fest');
     td.dataset.tipo = tipo || '';
     td.dataset.hi   = hi || '';
     td.dataset.hf   = hf || '';
 
-    if (ausencia && !tipo) {
-        // Sin horario, la ausencia manda: solo lectura, sin el amarillo de conflicto (no hay
-        // horario con el que comparar -- igual que en el servidor, ver $mostrarSoloAusencia).
-        td.innerHTML = ausenciaBadgeHtml(ausencia);
-        td.classList.remove('cell-edit', 'cell-ausencia');
-        td.classList.add('cell-readonly');
-        td.onclick = null;
-        td.removeAttribute('title');
-        return;
-    }
-
-    td.innerHTML = cellHtml(tipo, hi, hf);
+    td.innerHTML = cellHtml(tipo, hi, hf, isFest, ausencia);
     td.classList.add('cell-edit');
     td.classList.remove('cell-readonly');
     td.onclick = () => openPop(td);
 
+    // Amarillo cuando hay ausencia y el horario no la refleja. Sin horario tampoco la refleja,
+    // asi que tambien sale: el aviso es "aqui hay una ausencia que el cuadrante no recoge".
     const mismo = ausencia && tipo && LABELS[tipo] === ausencia;
-    td.classList.toggle('cell-ausencia', !!(ausencia && tipo && !mismo));
+    td.classList.toggle('cell-ausencia', !!(ausencia && !mismo));
     if (ausencia) td.title = 'Ausencia registrada: ' + ausencia;
     else td.removeAttribute('title');
 }
