@@ -231,7 +231,7 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
                     <th class="col-dur">Pausa</th>
                     <th class="col-dur">Extras</th>
                     <th class="col-dur">Reales</th>
-                    <th class="col-dur">@if($es_recepcion)Late ch-in@else Tareas @endif</th>
+                    <th class="col-dur">{{ $es_recepcion ? 'Late ch-in' : 'Tareas' }}</th>
                     <th class="col-km">Km</th>
                     <th class="col-tipo">Tipo</th>
                 </tr>

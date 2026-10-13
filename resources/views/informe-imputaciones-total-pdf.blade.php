@@ -210,7 +210,7 @@ $sum_et = array_sum(array_column($year_stats, 'total'));
             <table class="tbl-main">
                 <thead><tr>
                     <th class="col-dia">Día</th><th class="col-time">Inicio</th><th class="col-time">Fin</th><th class="col-dur">Jornada</th>
-                    <th class="col-dur">Pausa</th><th class="col-dur">Extras</th><th class="col-dur">Reales</th><th class="col-dur">@if($es_recepcion)Late ch-in@else Tareas @endif</th><th class="col-km">Km</th><th class="col-tipo">Tipo</th>
+                    <th class="col-dur">Pausa</th><th class="col-dur">Extras</th><th class="col-dur">Reales</th><th class="col-dur">{{ $es_recepcion ? 'Late ch-in' : 'Tareas' }}</th><th class="col-km">Km</th><th class="col-tipo">Tipo</th>
                 </tr></thead>
                 <tbody>
                 @foreach($dias as $dia)

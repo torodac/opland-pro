@@ -445,7 +445,7 @@ function firmarPaso(url, confirmMsg) {
                         <th>Pausa</th>
                         <th>H. Extras</th>
                         <th>H. reales</th>
-                        <th>@if($es_recepcion)Late check-in@else H. Tareas @endif</th>
+                        <th>{{ $es_recepcion ? 'Late check-in' : 'H. Tareas' }}</th>
                         <th>Km</th>
                         <th>Tipo</th>
                     </tr>
