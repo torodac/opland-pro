@@ -314,6 +314,8 @@ class DashboardController extends Controller
                 ->where('h.tipo', 'descanso')
             )
             ->where('f.deleted', 0)
+            // Igual que arriba: validado = ya revisado, fuera de la lista de pendientes.
+            ->where(fn($q) => $q->whereNull('f.validado')->orWhere('f.validado', false))
             ->get(['u.id as id_usuario', 'u.nombre as usuario', 'f.fecha_fichaje as fecha', 'f.id as fichaje_id']);
 
         // Caso 3: fichaje + ausencia
@@ -329,6 +331,10 @@ class DashboardController extends Controller
                 ->where('a.deleted', 0)
             )
             ->where('f.deleted', 0)
+            // Un fichaje validado ya lo ha mirado alguien y ha decidido que esta bien: deja de
+            // ser algo pendiente. Mismo criterio que "Fichaje vs imputaciones", que ya lo
+            // aplicaba (VmHorasService::desviacionesFichajeImputacion).
+            ->where(fn($q) => $q->whereNull('f.validado')->orWhere('f.validado', false))
             ->get(['u.id as id_usuario', 'u.nombre as usuario', 'f.fecha_fichaje as fecha', 'f.id as fichaje_id', 'a.id as ausencia_id', 'a.tipo as ausencia_tipo']);
 
         // ── Incidencias de ausencias en Horario (bloque de RRHH) ─────────────
