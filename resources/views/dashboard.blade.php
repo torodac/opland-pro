@@ -8,6 +8,19 @@
 .dark .db-card { background:#1a1a1a; border-color:rgba(255,255,255,.08); }
 .db-title   { font-size:13px; font-weight:500; color:#888; margin:0 0 10px; display:flex; align-items:center; gap:6px; }
 .db-title i { font-size:15px; }
+/* Bloques plegables. El título entero es el mando: un objetivo de clic grande, y la flecha sola
+   seria diminuta. El margin-bottom se quita al plegar para que la tarjeta cerrada no deje un
+   hueco debajo del titulo. */
+.db-title.db-plegable { cursor:pointer; user-select:none; }
+.db-card.db-cerrado .db-title { margin-bottom:0; }
+/* Chip y flecha van juntos en un contenedor con margin-left:auto, en vez de repartir ese auto
+   entre los dos segun haya chip o no: asi el margen lo pone un solo sitio. */
+.db-mando   { margin-left:auto; display:flex; align-items:center; gap:6px; }
+.db-chip    { background:#EFF1F3; color:#4B5563; font-size:11px; font-weight:600;
+              line-height:1; padding:3px 8px; border-radius:999px; font-variant-numeric:tabular-nums; }
+.dark .db-chip { background:#2a2a2a; color:#9ca3af; }
+.db-flecha  { color:#9ca3af; font-size:13px; line-height:1; transition:transform .15s; }
+.db-card.db-cerrado .db-flecha { transform:rotate(-90deg); }
 .db-count   { font-size:32px; font-weight:500; line-height:1; margin:0 0 12px; }
 .db-table   { width:100%; border-collapse:collapse; font-size:12px; }
 .db-table th{ text-align:left; padding:4px 6px; color:#aaa; font-weight:500; border-bottom:0.5px solid rgba(0,0,0,.06); }
@@ -284,7 +297,7 @@
              pinta una sola vez, al cruzar de las proximas a las pasadas. --}}
         @if(!$a->futuro && !$yaPasadasPintado)
         @php $yaPasadasPintado = true; @endphp
-        <tr><td colspan="4" style="padding:6px 8px;font-size:11px;color:#9ca3af;background:rgba(0,0,0,.015);">Ya pasados</td></tr>
+        <tr class="db-sep"><td colspan="4" style="padding:6px 8px;font-size:11px;color:#9ca3af;background:rgba(0,0,0,.015);">Ya pasados</td></tr>
         @endif
         <tr @if($a->fichaje_id) data-fid="{{ $a->fichaje_id }}" @endif>
           <td>
@@ -938,5 +951,102 @@ document.querySelectorAll('.db-card table.db-table').forEach(tabla => {
     caja.appendChild(tabla);
     if (alto > 0) caja.style.maxHeight = alto + 'px';
 });
+</script>
+
+{{-- Bloques plegables. Igual que el scroll de arriba: en un solo punto, para que los bloques que
+     se añadan después lo hereden sin tocar nada.
+
+     Va DESPUÉS del script de alturas a propósito: aquel mide con getBoundingClientRect, y sobre
+     un bloque ya plegado mediría cero. --}}
+<script>
+(function () {
+    // El estado se guarda por bloque, para que plegar lo que no te interesa aguante entre
+    // visitas. La clave es el texto del título: los bloques no tienen id, y usar su posición
+    // haría que insertar uno nuevo desplazara el estado de todos los demás.
+    const GUARDADO = 'db-cerrados:{{ $project->slug }}';
+    let cerrados;
+    try { cerrados = new Set(JSON.parse(localStorage.getItem(GUARDADO) || '[]')); }
+    catch (e) { cerrados = new Set(); }
+
+    const guardar = () => {
+        try { localStorage.setItem(GUARDADO, JSON.stringify([...cerrados])); } catch (e) {}
+    };
+
+    // Dos bloques comparten título ("Limpieza completada sin imputar" sale en dos variantes de
+    // maquetación), así que al repetirse se numera: si no, plegar uno plegaría el otro.
+    const vistas = new Map();
+
+    document.querySelectorAll('.db-card').forEach(tarjeta => {
+        const titulo = tarjeta.querySelector('.db-title');
+        if (!titulo || titulo.dataset.plegable === '1') return;
+        titulo.dataset.plegable = '1';
+
+        // El texto del título SIN el tooltip: su contenido es largo y cambia cada vez que se
+        // reescribe la ayuda, y entonces el estado guardado dejaría de encontrarse.
+        const soloTexto = titulo.cloneNode(true);
+        soloTexto.querySelectorAll('.app-tooltip').forEach(t => t.remove());
+        const base = (soloTexto.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+        const n = (vistas.get(base) || 0) + 1;
+        vistas.set(base, n);
+        const clave = n > 1 ? base + ' #' + n : base;
+
+        // Todo lo que va detrás del título pasa a un contenedor, que es lo que se pliega.
+        const cuerpo = document.createElement('div');
+        cuerpo.className = 'db-body';
+        while (titulo.nextSibling) cuerpo.appendChild(titulo.nextSibling);
+        tarjeta.appendChild(cuerpo);
+
+        const mando = document.createElement('span');
+        mando.className = 'db-mando';
+
+        // Chip solo en los listados. Las filas separadoras no son elementos: contarlas diría que
+        // hay una incidencia más de las que hay.
+        const filas = [...cuerpo.querySelectorAll('table.db-table tbody tr')]
+            .filter(tr => !tr.classList.contains('db-sep'));
+        if (cuerpo.querySelector('table.db-table')) {
+            const chip = document.createElement('span');
+            chip.className = 'db-chip';
+            chip.textContent = filas.length;
+            chip.title = filas.length === 1 ? '1 elemento' : filas.length + ' elementos';
+            mando.appendChild(chip);
+        }
+
+        const flecha = document.createElement('span');
+        flecha.className = 'db-flecha';
+        flecha.textContent = '▾';
+        mando.appendChild(flecha);
+
+        titulo.appendChild(mando);
+        titulo.classList.add('db-plegable');
+
+        // Accesible con teclado: el título no es un <button>, así que se le da rol y foco.
+        titulo.setAttribute('role', 'button');
+        titulo.setAttribute('tabindex', '0');
+
+        const pintar = (cerrado) => {
+            tarjeta.classList.toggle('db-cerrado', cerrado);
+            cuerpo.hidden = cerrado;
+            titulo.setAttribute('aria-expanded', cerrado ? 'false' : 'true');
+        };
+        pintar(cerrados.has(clave));
+
+        const alternar = () => {
+            const cerrado = !tarjeta.classList.contains('db-cerrado');
+            pintar(cerrado);
+            cerrado ? cerrados.add(clave) : cerrados.delete(clave);
+            guardar();
+        };
+
+        titulo.addEventListener('click', (e) => {
+            // El icono de ayuda vive dentro del título y abre su propio tooltip: pulsarlo no
+            // debe plegar el bloque.
+            if (e.target.closest('.app-tooltip')) return;
+            alternar();
+        });
+        titulo.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); alternar(); }
+        });
+    });
+})();
 </script>
 </x-app-layout>
