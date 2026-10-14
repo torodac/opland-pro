@@ -617,12 +617,16 @@ class DashboardController extends Controller
             ->keyBy('id');
 
         // La tarea de limpieza "oficial" del checkout es la que Breezeway enlaza vía id_reservas.
-        // Se excluyen las Canceladas: una reserva puede tener una tarea cancelada + una activa
-        // a la vez (ver VmGenerateCheckoutTasksCommand), y solo la activa cuenta aquí.
+        // Se excluyen las que no se van a hacer -- Canceladas y Descartadas: una reserva puede
+        // tener una descartada + una activa a la vez (ver VmGenerateCheckoutTasksCommand), y solo
+        // la activa cuenta aquí. Mismo criterio que el planificador de limpieza, de donde sale la
+        // constante, para que los dos sitios no puedan discrepar sobre qué trabajo hay.
+        //
+        // COALESCE y no "estado != ...": con un estado a NULL, un NOT IN descartaría la fila.
         $tareasPorReserva = DB::table('vm_tareas_limpieza')
             ->whereIn('id_reservas', $checkouts->pluck('id'))
             ->where('deleted', 0)
-            ->where('estado', '!=', 'Cancelada')
+            ->whereNotIn(DB::raw("COALESCE(estado, '')"), PlanificadorLimpiezaController::ESTADOS_SIN_PLANIFICAR)
             ->get(['id', 'id_reservas', 'control_user'])
             ->keyBy('id_reservas');
 

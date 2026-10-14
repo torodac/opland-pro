@@ -11,6 +11,9 @@ use Illuminate\Support\Facades\DB;
 
 class PlanificadorLimpiezaController extends Controller
 {
+    // Limpiezas que no se van a hacer. Ni se planifican ni cuentan como carga de trabajo.
+    public const ESTADOS_SIN_PLANIFICAR = ['Descartada', 'Cancelada'];
+
     public function index(Request $request, Project $project)
     {
         $fecha = $request->input('fecha');
@@ -21,6 +24,10 @@ class PlanificadorLimpiezaController extends Controller
         $tareas = DB::table('vm_tareas_limpieza as t')
             ->join('vm_propiedades as p', 'p.id', '=', 't.id_propiedades')
             ->where('t.deleted', 0)
+            // Una limpieza descartada o cancelada no se va a hacer, asi que no hay nada que
+            // planificar ni a quien asignarsela: ocupaba sitio y sumaba carga que no existe.
+            // COALESCE y no "estado != ...": con NULL, un NOT IN descartaria la fila entera.
+            ->whereNotIn(DB::raw("COALESCE(t.estado, '')"), self::ESTADOS_SIN_PLANIFICAR)
             ->where('t.fecha_planificada', $fecha)
             ->orderBy('p.nombre')
             ->get([

@@ -135,7 +135,9 @@
 
   {{-- Flujo semanal y carga de limpieza (navegable) ---------------------------}}
   @if($verReservas)
-  <div style="margin-bottom:12px;">
+  {{-- data-plegable-clave: el estado plegado se guarda con esta clave y no con el texto de la
+       cabecera, porque ahí va el rango de la semana y cambiaría cada vez que se navega. --}}
+  <div style="margin-bottom:12px;" data-plegable-clave="carga-semanal">
     @include('partials.vm-carga-semanal')
   </div>
   @endif
@@ -976,8 +978,18 @@ document.querySelectorAll('.db-card table.db-table').forEach(tabla => {
     // maquetación), así que al repetirse se numera: si no, plegar uno plegaría el otro.
     const vistas = new Map();
 
-    document.querySelectorAll('.db-card').forEach(tarjeta => {
-        const titulo = tarjeta.querySelector('.db-title');
+    // Dos tipos de bloque: las tarjetas estandar del dashboard y el widget de carga semanal,
+    // que trae su propio diseno y su propia cabecera. Se listan aqui en vez de duplicar el
+    // script, para que anadir un tercero sea una linea.
+    const TIPOS = [
+        { bloque: '.db-card',     cabecera: '.db-title' },
+        { bloque: '.vmcs-widget', cabecera: '.vmcs-header' },
+    ];
+    const todos = [];
+    TIPOS.forEach(t => document.querySelectorAll(t.bloque).forEach(el => todos.push([el, t.cabecera])));
+
+    todos.forEach(([tarjeta, selCabecera]) => {
+        const titulo = tarjeta.querySelector(selCabecera);
         if (!titulo || titulo.dataset.plegable === '1') return;
         titulo.dataset.plegable = '1';
 
@@ -985,7 +997,12 @@ document.querySelectorAll('.db-card table.db-table').forEach(tabla => {
         // reescribe la ayuda, y entonces el estado guardado dejaría de encontrarse.
         const soloTexto = titulo.cloneNode(true);
         soloTexto.querySelectorAll('.app-tooltip').forEach(t => t.remove());
-        const base = (soloTexto.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+        // Una clave explicita en el contenedor manda sobre el texto: la cabecera del widget de
+        // carga semanal incluye el rango de fechas, que cambia al navegar de semana.
+        const explicita = tarjeta.dataset.plegableClave
+            || tarjeta.closest('[data-plegable-clave]')?.dataset.plegableClave;
+        const base = explicita
+            || (soloTexto.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60);
         const n = (vistas.get(base) || 0) + 1;
         vistas.set(base, n);
         const clave = n > 1 ? base + ' #' + n : base;
@@ -1038,9 +1055,9 @@ document.querySelectorAll('.db-card table.db-table').forEach(tabla => {
         };
 
         titulo.addEventListener('click', (e) => {
-            // El icono de ayuda vive dentro del título y abre su propio tooltip: pulsarlo no
-            // debe plegar el bloque.
-            if (e.target.closest('.app-tooltip')) return;
+            // Lo que ya hace algo al pulsarlo no debe plegar ademas: el icono de ayuda con su
+            // tooltip, y la navegacion de semana del widget de carga, que vive en su cabecera.
+            if (e.target.closest('.app-tooltip, button, a, input, select, label')) return;
             alternar();
         });
         titulo.addEventListener('keydown', (e) => {
