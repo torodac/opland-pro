@@ -158,6 +158,8 @@ class AlarmasController extends Controller
             'titular_doc'  => 'nullable|string|max:20',
             'tipo_alarma'  => 'nullable|string|max:255',
             'num_contrato' => 'nullable|string|max:255',
+            'codigo_panel' => 'nullable|string|max:255',
+            'informacion_extra' => 'nullable|string|max:4000',
             'app_usuario'  => 'nullable|string|max:255',
             'observaciones' => 'nullable|string|max:4000',
             'palabra_clave' => 'nullable|string|max:255',
@@ -261,7 +263,7 @@ class AlarmasController extends Controller
             ->where(fn($x) => $x->where('a.deleted', 0)->orWhereNull('a.deleted'))
             ->selectRaw("
                 a.id, a.id_propiedades, a.empresa, a.titular, a.titular_doc, a.tipo_alarma,
-                a.num_contrato, a.app_usuario, a.observaciones,
+                a.num_contrato, a.codigo_panel, a.informacion_extra, a.app_usuario, a.observaciones,
                 a.contacto1_nombre, a.contacto1_telefono,
                 a.contacto2_nombre, a.contacto2_telefono,
                 a.contacto3_nombre, a.contacto3_telefono,

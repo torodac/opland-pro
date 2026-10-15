@@ -89,6 +89,16 @@
       </div>
 
       <div class="al-f">
+        <label for="codigo_panel">Código del panel</label>
+        <input type="text" name="codigo_panel" id="codigo_panel" value="{{ $val('codigo_panel') }}" maxlength="255">
+      </div>
+
+      <div class="al-f">
+        <label for="informacion_extra">Información extra</label>
+        <input type="text" name="informacion_extra" id="informacion_extra" value="{{ $val('informacion_extra') }}" maxlength="4000">
+      </div>
+
+      <div class="al-f">
         <label for="titular">Titular de la alarma</label>
         <input type="text" name="titular" id="titular" value="{{ $val('titular') }}" maxlength="255">
       </div>

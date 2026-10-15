@@ -88,6 +88,16 @@
       <p class="al-val">{{ $alarma->num_contrato ?: '—' }}</p>
     </div>
     <div class="al-cell">
+      <p class="al-lbl">Código del panel</p>
+      {{-- A la vista, no oculto como la palabra clave: por sí solo no da acceso remoto a nada, y
+           tenerlo delante es justo lo que hace útil esta ficha cuando salta una alarma. --}}
+      <p class="al-val">{{ $alarma->codigo_panel ?: '—' }}</p>
+    </div>
+    <div class="al-cell">
+      <p class="al-lbl">Información extra</p>
+      <p class="al-val" style="white-space:pre-line">{{ $alarma->informacion_extra ?: '—' }}</p>
+    </div>
+    <div class="al-cell">
       <p class="al-lbl">Titular</p>
       <p class="al-val">{{ $alarma->titular ?: '—' }}</p>
     </div>
