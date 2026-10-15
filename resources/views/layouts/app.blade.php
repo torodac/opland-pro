@@ -74,7 +74,7 @@
                 @foreach($project->menuItems as $item)
                     @php
                         $itemTable = $item->projectTable;
-                        if ($itemTable && !auth()->user()?->canViewTable($project, $itemTable->name)) continue;
+                        if ($itemTable && !($itemTable->is_virtual ?? false) && !auth()->user()?->canViewTable($project, $itemTable->name)) continue;
                     @endphp
                     @if($item->children->count())
                         {{-- Ítem con submenú --}}

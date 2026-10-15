@@ -174,6 +174,110 @@ class HealthController extends Controller
         return response()->json($data);
     }
 
+
+    // ── Push subscriptions ────────────────────────────────────────────────────
+
+    public function pushSubscribe(Request $request)
+    {
+        $user = $this->authenticate($request);
+        $request->validate([
+            'endpoint' => 'required|string|max:1000',
+            'p256dh'   => 'required|string|max:500',
+            'auth'     => 'required|string|max:200',
+        ]);
+
+        DB::table('health_push_subscriptions')->updateOrInsert(
+            ['admin_user_id' => $user->id, 'endpoint' => $request->endpoint],
+            [
+                'p256dh'    => $request->p256dh,
+                'auth'      => $request->auth,
+                'updatedat' => now(),
+                'createdat' => now(),
+            ]
+        );
+
+        return response()->json(['ok' => true]);
+    }
+
+
+    // ── Exercise ──────────────────────────────────────────────────────────────
+
+    public function muscleGroups(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $this->authenticate($request);
+        $groups    = DB::table('health_muscle_groups')->orderBy('orden')->get();
+        $exercises = DB::table('health_exercises')->orderBy('muscle_group_id')->orderBy('orden')->get();
+        return response()->json(['groups' => $groups, 'exercises' => $exercises]);
+    }
+
+    public function exerciseLog(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $user = $this->authenticate($request);
+        $date = $request->query('date', now()->toDateString());
+        $rows = DB::table('health_exercise_log')
+            ->where('admin_user_id', $user->id)
+            ->where('log_date', $date)
+            ->get(['exercise_id', 'count', 'weight_kg']);
+        return response()->json(['log' => $rows]);
+    }
+
+    public function toggleExercise(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $user = $this->authenticate($request);
+        $request->validate(['date' => 'required|date', 'exercise_id' => 'required|integer',
+            'weight_kg' => 'nullable|numeric|min:0|max:999']);
+        DB::statement(
+            'INSERT INTO health_exercise_log (admin_user_id, log_date, exercise_id, count, created_at, updated_at)
+             VALUES (?, ?, ?, 1, now(), now())
+             ON CONFLICT (admin_user_id, log_date, exercise_id)
+             DO UPDATE SET count = health_exercise_log.count + 1, updated_at = now()',
+            [$user->id, $request->date, $request->exercise_id]
+        );
+        // Actualizar peso si se ha enviado
+        if ($request->filled('weight_kg')) {
+            DB::table('health_exercise_log')
+                ->where('admin_user_id', $user->id)
+                ->where('log_date', $request->date)
+                ->where('exercise_id', $request->exercise_id)
+                ->update(['weight_kg' => $request->weight_kg]);
+        }
+        $row = DB::table('health_exercise_log')
+            ->where('admin_user_id', $user->id)
+            ->where('log_date', $request->date)
+            ->where('exercise_id', $request->exercise_id)
+            ->first(['count', 'weight_kg']);
+        return response()->json(['count' => $row->count, 'weight_kg' => $row->weight_kg]);
+    }
+
+    public function updateExerciseWeight(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $user = $this->authenticate($request);
+        $request->validate([
+            'date'        => 'required|date',
+            'exercise_id' => 'required|integer',
+            'weight_kg'   => 'nullable|numeric|min:0|max:999',
+        ]);
+        $updated = DB::table('health_exercise_log')
+            ->where('admin_user_id', $user->id)
+            ->where('log_date', $request->date)
+            ->where('exercise_id', $request->exercise_id)
+            ->update(['weight_kg' => $request->weight_kg, 'updated_at' => now()]);
+        return response()->json(['ok' => (bool)$updated]);
+    }
+
+    public function removeExercise(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $user = $this->authenticate($request);
+        $date = $request->query('date');
+        $eid  = $request->query('exercise_id');
+        DB::table('health_exercise_log')
+            ->where('admin_user_id', $user->id)
+            ->where('log_date', $date)
+            ->where('exercise_id', $eid)
+            ->delete();
+        return response()->json(['ok' => true]);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private function authenticate(Request $request): object

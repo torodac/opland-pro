@@ -429,6 +429,31 @@
     @endif
     @endif
 
+    @if($rodcarFiltros ?? null)
+    <div class="mb-4 flex flex-col gap-2">
+      {{-- Titular --}}
+      <div class="flex flex-wrap items-center gap-2">
+        <span style="font-size:11px;color:#9ca3af;font-weight:700;letter-spacing:.05em;min-width:48px">TITULAR</span>
+        <a href="{{ request()->fullUrlWithQuery(['titular'=>null,'tipo'=>$rodcarFiltros['tipo_sel']??null,'page'=>null]) }}"
+           style="padding:4px 13px;border-radius:20px;border:1.5px solid {{ !$rodcarFiltros['titular_sel'] ? '#6366f1' : '#e5e7eb' }};background:{{ !$rodcarFiltros['titular_sel'] ? '#6366f1' : 'none' }};color:{{ !$rodcarFiltros['titular_sel'] ? '#fff' : '#6b7280' }};font-size:12px;font-weight:{{ !$rodcarFiltros['titular_sel'] ? '700' : '400' }};text-decoration:none">Todos</a>
+        @foreach($rodcarFiltros['titular'] as $t)
+        <a href="{{ request()->fullUrlWithQuery(['titular'=>$t,'tipo'=>$rodcarFiltros['tipo_sel']??null,'page'=>null]) }}"
+           style="padding:4px 13px;border-radius:20px;border:1.5px solid {{ $rodcarFiltros['titular_sel']===$t ? '#6366f1' : '#e5e7eb' }};background:{{ $rodcarFiltros['titular_sel']===$t ? '#6366f1' : 'none' }};color:{{ $rodcarFiltros['titular_sel']===$t ? '#fff' : '#6b7280' }};font-size:12px;font-weight:{{ $rodcarFiltros['titular_sel']===$t ? '700' : '400' }};text-decoration:none">{{ $t }}</a>
+        @endforeach
+      </div>
+      {{-- Tipo --}}
+      <div class="flex flex-wrap items-center gap-2">
+        <span style="font-size:11px;color:#9ca3af;font-weight:700;letter-spacing:.05em;min-width:48px">TIPO</span>
+        <a href="{{ request()->fullUrlWithQuery(['tipo'=>null,'titular'=>$rodcarFiltros['titular_sel']??null,'page'=>null]) }}"
+           style="padding:4px 13px;border-radius:20px;border:1.5px solid {{ !$rodcarFiltros['tipo_sel'] ? '#10b981' : '#e5e7eb' }};background:{{ !$rodcarFiltros['tipo_sel'] ? '#10b981' : 'none' }};color:{{ !$rodcarFiltros['tipo_sel'] ? '#fff' : '#6b7280' }};font-size:12px;font-weight:{{ !$rodcarFiltros['tipo_sel'] ? '700' : '400' }};text-decoration:none">Todos</a>
+        @foreach($rodcarFiltros['tipo'] as $tp)
+        <a href="{{ request()->fullUrlWithQuery(['tipo'=>$tp,'titular'=>$rodcarFiltros['titular_sel']??null,'page'=>null]) }}"
+           style="padding:4px 13px;border-radius:20px;border:1.5px solid {{ $rodcarFiltros['tipo_sel']===$tp ? '#10b981' : '#e5e7eb' }};background:{{ $rodcarFiltros['tipo_sel']===$tp ? '#10b981' : 'none' }};color:{{ $rodcarFiltros['tipo_sel']===$tp ? '#fff' : '#6b7280' }};font-size:12px;font-weight:{{ $rodcarFiltros['tipo_sel']===$tp ? '700' : '400' }};text-decoration:none">{{ $tp }}</a>
+        @endforeach
+      </div>
+    </div>
+    @endif
+
     @if($icneaSync ?? null)
     <div class="flex items-center gap-3 mb-3">
         <span class="text-xs text-gray-400">
@@ -893,7 +918,7 @@
                                     </button>
                                     <div x-show="open"
                                          class="absolute right-6 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 text-sm">
-                                        <a href="{{ ($projectTable->name === 'facturas' && $project->slug === 'opland') ? route('opland.factura_form.show', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : (($projectTable->name === 'clientes' && $project->slug === 'nf') ? route('nf.clientes_form', [$project->slug, $registro->id]) : route('ficha', [$project->slug, $projectTable->name, $registro->id]))) }}"
+                                        <a href="{{ ($projectTable->name === 'facturas' && $project->slug === 'opland') ? route('opland.factura_form.show', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : (($projectTable->name === 'clientes' && $project->slug === 'nf') ? route('nf.clientes_form', [$project->slug, $registro->id]) : (($projectTable->name === 'clientes' && $project->slug === 'clase') ? route('clase.alumnos_form', [$project->slug, $registro->id]) : route('ficha', [$project->slug, $projectTable->name, $registro->id])))) }}"
                                            class="flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50">
                                             Ver ficha
                                         </a>
@@ -938,7 +963,7 @@
                                 }
                             @endphp
                             <tr class="hover:bg-gray-50 cursor-pointer {{ $estadoFila ? 'fila-' . $estadoFila : '' }}"
-                                onclick="window.location='{{ $projectTable->name === 'fichaje' ? route('vm.fichaje_form', [$project->slug, $registro->id]) : ($projectTable->name === 'usuarios' && $project->slug === 'vm' ? route('vm.usuario_form', [$project->slug, $registro->id]) : (($projectTable->name === 'facturas' && $project->slug === 'opland') ? route('opland.factura_form.show', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : (($projectTable->name === 'clientes' && $project->slug === 'nf') ? route('nf.clientes_form', [$project->slug, $registro->id]) : route('ficha', [$project->slug, $projectTable->name, $registro->id]))))) }}'">
+                                onclick="window.location='{{ $projectTable->name === 'fichaje' ? route('vm.fichaje_form', [$project->slug, $registro->id]) : ($projectTable->name === 'usuarios' && $project->slug === 'vm' ? route('vm.usuario_form', [$project->slug, $registro->id]) : (($projectTable->name === 'facturas' && $project->slug === 'opland') ? route('opland.factura_form.show', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : (($projectTable->name === 'clientes' && $project->slug === 'nf') ? route('nf.clientes_form', [$project->slug, $registro->id]) : (($projectTable->name === 'clientes' && $project->slug === 'clase') ? route('clase.alumnos_form', [$project->slug, $registro->id]) : route('ficha', [$project->slug, $projectTable->name, $registro->id])))))) }}'">
                                 @if($esCuotasProvisional)
                                     <td class="pl-3 pr-0 py-3 w-8" onclick="event.stopPropagation()">
                                         <button type="button" onclick="toggleCuotaHistorico({{ $registro->id }}, this)"
@@ -1015,7 +1040,7 @@
                                     </button>
                                     <div x-show="open"
                                          class="absolute right-6 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 text-sm">
-                                        <a href="{{ ($projectTable->name === 'facturas' && $project->slug === 'opland') ? route('opland.factura_form.show', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : (($projectTable->name === 'clientes' && $project->slug === 'nf') ? route('nf.clientes_form', [$project->slug, $registro->id]) : route('ficha', [$project->slug, $projectTable->name, $registro->id]))) }}"
+                                        <a href="{{ ($projectTable->name === 'facturas' && $project->slug === 'opland') ? route('opland.factura_form.show', [$project->slug, $registro->id]) : (in_array($projectTable->name, ['tareas_limpieza','tareas_mantenimiento','tareas_piscinas']) ? url('/vm/tareas_' . ['tareas_limpieza'=>'limpieza','tareas_mantenimiento'=>'mantenimiento','tareas_piscinas'=>'piscina'][$projectTable->name] . '_form/' . $registro->id) : (($projectTable->name === 'clientes' && $project->slug === 'nf') ? route('nf.clientes_form', [$project->slug, $registro->id]) : (($projectTable->name === 'clientes' && $project->slug === 'clase') ? route('clase.alumnos_form', [$project->slug, $registro->id]) : route('ficha', [$project->slug, $projectTable->name, $registro->id])))) }}"
                                            class="flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50">
                                             Ver ficha
                                         </a>
