@@ -61,9 +61,15 @@ $tipoLabels = \App\Services\VmAusenciaTipos::LABEL_HORARIO;
    de dias para que se lea como informacion y no como otra cabecera mas. */
 .hor-table tr.hor-checkins th { background:#eef4fb; border-bottom:0; font-weight:500; padding:3px 4px; }
 .hor-table tr.hor-checkins th.col-user { color:#8b9bb0; font-size:10px; text-transform:uppercase; letter-spacing:.04em; }
-.chk-pill { display:inline-block; min-width:18px; padding:1px 6px; border-radius:999px;
-            background:#2E7D63; color:#fff; font-size:10px; font-weight:700; line-height:16px; cursor:default; }
+/* Sin pastilla: el icono de entrada y la cifra, en el verde de las llegadas. */
+.chk-ent { display:inline-flex; align-items:center; gap:3px; color:#2E7D63; font-size:11px;
+           font-weight:700; line-height:1; cursor:default; }
+.chk-ent svg { width:12px; height:12px; flex:0 0 auto; }
 .chk-cero { color:#c7d2de; }
+/* El tooltip de las entradas se abre hacia ABAJO. Hacia arriba quedaba fuera del .dept-block, y
+   ese bloque tiene overflow para el scroll horizontal, asi que lo recortaba: parecia que lo
+   tapaba la tabla de encima. Hacia abajo cae sobre su propia tabla, dentro del bloque. */
+.chk-tt .app-tooltip-box { bottom:auto; top:100%; margin-bottom:0; margin-top:6px; z-index:60; }
 .hor-table th.th-wk { color:#d1d5db; }
 .hor-table th .fest-badge { font-size:9px; font-weight:400; display:block; overflow-wrap:anywhere; }
 .hor-table td { border:1px solid #e5e7eb; padding:3px 4px; text-align:center; height:34px; vertical-align:middle; }
@@ -264,8 +270,18 @@ $deptLabel = $dept->nombre ?: 'Sin departamento';
                     @endphp
                     <th>
                         @if($props)
-                            <span class="app-tooltip">
-                                <span class="chk-pill">{{ count($props) }}</span>
+                            <span class="app-tooltip chk-tt">
+                                <span class="chk-ent">
+                                    {{-- Icono "log-in" de Feather, en linea como el resto de los
+                                         de esta pantalla: aqui no hay libreria de iconos cargada. --}}
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                         stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                                        <polyline points="10 17 15 12 10 7"/>
+                                        <line x1="15" y1="12" x2="3" y2="12"/>
+                                    </svg>
+                                    {{ count($props) }}
+                                </span>
                                 <span class="app-tooltip-box" style="text-align:left;">
                                     {{ count($props) }} {{ count($props) === 1 ? 'entrada' : 'entradas' }}:<br>
                                     {!! implode('<br>', array_map('e', $props)) !!}
