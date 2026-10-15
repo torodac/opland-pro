@@ -55,6 +55,11 @@ Schedule::command('admin:informe-fallos-diario')->dailyAt('07:45')->withoutOverl
 // correo fijo que casi siempre llega vacío se aprende a ignorar, y este avisa de dinero.
 Schedule::command('vm:avisar-limpiezas-sin-reserva')->dailyAt('08:00')->withoutOverlapping();
 
+// Estado de las cerraduras Nuki (bateria) a vm_cerraduras, para el aviso del dashboard. Una vez
+// al dia basta: una pila no baja de un 30% a cero en unas horas, y asi no se llama a un tercero
+// en cada carga de pantalla. Solo lectura: el comando nunca abre ni cierra nada.
+Schedule::command('vm:sync-nuki')->dailyAt('06:45')->withoutOverlapping();
+
 // Cierra automáticamente los fichajes del día anterior que siguen abiertos
 Schedule::call(function () {
     // Se ejecuta a las 08:00 — procesa fichajes del día anterior

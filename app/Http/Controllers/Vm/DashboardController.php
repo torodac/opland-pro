@@ -12,7 +12,9 @@ use App\Services\RoleHierarchy;
 use App\Services\VmAusenciaTipos;
 use App\Services\VmFichajePermisos;
 use App\Services\VmHorasService;
+use App\Console\Commands\VmSyncNukiCommand;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class DashboardController extends Controller
 {
@@ -253,6 +255,24 @@ class DashboardController extends Controller
             ->orderByDesc('t.fecha_planificada')
             ->get(['t.id', 't.nombre', 't.fecha_planificada', 't.estado',
                    't.breezeway_task_id', 'p.nombre as propiedad']);
+
+        // ── Cerraduras Nuki con la batería baja ──────────────────────────────
+        // Se lee del espejo local (vm:sync-nuki, 06:45), no de la API de Nuki: son 49 cerraduras
+        // y casi un segundo de espera, y esto se pinta en cada carga del dashboard.
+        //
+        // Las críticas primero aunque su porcentaje no sea el más bajo: cuando Nuki marca
+        // batteryCritical es que la cerradura ya avisa por su cuenta, y esa va antes.
+        $cerradurasBateria = Schema::hasTable('vm_cerraduras')
+            ? DB::table('vm_cerraduras as c')
+                ->leftJoin('vm_propiedades as p', 'p.id', '=', 'c.id_propiedades')
+                ->whereNotNull('c.bateria')
+                ->where(fn($q) => $q->where('c.bateria', '<=', VmSyncNukiCommand::umbral())
+                                    ->orWhere('c.bateria_critica', true))
+                ->orderByDesc('c.bateria_critica')
+                ->orderBy('c.bateria')
+                ->get(['c.nuki_smartlock_id', 'c.nombre', 'c.bateria', 'c.bateria_critica',
+                       'c.leido_at', 'p.nombre as propiedad', 'p.id as propiedad_id'])
+            : collect();
 
         // ── Personas de Breezeway sin usuario mapeado en Opland ──────────────
         $breezewayPendientes = DB::table('vm_breezeway_pendientes')
@@ -570,7 +590,7 @@ class DashboardController extends Controller
             'conciliaciones',
             'tareasLimpieza', 'tareasMantPisc', 'breezewayPendientes', 'limpiezasSinReserva',
             'incidenciasFichaje', 'incidenciasAusencias', 'desviaciones', 'recordatoriosSscc',
-            'conflictosAusencias', 'informesPendientes',
+            'conflictosAusencias', 'informesPendientes', 'cerradurasBateria',
             'usuariosFichaje', 'puedeFicharSinLimite', 'fechaMinimaFichaje',
             'vmUsuario', 'proximasAusencias',
             'verReservas', 'verRRHH', 'verAusenciasSin', 'verLimpSinImp', 'verMantSinImp',

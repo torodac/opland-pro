@@ -49,6 +49,13 @@ $tipoLabels = \App\Services\VmAusenciaTipos::LABEL_HORARIO;
 .hor-table th { padding:5px 4px; text-align:center; font-size:11px; font-weight:600; color:#6b7280; background:#f9fafb; border:1px solid #e5e7eb; }
 .hor-table th.col-user { text-align:left; padding-left:8px; white-space:nowrap; width:{{ $colUserMaxLen }}ch; }
 .hor-table th.th-fest { background:#ffe0e0; color:#cc0000; }
+/* Fila de entradas del dia, encima del cuadrante de Recepcion. Fondo distinto del de la cabecera
+   de dias para que se lea como informacion y no como otra cabecera mas. */
+.hor-table tr.hor-checkins th { background:#eef4fb; border-bottom:0; font-weight:500; padding:3px 4px; }
+.hor-table tr.hor-checkins th.col-user { color:#8b9bb0; font-size:10px; text-transform:uppercase; letter-spacing:.04em; }
+.chk-pill { display:inline-block; min-width:18px; padding:1px 6px; border-radius:999px;
+            background:#2E7D63; color:#fff; font-size:10px; font-weight:700; line-height:16px; cursor:default; }
+.chk-cero { color:#c7d2de; }
 .hor-table th.th-wk { color:#d1d5db; }
 .hor-table th .fest-badge { font-size:9px; font-weight:400; display:block; overflow-wrap:anywhere; }
 .hor-table td { border:1px solid #e5e7eb; padding:3px 4px; text-align:center; height:34px; vertical-align:middle; }
@@ -215,6 +222,33 @@ $deptLabel = $dept->nombre ?: 'Sin departamento';
     </div>
     <table class="hor-table">
         <thead>
+            {{-- Entradas del día, solo encima del cuadrante de Recepción: son ellos quienes
+                 reciben al huésped, así que es el dato que dice si el turno está bien
+                 dimensionado. En el resto de departamentos sería ruido. --}}
+            @if((int) $dept->id === 3)
+            <tr class="hor-checkins">
+                <th class="col-user">Entradas</th>
+                @foreach($dates as $d)
+                    @php
+                        $ds    = $d->toDateString();
+                        $props = $checkinsPorDia[$ds] ?? [];
+                    @endphp
+                    <th>
+                        @if($props)
+                            <span class="app-tooltip">
+                                <span class="chk-pill">{{ count($props) }}</span>
+                                <span class="app-tooltip-box" style="text-align:left;">
+                                    {{ count($props) }} {{ count($props) === 1 ? 'entrada' : 'entradas' }}:<br>
+                                    {!! implode('<br>', array_map('e', $props)) !!}
+                                </span>
+                            </span>
+                        @else
+                            <span class="chk-cero">·</span>
+                        @endif
+                    </th>
+                @endforeach
+            </tr>
+            @endif
             <tr>
                 <th class="col-user">Usuario</th>
                 @foreach($dates as $di => $d)

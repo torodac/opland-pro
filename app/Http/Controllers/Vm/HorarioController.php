@@ -96,6 +96,23 @@ class HorarioController extends Controller
             ->pluck('nombre', 'fecha_fecha')
             ->toArray();
 
+        // Entradas de cada día de la semana, para el cuadrante de Recepción: son ellos quienes
+        // reciben al huésped, así que cuántas llegadas hay ese día es lo que decide si el turno
+        // está bien dimensionado. Se agrupa por fecha con el detalle de propiedades para el
+        // tooltip. Las canceladas no cuentan: no llega nadie.
+        $checkinsPorDia = [];
+        $reservasSemana = DB::table('vm_reservas as r')
+            ->leftJoin('vm_propiedades as p', 'p.id', '=', 'r.id_propiedades')
+            ->whereBetween('r.check_in_date', [$weekStart->toDateString(), $weekEnd->toDateString()])
+            ->where(fn($q) => $q->where('r.deleted', 0)->orWhereNull('r.deleted'))
+            ->where('r.booking_status', '<>', 'cancelled')
+            ->orderBy('p.nombre')
+            ->get(['r.check_in_date', 'r.booking_id', 'p.nombre as propiedad']);
+
+        foreach ($reservasSemana as $r) {
+            $checkinsPorDia[$r->check_in_date][] = $r->propiedad ?: ('reserva ' . $r->booking_id);
+        }
+
         // Saldo histórico hasta hoy (mismo cálculo y desglose que "Saldo histórico" del informe
         // mensual), para mostrar junto al nombre en la celda de usuario.
         $hoy = now()->toDateString();
@@ -128,6 +145,7 @@ class HorarioController extends Controller
             'horariosMap'    => $horariosMap,
             'ausenciasMap'   => $ausenciasMap,
             'festivosMap'    => $festivosMap,
+            'checkinsPorDia' => $checkinsPorDia,
             'saldoMap'       => $saldoMap,
             'colUserMaxLen'  => $colUserMaxLen,
             'prevWeek'       => $weekStart->copy()->subWeek()->toDateString(),

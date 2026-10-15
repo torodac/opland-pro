@@ -932,6 +932,51 @@ async function marcarSsccHecho(btn, id) {
 
   @endif
 
+@if($verReservas)
+{{-- Cerraduras con la bateria baja. Lo ve quien lleva las propiedades (mismos roles que el resto
+     de bloques de reservas), porque cambiar una pila es trabajo de campo, no de RRHH. --}}
+<div class="db-card" style="margin-bottom:12px;">
+  <p class="db-title"><i class="ti ti-battery-2"></i> Cerraduras con la bateria baja <span class="app-tooltip"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;cursor:default;margin-left:4px;font-style:normal;">i</span><span class="app-tooltip-box">Cerraduras Nuki al {{ \App\Console\Commands\VmSyncNukiCommand::umbral() }}% de bateria o menos, y las que Nuki marca como criticas aunque su porcentaje sea mayor.<br><br>El dato se lee una vez al dia (06:45) y se guarda: no se consulta a Nuki en cada carga de esta pantalla. La fecha de lectura va en la ultima columna.</span></span></p>
+  @if($cerradurasBateria->isEmpty())
+    <p class="empty">Ninguna por debajo del umbral</p>
+  @else
+  <table class="db-table">
+    <thead><tr><th>Cerradura</th><th>Propiedad</th><th style="text-align:right;">Bateria</th><th>Leido</th></tr></thead>
+    <tbody>
+      @foreach($cerradurasBateria as $c)
+      <tr>
+        <td style="font-weight:500;">{{ $c->nombre ?: 'Cerradura ' . $c->nuki_smartlock_id }}</td>
+        <td style="color:#6b7280;">
+          @if($c->propiedad_id)
+            <a target="_blank" rel="noopener" href="{{ route('ficha', [$project->slug, 'propiedades', $c->propiedad_id]) }}" style="color:#185FA5;text-decoration:none;">{{ $c->propiedad }}</a>
+          @else
+            {{-- Sin propiedad atada: el nombre de la cerradura en Nuki no casa con ninguna de
+                 forma inequivoca. El aviso vale igual, y atarla mal mandaria a alguien a la
+                 casa equivocada. --}}
+            <span style="color:#c1c5cb;">sin asociar</span>
+          @endif
+        </td>
+        <td style="text-align:right;white-space:nowrap;">
+          @php
+            $b = (int) $c->bateria;
+            [$fondo, $tinta] = $b <= 10 ? ['#FBE9E9', '#9B1C1C'] : ($b <= 20 ? ['#FDF0E3', '#9A5B00'] : ['#FDF6E3', '#8A6400']);
+          @endphp
+          <span style="background:{{ $fondo }};color:{{ $tinta }};padding:2px 8px;border-radius:6px;font-weight:600;font-variant-numeric:tabular-nums;">{{ $b }}%</span>
+          @if($c->bateria_critica)
+            <span class="badge-sm" style="background:#FBE9E9;color:#9B1C1C;margin-left:4px;">critica</span>
+          @endif
+        </td>
+        <td style="color:#9ca3af;font-size:12px;white-space:nowrap;">
+          {{ $c->leido_at ? \Carbon\Carbon::parse($c->leido_at)->diffForHumans() : '—' }}
+        </td>
+      </tr>
+      @endforeach
+    </tbody>
+  </table>
+  @endif
+</div>
+@endif
+
 @if($verRRHH)
 @include('partials.vm-fichaje-modal', ['project' => $project, 'usuarios' => $usuariosFichaje])
 @endif
