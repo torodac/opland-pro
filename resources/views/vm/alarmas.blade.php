@@ -44,6 +44,9 @@
 .al-prop{font-size:14px;font-weight:600;margin:0}
 .al-dir{font-size:12px;color:#888;margin:3px 0 0}
 .al-meta{font-size:12px;color:#666;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:4px 10px}
+.al-btn-buscar{font-size:13px;padding:6px 14px;border-radius:8px;border:0.5px solid rgba(0,0,0,.15);
+               background:#f3f4f6;color:#555;cursor:pointer}
+.al-btn-buscar:hover{background:#e9ebee}
 .al-tag{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;background:rgba(0,0,0,.05);color:#555;white-space:nowrap}
 /* El logo de la compania en lugar de su nombre. Alto fijo y ancho libre: los logos vienen con
    proporciones muy distintas (AJAX es apaisado, Sector Alarm es un circulo) y forzar los dos
@@ -66,13 +69,25 @@
          que haya forma de volver sin usar el botón del navegador. --}}
     <div class="al-chips">
         <a class="al-chip {{ $empresa === '' ? 'on' : '' }}"
-           href="{{ route('vm.alarmas', $project->slug) }}">
+           href="{{ route('vm.alarmas', array_filter([$project->slug, 'q' => $q])) }}">
             <p class="al-chip-n">{{ $total }}</p>
             <p class="al-chip-l">Todas</p>
         </a>
         @foreach($empresas as $e)
-            <a class="al-chip {{ $empresa === $e->empresa ? 'on' : '' }}"
-               href="{{ route('vm.alarmas', [$project->slug, 'empresa' => $e->empresa]) }}">
+            @php
+                // Pulsar la empresa ya elegida la quita y devuelve a "Todas": si no, la unica
+                // forma de deshacer el filtro era buscar la tarjeta de Todas. La busqueda de
+                // texto se conserva al cambiar de empresa, que son dos filtros distintos.
+                $seleccionada = $empresa === $e->empresa;
+                $destino = array_filter([
+                    $project->slug,
+                    'empresa' => $seleccionada ? '' : $e->empresa,
+                    'q'       => $q,
+                ]);
+            @endphp
+            <a class="al-chip {{ $seleccionada ? 'on' : '' }}"
+               href="{{ route('vm.alarmas', $destino) }}"
+               title="{{ $seleccionada ? 'Quitar el filtro de ' . $e->empresa : 'Ver solo las de ' . $e->empresa }}">
                 <div class="al-chip-top">
                     {{-- Mientras no haya logo de la empresa, el de Opland. --}}
                     <img class="al-chip-logo" alt="{{ $e->empresa }}"
@@ -84,10 +99,30 @@
         @endforeach
     </div>
 
+    {{-- Buscador por propiedad: es como se busca una alarma de verdad. Mismo aspecto que el del
+         resto de listados de Opland. --}}
+    <form method="GET" style="display:flex;gap:8px;margin:0 0 1rem;align-items:center">
+        @if($empresa !== '')<input type="hidden" name="empresa" value="{{ $empresa }}">@endif
+        <input type="text" name="q" value="{{ $q }}" placeholder="Buscar propiedad..."
+               style="flex:1;max-width:20rem;font-size:13px;border:0.5px solid rgba(0,0,0,.18);
+                      border-radius:8px;padding:6px 12px">
+        <button type="submit" class="al-btn-buscar">Buscar</button>
+        @if($q !== '')
+            <a href="{{ route('vm.alarmas', array_filter([$project->slug, 'empresa' => $empresa])) }}"
+               style="font-size:13px;color:#888;text-decoration:none;padding:6px 10px">Quitar filtro</a>
+        @endif
+    </form>
+
 
     @if($alarmas->isEmpty())
         <div class="al-empty">
-            @if($empresa !== '')
+            {{-- El mensaje nombra los filtros puestos: sin eso, buscar algo que no existe se
+                 parece demasiado a que no haya nada cargado. --}}
+            @if($q !== '' && $empresa !== '')
+                Ninguna propiedad de {{ $empresa }} coincide con «{{ $q }}».
+            @elseif($q !== '')
+                Ninguna propiedad coincide con «{{ $q }}».
+            @elseif($empresa !== '')
                 No hay propiedades con alarma de {{ $empresa }}.
             @else
                 Todavía no hay ninguna alarma registrada.

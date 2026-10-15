@@ -40,6 +40,9 @@
 .dark .al-cell{background:rgba(255,255,255,.04)}
 .al-lbl{font-size:11px;color:#888;margin:0 0 3px}
 .al-val{font-size:13px;font-weight:500;margin:0}
+/* Para valores largos (direcciones): parte en lineas y baja de cuerpo, para que la celda no se
+   estire y descuadre la rejilla. break-word evita que una calle sin espacios se salga. */
+.al-val-largo{font-size:11.5px;font-weight:500;line-height:1.35;overflow-wrap:anywhere}
 
 /* El recuadro sensible: un botón con pinta de campo tapado, para que se vea que hay algo y que
    pulsarlo tiene consecuencias. */
@@ -107,6 +110,12 @@
            style="color:#185FA5;text-decoration:none">{{ $alarma->propiedad }}</a>
       </p>
     </div>
+    <div class="al-cell">
+      <p class="al-lbl">Dirección de la propiedad</p>
+      {{-- Las direcciones son largas y de longitud muy dispar: se deja que partan en varias
+           líneas y se achica el texto, para que la celda no se estire y rompa la rejilla. --}}
+      <p class="al-val al-val-largo">{{ $alarma->direccion ?: '—' }}</p>
+    </div>
   </div>
 </div>
 
@@ -141,11 +150,11 @@
     apartado de abajo.
   </p>
 
-  <div class="al-grid3">
+  <div class="al-grid">
     @php
-        // Las tres celdas en orden: la palabra clave primero, y detrás el usuario y la
-        // contraseña de la app, que van juntos porque son del mismo sitio. Se declaran así, en
-        // vez de partir el bucle, para no repetir el recuadro tapado en dos ramas.
+        // Las cuatro celdas en orden: el código del panel, la palabra clave, y detrás el usuario
+        // y la contraseña de la app, que van juntos porque son del mismo sitio. Se declaran así,
+        // en vez de partir el bucle, para no repetir el recuadro tapado en dos ramas.
         $celdas = [
             ['secreto' => 'codigo_panel',  'tiene' => $alarma->tiene_codigo_panel],
             ['secreto' => 'palabra_clave', 'tiene' => $alarma->tiene_palabra_clave],
@@ -175,7 +184,19 @@
   </div>
 </div>
 
-{{-- ── Bloque 4: quién ha mirado qué ───────────────────────────────────── --}}
+{{-- ── Bloque 4: observaciones ─────────────────────────────────────────── --}}
+{{-- En bloque propio y no como una celda más: es texto libre de longitud imprevisible, y
+     metido en la rejilla estiraba su fila y descuadraba el resto. --}}
+<div class="al-card">
+  <div class="al-title"><i class="ti ti-notes"></i>Observaciones</div>
+  @if($alarma->observaciones)
+    <p class="al-val" style="white-space:pre-line;font-weight:400;line-height:1.45">{{ $alarma->observaciones }}</p>
+  @else
+    <p class="al-val" style="color:#aaa;font-weight:400">Sin observaciones.</p>
+  @endif
+</div>
+
+{{-- ── Bloque 5: quién ha mirado qué ───────────────────────────────────── --}}
 <div class="al-card al-plano">
   <div class="al-title"><i class="ti ti-eye"></i>Consultas registradas</div>
   <table class="al-tabla">

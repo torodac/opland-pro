@@ -40,6 +40,7 @@ class AlarmasController extends Controller
     public function index(Request $request, Project $project)
     {
         $empresa = trim((string) $request->input('empresa', ''));
+        $q       = trim((string) $request->input('q', ''));
 
         // Las tarjetas de cabecera: una por empresa de seguridad, con cuantas propiedades lleva.
         // Salen de los datos, no de una lista fija, para que una empresa nueva aparezca sola.
@@ -51,8 +52,12 @@ class AlarmasController extends Controller
             ->orderBy('empresa')
             ->get([DB::raw('empresa'), DB::raw('count(*) as propiedades')]);
 
+        // El buscador filtra por nombre de propiedad, que es como se busca una alarma: nadie
+        // recuerda el numero de contrato, pero si de que casa esta hablando. "Contiene" y sin
+        // distinguir mayusculas ni acentos de la forma en que lo hace la base.
         $alarmas = $this->baseQuery()
-            ->when($empresa !== '', fn($q) => $q->where('a.empresa', $empresa))
+            ->when($empresa !== '', fn($x) => $x->where('a.empresa', $empresa))
+            ->when($q !== '', fn($x) => $x->where('p.nombre', 'ILIKE', '%' . $q . '%'))
             ->orderBy('p.nombre')
             ->get();
 
@@ -61,6 +66,7 @@ class AlarmasController extends Controller
             'empresas'    => $empresas,
             'logos'       => $this->logos($empresas),
             'empresa'     => $empresa,
+            'q'           => $q,
             'alarmas'     => $alarmas,
             'total'       => $empresas->sum('propiedades'),
             'puedeEditar' => Auth::user()?->canEditTable($project, self::TABLA) ?? false,
