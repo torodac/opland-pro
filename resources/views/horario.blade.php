@@ -66,10 +66,12 @@ $tipoLabels = \App\Services\VmAusenciaTipos::LABEL_HORARIO;
            font-weight:700; line-height:1; cursor:default; }
 .chk-ent svg { width:12px; height:12px; flex:0 0 auto; }
 .chk-cero { color:#c7d2de; }
-/* El tooltip de las entradas se abre hacia ABAJO. Hacia arriba quedaba fuera del .dept-block, y
-   ese bloque tiene overflow para el scroll horizontal, asi que lo recortaba: parecia que lo
-   tapaba la tabla de encima. Hacia abajo cae sobre su propia tabla, dentro del bloque. */
-.chk-tt .app-tooltip-box { bottom:auto; top:100%; margin-bottom:0; margin-top:6px; z-index:60; }
+/* El tooltip de las entradas va en position:fixed y lo coloca el JS sobre el puntero.
+   Con posicionamiento normal no hay salida: hacia arriba lo recorta el overflow del
+   .dept-block (que existe para el scroll horizontal), y hacia abajo ocupa sitio dentro del
+   bloque y saca una barra de scroll vertical. En fixed sale del flujo y del recorte. */
+.chk-tt .app-tooltip-box { position:fixed; left:0; top:0; bottom:auto;
+                           margin:0; transform:translate(-50%, -100%); z-index:90; }
 .hor-table th.th-wk { color:#d1d5db; }
 .hor-table th .fest-badge { font-size:9px; font-weight:400; display:block; overflow-wrap:anywhere; }
 .hor-table td { border:1px solid #e5e7eb; padding:3px 4px; text-align:center; height:34px; vertical-align:middle; }
@@ -634,6 +636,52 @@ function doDelete() {
 document.addEventListener('click', e => {
     if (!e.target.closest('#hor-pop') && !e.target.closest('.cell-edit')) closePop();
 });
+
+// ── Tooltip de las entradas del día ─────────────────────────────────────────
+// Va en position:fixed y se coloca aquí, sobre el puntero. No es capricho: dentro del flujo no
+// hay sitio donde quepa. Hacia arriba lo recorta el overflow del .dept-block, que existe para el
+// scroll horizontal; hacia abajo ocupa espacio en el bloque y saca una barra de scroll vertical.
+//
+// Se delega en el documento porque esta fila se pinta en el bucle de departamentos, mucho
+// después de donde acabe este script.
+(function () {
+    const MARGEN = 10;   // separación entre el puntero y el pie del recuadro
+
+    const colocar = (caja, x, y) => {
+        caja.style.left = x + 'px';
+        caja.style.top  = (y - MARGEN) + 'px';
+
+        // Si se sale por un lado, se arrima al borde. Sin esto, los días del extremo derecho
+        // pintan el recuadro medio fuera de la ventana.
+        //
+        // Solo se corrige si de verdad se ha podido medir: con la caja aún sin pintar, el rect
+        // llega a cero y la "corrección" la desplazaría siempre, estuviera o no fuera.
+        const r = caja.getBoundingClientRect();
+        if (!r.width) return;
+
+        if (r.left < MARGEN) {
+            caja.style.left = (x + (MARGEN - r.left)) + 'px';
+        } else if (r.right > window.innerWidth - MARGEN) {
+            caja.style.left = (x - (r.right - window.innerWidth + MARGEN)) + 'px';
+        }
+    };
+
+    document.addEventListener('mouseover', (e) => {
+        const tt = e.target.closest('.chk-tt');
+        if (!tt) return;
+        const caja = tt.querySelector('.app-tooltip-box');
+        if (caja) colocar(caja, e.clientX, e.clientY);
+    });
+
+    // Al moverse dentro de la misma celda el recuadro sigue al puntero: si no, quedaría anclado
+    // donde se entró, que con celdas anchas se nota.
+    document.addEventListener('mousemove', (e) => {
+        const tt = e.target.closest('.chk-tt');
+        if (!tt) return;
+        const caja = tt.querySelector('.app-tooltip-box');
+        if (caja) colocar(caja, e.clientX, e.clientY);
+    });
+})();
 </script>
 
 </x-app-layout>
