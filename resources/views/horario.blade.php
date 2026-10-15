@@ -37,7 +37,15 @@ $tipoLabels = \App\Services\VmAusenciaTipos::LABEL_HORARIO;
    de cada bloque, no de la cabecera, y a tamaño completo competía con el nombre del
    departamento. La pastilla de estado, que ocupa su sitio para quien no puede publicar, se
    iguala para que la fila no baile según quién mire. */
-.btn-publicar-dept { font-size:9.75px; padding:3.75px 9px; border-radius:5px; }
+.pub-toggle { display:inline-flex; border:1px solid #E5E7EB; border-radius:5px; overflow:hidden; line-height:1; }
+.pub-opt { font-size:9.75px; font-weight:600; padding:3.75px 9px; border:0; background:#fff; color:#9CA3AF; cursor:pointer; }
+.pub-opt + .pub-opt { border-left:1px solid #E5E7EB; }
+.pub-opt:hover:not([aria-pressed="true"]) { background:#F3F4F6; color:#4B5563; }
+/* Solo la opcion activa se colorea: verde si el equipo la ve, ambar si no. Sobre la inactiva no
+   se usa color, para que de un vistazo se lea cual es el estado y no dos avisos a la vez. */
+.pub-opt[data-valor="1"][aria-pressed="true"] { background:#e8f2e2; color:#27500A; }
+.pub-opt[data-valor="0"][aria-pressed="true"] { background:#fdf3d3; color:#8a6300; }
+.pub-toggle[data-enviando="1"] { opacity:.55; pointer-events:none; }
 .dept-estado { font-size:9.75px; font-weight:500; color:#9CA3AF; border:1px solid #E5E7EB; border-radius:5px; padding:3.75px 9px; }
 
 /* table-layout:fixed reparte a partes iguales todo lo que sobra tras la columna de usuario, que
@@ -144,51 +152,59 @@ $pastBlocked = $isPastWeek && !($canEditPast ?? false);
 
 @if(!empty($deptsQuePublica))
 <script>
-// Un botón por departamento. El aviso al ocultar nombra el departamento, porque ocultar
-// Limpieza y ocultar Mantenimiento ya no es lo mismo.
+// Un selector por departamento, con las dos opciones a la vista. El aviso al ocultar nombra el
+// departamento, porque ocultar Limpieza y ocultar Mantenimiento ya no es lo mismo.
 //
-// Se escucha en el documento y no en cada botón, porque este <script> va ANTES del bucle que
-// los pinta: un querySelectorAll aquí encontraba cero elementos y el botón no hacía nada.
+// Se escucha en el documento y no en cada control, porque este <script> va ANTES del bucle que
+// los pinta: un querySelectorAll aquí encontraba cero elementos y no se enganchaba nada.
 // Delegando, además, da igual dónde acabe el script el día que se mueva el marcado.
 document.addEventListener('click', async function (ev) {
-    const btn = ev.target.closest('.btn-publicar-dept');
-    if (!btn || btn.disabled) return;
+    const opt = ev.target.closest('.pub-opt');
+    if (!opt) return;
 
-    {
-        const publicar = btn.dataset.publicado !== '1';
-        const dept     = btn.dataset.deptNombre;
+    const grupo = opt.closest('.pub-toggle');
+    if (!grupo || grupo.dataset.enviando === '1') return;
 
-        if (!publicar && !confirm('Al ocultar esta semana en ' + dept + ', su equipo dejará de ver '
-            + 'en la app esta y todas las posteriores, aunque estén publicadas.\n\n¿Continuar?')) return;
+    const publicar = opt.dataset.valor === '1';
+    const dept     = grupo.dataset.deptNombre;
 
-        btn.disabled = true;
-        try {
-            const res = await fetch(@json(route('horario.publicar', $project->slug)), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json',
-                           'X-CSRF-TOKEN': @json(csrf_token()) },
-                body: JSON.stringify({
-                    semana: btn.dataset.semana,
-                    departamento: btn.dataset.dept,
-                    publicado: publicar,
-                }),
-            });
-            if (!res.ok) throw new Error('http ' + res.status);
-            const data = await res.json();
+    // Pulsar la opción en la que ya se está no es un cambio: no se pregunta ni se llama.
+    if (publicar === (grupo.dataset.publicado === '1')) return;
 
-            btn.dataset.publicado = data.publicado ? '1' : '0';
-            btn.textContent = data.publicado ? 'Publicada' : '🚫 Oculta';
-            btn.style.cssText = data.publicado
-                ? 'background:#e8f2e2;border-color:#7BBF50;color:#27500A;'
-                : 'background:#fdf3d3;border-color:#e8b800;color:#8a6300;';
-            btn.title = data.publicado
-                ? 'Visible en la app del trabajador. Pulsa para ocultarla.'
-                : 'Oculta en la app del trabajador: no verá esta semana ni ninguna posterior. Pulsa para publicarla.';
-        } catch (e) {
-            alert('No se ha podido cambiar la publicación de ' + dept + '.');
-        } finally {
-            btn.disabled = false;
-        }
+    if (!publicar && !confirm('Al ocultar esta semana en ' + dept + ', su equipo dejará de ver '
+        + 'en la app esta y todas las posteriores, aunque estén publicadas.\n\n¿Continuar?')) return;
+
+    const pintar = (publicado) => {
+        grupo.dataset.publicado = publicado ? '1' : '0';
+        grupo.querySelectorAll('.pub-opt').forEach(b => {
+            b.setAttribute('aria-pressed', (b.dataset.valor === '1') === publicado ? 'true' : 'false');
+        });
+    };
+
+    const antes = grupo.dataset.publicado === '1';
+    grupo.dataset.enviando = '1';
+    // Se pinta ya el estado nuevo: el ida y vuelta se nota, y si falla se deshace abajo.
+    pintar(publicar);
+
+    try {
+        const res = await fetch(@json(route('horario.publicar', $project->slug)), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json',
+                       'X-CSRF-TOKEN': @json(csrf_token()) },
+            body: JSON.stringify({
+                semana: grupo.dataset.semana,
+                departamento: grupo.dataset.dept,
+                publicado: publicar,
+            }),
+        });
+        if (!res.ok) throw new Error('http ' + res.status);
+        const data = await res.json();
+        pintar(!!data.publicado);
+    } catch (e) {
+        pintar(antes);
+        alert('No se ha podido cambiar la publicación de ' + dept + '.');
+    } finally {
+        grupo.dataset.enviando = '0';
     }
 });
 </script>
@@ -212,15 +228,21 @@ $deptLabel = $dept->nombre ?: 'Sin departamento';
     <div class="dept-title">
         <span>{{ $deptLabel }}</span>
         @if($deptPuede)
-        <button type="button" class="hor-btn btn-publicar-dept"
-                data-dept="{{ $dept->id }}"
-                data-dept-nombre="{{ $deptLabel }}"
-                data-publicado="{{ $deptPublicada ? 1 : 0 }}"
-                data-semana="{{ $weekStart->toDateString() }}"
-                style="{{ $deptPublicada ? 'background:#e8f2e2;border-color:#7BBF50;color:#27500A;' : 'background:#fdf3d3;border-color:#e8b800;color:#8a6300;' }}"
-                title="{{ $deptPublicada ? 'Visible en la app del trabajador. Pulsa para ocultarla.' : 'Oculta en la app del trabajador: no verá esta semana ni ninguna posterior. Pulsa para publicarla.' }}">
-            {{ $deptPublicada ? 'Publicada' : '🚫 Oculta' }}
-        </button>
+        {{-- Las dos opciones a la vista en vez de un boton que alterna: con un solo boton hay
+             que leer la etiqueta para saber si dice en que estado ESTA o que hara al pulsarlo.
+             Aqui lo marcado es el estado actual, y se cambia pulsando la otra. --}}
+        <span class="pub-toggle" role="group" aria-label="Publicación de {{ $deptLabel }}"
+              data-dept="{{ $dept->id }}"
+              data-dept-nombre="{{ $deptLabel }}"
+              data-publicado="{{ $deptPublicada ? 1 : 0 }}"
+              data-semana="{{ $weekStart->toDateString() }}">
+            <button type="button" class="pub-opt" data-valor="1"
+                    aria-pressed="{{ $deptPublicada ? 'true' : 'false' }}"
+                    title="Visible en la app del trabajador.">Publicada</button>
+            <button type="button" class="pub-opt" data-valor="0"
+                    aria-pressed="{{ $deptPublicada ? 'false' : 'true' }}"
+                    title="Oculta en la app del trabajador: no verá esta semana ni ninguna posterior.">Oculta</button>
+        </span>
         @else
         {{-- Sin permiso sobre este departamento se muestra el estado igualmente: saber si el
              equipo ya ve la semana es útil aunque no puedas cambiarlo. --}}
