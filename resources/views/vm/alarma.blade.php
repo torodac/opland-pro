@@ -88,12 +88,6 @@
       <p class="al-val">{{ $alarma->num_contrato ?: '—' }}</p>
     </div>
     <div class="al-cell">
-      <p class="al-lbl">Código del panel</p>
-      {{-- A la vista, no oculto como la palabra clave: por sí solo no da acceso remoto a nada, y
-           tenerlo delante es justo lo que hace útil esta ficha cuando salta una alarma. --}}
-      <p class="al-val">{{ $alarma->codigo_panel ?: '—' }}</p>
-    </div>
-    <div class="al-cell">
       <p class="al-lbl">Información extra</p>
       <p class="al-val" style="white-space:pre-line">{{ $alarma->informacion_extra ?: '—' }}</p>
     </div>
@@ -112,10 +106,6 @@
         <a href="{{ url($project->slug . '/propiedades/' . $alarma->id_propiedades) }}"
            style="color:#185FA5;text-decoration:none">{{ $alarma->propiedad }}</a>
       </p>
-    </div>
-    <div class="al-cell" style="grid-column:span 2">
-      <p class="al-lbl">Dirección de la propiedad</p>
-      <p class="al-val">{{ $alarma->direccion ?: '—' }}</p>
     </div>
   </div>
 </div>
@@ -157,6 +147,7 @@
         // contraseña de la app, que van juntos porque son del mismo sitio. Se declaran así, en
         // vez de partir el bucle, para no repetir el recuadro tapado en dos ramas.
         $celdas = [
+            ['secreto' => 'codigo_panel',  'tiene' => $alarma->tiene_codigo_panel],
             ['secreto' => 'palabra_clave', 'tiene' => $alarma->tiene_palabra_clave],
             ['label'   => 'Usuario en la app', 'valor' => $alarma->app_usuario],
             ['secreto' => 'app_password',  'tiene' => $alarma->tiene_app_password],

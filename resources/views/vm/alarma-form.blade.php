@@ -89,11 +89,6 @@
       </div>
 
       <div class="al-f">
-        <label for="codigo_panel">Código del panel</label>
-        <input type="text" name="codigo_panel" id="codigo_panel" value="{{ $val('codigo_panel') }}" maxlength="255">
-      </div>
-
-      <div class="al-f">
         <label for="informacion_extra">Información extra</label>
         <input type="text" name="informacion_extra" id="informacion_extra" value="{{ $val('informacion_extra') }}" maxlength="4000">
       </div>
@@ -142,7 +137,7 @@
         <input type="text" name="app_usuario" id="app_usuario" value="{{ $val('app_usuario') }}" maxlength="255">
       </div>
 
-      @foreach(['palabra_clave' => 'Palabra clave', 'app_password' => 'Contraseña en la app'] as $campo => $etiqueta)
+      @foreach(['codigo_panel' => 'Código del panel', 'palabra_clave' => 'Palabra clave', 'app_password' => 'Contraseña en la app'] as $campo => $etiqueta)
         @php $yaTiene = !$esNuevo && $alarma->{'tiene_' . $campo}; @endphp
         <div class="al-f">
           <label for="{{ $campo }}">{{ $etiqueta }}</label>

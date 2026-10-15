@@ -28,10 +28,11 @@ class AlarmasController extends Controller
 {
     private const TABLA = 'alarmas';
 
-    /** Los dos campos que se pueden revelar, y que por tanto van cifrados. */
-    private const CAMPOS_SENSIBLES = ['palabra_clave', 'app_password'];
+    /** Los campos que se pueden revelar, y que por tanto van cifrados. */
+    private const CAMPOS_SENSIBLES = ['codigo_panel', 'palabra_clave', 'app_password'];
 
     private const ETIQUETAS_SENSIBLES = [
+        'codigo_panel'  => 'Código del panel',
         'palabra_clave' => 'Palabra clave',
         'app_password'  => 'Contraseña en la app',
     ];
@@ -180,7 +181,7 @@ class AlarmasController extends Controller
             'id_propiedades' => 'propiedad',
         ]);
 
-        $fila = collect($datos)->except(['palabra_clave', 'app_password'])->all();
+        $fila = collect($datos)->except(self::CAMPOS_SENSIBLES)->all();
 
         // Un campo sensible que llega vacio en una edicion significa "no lo toques", no "borralo":
         // el formulario nunca muestra el valor actual, asi que el usuario no lo ha podido retecrear
@@ -263,7 +264,7 @@ class AlarmasController extends Controller
             ->where(fn($x) => $x->where('a.deleted', 0)->orWhereNull('a.deleted'))
             ->selectRaw("
                 a.id, a.id_propiedades, a.empresa, a.titular, a.titular_doc, a.tipo_alarma,
-                a.num_contrato, a.codigo_panel, a.informacion_extra, a.app_usuario, a.observaciones,
+                a.num_contrato, a.informacion_extra, a.app_usuario, a.observaciones,
                 a.contacto1_nombre, a.contacto1_telefono,
                 a.contacto2_nombre, a.contacto2_telefono,
                 a.contacto3_nombre, a.contacto3_telefono,
@@ -271,6 +272,7 @@ class AlarmasController extends Controller
                 cu.name AS creado_por, uu.name AS modificado_por,
                 p.nombre AS propiedad,
                 nullif(trim(concat_ws(', ', nullif(p.icnea_address, ''), nullif(p.icnea_city, ''))), '') AS direccion,
+                (a.codigo_panel  IS NOT NULL AND a.codigo_panel  <> '') AS tiene_codigo_panel,
                 (a.palabra_clave IS NOT NULL AND a.palabra_clave <> '') AS tiene_palabra_clave,
                 (a.app_password  IS NOT NULL AND a.app_password  <> '') AS tiene_app_password
             ");
