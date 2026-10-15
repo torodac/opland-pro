@@ -146,8 +146,15 @@ $pastBlocked = $isPastWeek && !($canEditPast ?? false);
 <script>
 // Un botón por departamento. El aviso al ocultar nombra el departamento, porque ocultar
 // Limpieza y ocultar Mantenimiento ya no es lo mismo.
-document.querySelectorAll('.btn-publicar-dept').forEach(function (btn) {
-    btn.addEventListener('click', async function () {
+//
+// Se escucha en el documento y no en cada botón, porque este <script> va ANTES del bucle que
+// los pinta: un querySelectorAll aquí encontraba cero elementos y el botón no hacía nada.
+// Delegando, además, da igual dónde acabe el script el día que se mueva el marcado.
+document.addEventListener('click', async function (ev) {
+    const btn = ev.target.closest('.btn-publicar-dept');
+    if (!btn || btn.disabled) return;
+
+    {
         const publicar = btn.dataset.publicado !== '1';
         const dept     = btn.dataset.deptNombre;
 
@@ -182,7 +189,7 @@ document.querySelectorAll('.btn-publicar-dept').forEach(function (btn) {
         } finally {
             btn.disabled = false;
         }
-    });
+    }
 });
 </script>
 @endif
