@@ -45,6 +45,10 @@
 .al-dir{font-size:12px;color:#888;margin:3px 0 0}
 .al-meta{font-size:12px;color:#666;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:4px 10px}
 .al-tag{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;background:rgba(0,0,0,.05);color:#555;white-space:nowrap}
+/* El logo de la compania en lugar de su nombre. Alto fijo y ancho libre: los logos vienen con
+   proporciones muy distintas (AJAX es apaisado, Sector Alarm es un circulo) y forzar los dos
+   lados los deformaria. */
+.al-tag-logo{height:18px;width:auto;max-width:72px;object-fit:contain;display:block}
 .dark .al-tag{background:rgba(255,255,255,.08);color:#bbb}
 .al-empty{padding:2rem;text-align:center;color:#888;font-size:13px;
           background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px}
@@ -96,7 +100,16 @@
                 <p class="al-prop">{{ $a->propiedad }}</p>
                 <p class="al-dir">{{ $a->direccion ?: 'Sin dirección' }}</p>
                 <div class="al-meta">
-                    @if($a->empresa)<span class="al-tag">{{ $a->empresa }}</span>@endif
+                    @if($a->empresa)
+                        @if(isset($logos[$a->empresa]))
+                            <img class="al-tag-logo" src="{{ $logos[$a->empresa] }}"
+                                 alt="{{ $a->empresa }}" title="{{ $a->empresa }}">
+                        @else
+                            {{-- Sin fichero de logo se mantiene el nombre: mejor leerlo que ver
+                                 un hueco o el logo de otra. --}}
+                            <span class="al-tag">{{ $a->empresa }}</span>
+                        @endif
+                    @endif
                     @if($a->tipo_alarma)<span class="al-tag">{{ $a->tipo_alarma }}</span>@endif
                     @if($a->num_contrato)<span>Contrato {{ $a->num_contrato }}</span>@endif
                 </div>
