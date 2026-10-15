@@ -75,6 +75,15 @@ return [
         'ocultar_tareas' => env('BREEZEWAY_OCULTAR_TAREAS', true),
     ],
 
+    // Nuki: las cerraduras de las propiedades de VM. La Web API se autentica con un solo token
+    // de portador (Authorization: Bearer), sin id de cliente ni secreto.
+    //
+    // Ese token abre puertas de viviendas con huéspedes dentro, así que vive solo en el .env y
+    // no se escribe en ningún comando ni en ningún fichero del repositorio.
+    'nuki' => [
+        'token' => env('NUKI_API_TOKEN'),
+    ],
+
     // Icnea. Dos juegos distintos de credenciales porque son dos interfaces:
     //   - api_key + owner_id → servicios REST (reservas y sus importes)
     //   - usr + pwd          → servicio SOAP del catálogo de alojamientos
