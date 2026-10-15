@@ -51,29 +51,36 @@ class VmSyncNukiCommand extends Command
             }
 
             $propiedad = $this->propiedadDe((string) ($l['name'] ?? ''), $propiedades);
-            if ($propiedad) {
-                $atadas++;
+
+            $datos = [
+                'nombre'          => trim((string) ($l['name'] ?? '')) ?: null,
+                'bateria'         => $l['state']['batteryCharge'] ?? null,
+                'bateria_critica' => (bool) ($l['state']['batteryCritical'] ?? false),
+                'leido_at'        => $ahora,
+                'updated_at'      => $ahora,
+                'created_at'      => $ahora,
+            ];
+
+            // La propiedad NO se escribe en cada pasada: solo se rellena si esta vacia.
+            //
+            // Esto se deduce de un nombre, y hay cerraduras que no se pueden deducir y se atan a
+            // mano. Si el sync reescribiera el campo, la pasada de la manana borraria ese trabajo
+            // todas las noches sin que nadie se enterara.
+            $actual = DB::table('vm_cerraduras')->where('nuki_smartlock_id', $id)->value('id_propiedades');
+            if ($actual === null && $propiedad !== null) {
+                $datos['id_propiedades'] = $propiedad;
+                $atadas++;   // atadas EN ESTA PASADA, no el total que ya tienen propiedad
             }
 
-            DB::table('vm_cerraduras')->updateOrInsert(
-                ['nuki_smartlock_id' => $id],
-                [
-                    'nombre'          => trim((string) ($l['name'] ?? '')) ?: null,
-                    'bateria'         => $l['state']['batteryCharge'] ?? null,
-                    'bateria_critica' => (bool) ($l['state']['batteryCritical'] ?? false),
-                    'id_propiedades'  => $propiedad,
-                    'leido_at'        => $ahora,
-                    'updated_at'      => $ahora,
-                    'created_at'      => $ahora,
-                ]
-            );
+            DB::table('vm_cerraduras')->updateOrInsert(['nuki_smartlock_id' => $id], $datos);
             $guardadas++;
         }
 
         $bajas = DB::table('vm_cerraduras')->whereNotNull('bateria')
             ->where('bateria', '<=', self::umbral())->count();
 
-        $this->info("{$guardadas} cerraduras guardadas, {$atadas} atadas a su propiedad, {$bajas} con la bateria baja.");
+        $conProp = DB::table('vm_cerraduras')->whereNotNull('id_propiedades')->count();
+        $this->info("{$guardadas} cerraduras guardadas, {$atadas} atadas ahora ({$conProp} con propiedad en total), {$bajas} con la bateria baja.");
         Log::info("vm:sync-nuki: {$guardadas} cerraduras, {$atadas} con propiedad, {$bajas} con bateria baja.");
 
         return self::SUCCESS;
