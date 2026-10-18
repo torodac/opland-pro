@@ -49,6 +49,15 @@ class EstudioPwaController extends Controller
             return response()->json(['error' => 'Usuario sin acceso a estudio'], 403);
         }
 
+        // Acceso por ficha de usuario (estudio_usuarios.acceso): 'web' o 'sin acceso' no entran a la app.
+        // Los admins sin ficha entran siempre.
+        $acceso = DB::table('estudio_usuarios')
+            ->where('admin_user_id', $authUser->id)->where('deleted', 0)
+            ->value('acceso');
+        if (in_array($acceso, ['web', 'sin acceso'], true)) {
+            return response()->json(['error' => 'Sin acceso a la app'], 403);
+        }
+
         $ttl   = $request->boolean('remember') ? 30 : 1;
         $token = Str::random(64);
 

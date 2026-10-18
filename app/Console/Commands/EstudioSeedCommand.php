@@ -96,7 +96,7 @@ class EstudioSeedCommand extends Command
                 'mail'          => $user->email,
                 'id_rol'        => $rolId,
                 'curso'         => $curso,
-                'acceso'        => 'APP y web',
+                'acceso'        => 'APP', // solo app: sin acceso web al proyecto
                 'admin_user_id' => $user->id,
                 'createuser'    => $user->id,
                 'updateuser'    => $user->id,
