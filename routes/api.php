@@ -3,6 +3,7 @@
 use App\Http\Controllers\ApiController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Vm\VacationmarbellaPwaController;
+use App\Http\Controllers\Estudio\EstudioPwaController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\EngController;
 
@@ -40,6 +41,30 @@ Route::patch('tareas/{tipo}/{id}/imputaciones/{imputacionId}', [Vacationmarbella
     Route::get('propiedades',                    [VacationmarbellaPwaController::class, 'propiedades']);
     Route::get('agenda',                         [VacationmarbellaPwaController::class, 'agendaSemana']);
     Route::get('horario-equipo',                 [VacationmarbellaPwaController::class, 'horarioEquipo']);
+});
+
+// PWA de estudio (proyecto `estudio`). Bloque independiente del de VM.
+Route::prefix('estudio')->group(function () {
+    Route::post('login',                  [EstudioPwaController::class, 'login']);
+    Route::post('logout',                 [EstudioPwaController::class, 'logout']);
+    Route::get('me',                      [EstudioPwaController::class, 'me']);
+    Route::get('arbol',                   [EstudioPwaController::class, 'arbol']);
+    Route::post('asignaturas',            [EstudioPwaController::class, 'crearAsignatura']);
+    Route::patch('asignaturas/{id}',      [EstudioPwaController::class, 'editarAsignatura']);
+    Route::delete('asignaturas/{id}',     [EstudioPwaController::class, 'borrarAsignatura']);
+    Route::post('temas',                  [EstudioPwaController::class, 'crearTema']);
+    Route::patch('temas/{id}',            [EstudioPwaController::class, 'editarTema']);
+    Route::delete('temas/{id}',           [EstudioPwaController::class, 'borrarTema']);
+    Route::post('tareas',                 [EstudioPwaController::class, 'crearTarea']);
+    Route::patch('tareas/{id}',           [EstudioPwaController::class, 'editarTarea']);
+    Route::delete('tareas/{id}',          [EstudioPwaController::class, 'borrarTarea']);
+    Route::post('cronometro/iniciar',     [EstudioPwaController::class, 'cronometroIniciar']);
+    Route::post('cronometro/detener',     [EstudioPwaController::class, 'cronometroDetener']);
+    Route::post('sesiones',               [EstudioPwaController::class, 'registrarManual']);
+    Route::delete('sesiones/{id}',        [EstudioPwaController::class, 'borrarSesion']);
+    Route::get('informes/diario',         [EstudioPwaController::class, 'informeDiario']);
+    Route::get('informes/semanal',        [EstudioPwaController::class, 'informeSemanal']);
+    Route::get('informes/asignaturas',    [EstudioPwaController::class, 'informePorAsignatura']);
 });
 
 

@@ -1,0 +1,18 @@
+{
+  "name": "Estudio",
+  "short_name": "Estudio",
+  "description": "Temas, tareas y tiempo de estudio",
+  "id": "/estudio/index.html",
+  "start_url": "/estudio/index.html",
+  "scope": "/estudio/",
+  "display": "standalone",
+  "background_color": "#f5f6fa",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/estudio/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/estudio/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/estudio/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/estudio/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

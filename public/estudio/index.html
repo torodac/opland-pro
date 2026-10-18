@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#4f46e5">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Estudio">
+  <title>Estudio</title>
+  <link rel="manifest" href="/estudio/manifest.json">
+  <link rel="icon" href="/estudio/icon-192.png">
+  <link rel="apple-touch-icon" href="/estudio/icon-192.png">
+  <style>
+    :root {
+      --bg: #f5f6fa; --card: #ffffff; --text: #1f2937; --muted: #6b7280;
+      --line: #e5e7eb; --brand: #4f46e5; --brand-soft: #eef2ff;
+      --ok: #16a34a; --ok-soft: #dcfce7; --warn: #d97706; --warn-soft: #fef3c7;
+      --danger: #dc2626; --danger-soft: #fee2e2; --radius: 12px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --muted: #94a3b8;
+        --line: #334155; --brand: #818cf8; --brand-soft: #312e81;
+        --ok: #4ade80; --ok-soft: #14532d; --warn: #fbbf24; --warn-soft: #78350f;
+        --danger: #f87171; --danger-soft: #7f1d1d;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --muted: #94a3b8;
+      --line: #334155; --brand: #818cf8; --brand-soft: #312e81;
+      --ok: #4ade80; --ok-soft: #14532d; --warn: #fbbf24; --warn-soft: #78350f;
+      --danger: #f87171; --danger-soft: #7f1d1d;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    button, input, select { font: inherit; color: inherit; }
+    button { cursor: pointer; border: 0; background: none; padding: 0; }
+    #app { max-width: 640px; margin: 0 auto; padding: 16px 16px 96px; }
+    h1 { font-size: 20px; margin: 4px 0 12px; }
+    h2 { font-size: 16px; margin: 0; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; margin-bottom: 12px; }
+    .row { display: flex; align-items: center; gap: 8px; }
+    .grow { flex: 1; min-width: 0; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .btn { padding: 9px 14px; border-radius: 10px; background: var(--brand); color: #fff; font-weight: 600; }
+    .btn.ghost { background: var(--brand-soft); color: var(--brand); }
+    .btn.danger { background: var(--danger-soft); color: var(--danger); }
+    .btn.small { padding: 5px 10px; font-size: 13px; border-radius: 8px; }
+    .btn.full { width: 100%; }
+    input, select { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+    .badge { font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+    .b-pend { background: var(--line); color: var(--muted); }
+    .b-curso { background: var(--warn-soft); color: var(--warn); }
+    .b-est { background: var(--ok-soft); color: var(--ok); }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+    .group { border-top: 1px solid var(--line); padding: 8px 0; }
+    .group:first-child { border-top: 0; }
+    .indent { padding-left: 14px; border-left: 2px solid var(--line); margin-left: 6px; }
+    .timer { background: var(--brand); color: #fff; border-radius: var(--radius); padding: 12px; margin-bottom: 12px; }
+    .timer .muted { color: #e0e7ff; }
+    .bar { height: 8px; background: var(--line); border-radius: 999px; overflow: hidden; }
+    .bar > span { display: block; height: 100%; background: var(--brand); }
+    .nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--line);
+           display: flex; justify-content: space-around; padding: 8px 0 calc(8px + env(safe-area-inset-bottom)); }
+    .nav button { flex: 1; text-align: center; color: var(--muted); font-size: 13px; }
+    .nav button.on { color: var(--brand); font-weight: 700; }
+    .toast { position: fixed; left: 16px; right: 16px; bottom: 80px; background: #111827; color: #fff; padding: 10px 14px; border-radius: 10px; text-align: center; }
+    .login { max-width: 360px; margin: 12vh auto 0; }
+    .section-title { display: flex; justify-content: space-between; align-items: center; margin: 16px 0 8px; }
+    .day { display: grid; grid-template-columns: 84px 1fr 56px; gap: 8px; align-items: center; padding: 6px 0; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script src="/estudio/app.js"></script>
+</body>
+</html>
