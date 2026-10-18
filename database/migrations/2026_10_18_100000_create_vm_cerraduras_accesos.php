@@ -52,7 +52,7 @@ return new class extends Migration
                 'icon'        => 'fa-solid fa-key',
                 'order'       => 48,
                 'is_virtual'  => true,
-                'admin_only'  => true,
+                'admin_only'  => false,
                 'active'      => true,
                 'createuser'  => 1,
                 'created_at'  => now(),

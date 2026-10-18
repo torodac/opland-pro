@@ -21,18 +21,13 @@ use Illuminate\Support\Facades\DB;
 // nuki_default), igual que dev-fianzas.
 class NukiController extends Controller
 {
-    // Orden de gravedad: lo que más pide atención, primero.
     public const ESTADO_BAJA        = 'baja';
     public const ESTADO_SIN_PROP    = 'sin_propiedad';
     public const ESTADO_SIN_DATO    = 'sin_dato';
     public const ESTADO_OK          = 'ok';
 
-    private const RANGO = [
-        self::ESTADO_BAJA     => 0,
-        self::ESTADO_SIN_PROP => 1,
-        self::ESTADO_SIN_DATO => 2,
-        self::ESTADO_OK       => 3,
-    ];
+    // Estados de vm_tareas_mantenimiento que siguen abiertas (la tarea aún no se ha hecho).
+    public const ESTADOS_ABIERTOS   = ['Nueva', 'Planificada', 'Vencida'];
 
     public function listado(Request $request, Project $project)
     {
@@ -58,7 +53,10 @@ class NukiController extends Controller
             ->get()
             ->keyBy('nuki_smartlock_id');
 
-        $todas = $cerraduras->map(function ($c) use ($umbral, $accesos) {
+        // Tareas de cambio de batería por propiedad, para el icono de Breezeway de cada tarjeta.
+        $tareas = $this->tareasBateria($cerraduras->pluck('id_propiedades')->filter()->unique()->values()->all());
+
+        $todas = $cerraduras->map(function ($c) use ($umbral, $accesos, $tareas) {
             // "Propiedad activa" = vinculada y no borrada. Sin contrato ni fechas (decidido).
             $sinProp = $c->id_propiedades === null
                 || $c->propiedad === null
@@ -89,6 +87,7 @@ class NukiController extends Controller
                 'accesos'       => (int) ($acc->total ?? 0),
                 'sin_caducidad' => (int) ($acc->sin_caducidad ?? 0),
                 'estado'        => $estado,
+                'tarea'         => $this->tareaVigente($tareas->get($c->id_propiedades)),
             ];
         });
 
@@ -99,7 +98,7 @@ class NukiController extends Controller
                 if ($q !== '' && !str_contains(mb_strtolower($t->titulo . ' ' . $t->cerradura), mb_strtolower($q))) return false;
                 return true;
             })
-            ->sortBy(fn($t) => [self::RANGO[$t->estado], $t->bateria ?? 101, mb_strtolower((string) $t->titulo)])
+            ->sortBy(fn($t) => mb_strtolower((string) $t->titulo))
             ->values();
 
         // Los contadores van sobre todas las cerraduras, no sobre lo filtrado.
@@ -147,12 +146,55 @@ class NukiController extends Controller
                 return $a;
             });
 
+        // Histórico: todas las tareas de batería de la propiedad, la más reciente primero.
+        $historico = ($this->tareasBateria($cerradura->id_propiedades ? [$cerradura->id_propiedades] : [])
+                ->get($cerradura->id_propiedades) ?? collect())
+            ->reverse()->values()
+            ->map(fn($t) => $this->conUrl($t));
+
         return view('vm.nuki', [
             'project'   => $project,
+            'historico' => $historico,
             'cerradura' => $cerradura,
             'accesos'   => $accesos,
             'umbral'    => VmSyncNukiCommand::umbral(),
             'sinCaducidad' => $accesos->whereNull('fecha_hasta')->count(),
         ]);
+    }
+
+    // Tareas de Breezeway cuyo nombre habla de la pila o batería del Nuki. Se buscan en las tareas
+    // de mantenimiento de la propiedad, y solo las que tienen id de Breezeway, para poder enlazarlas.
+    // Devuelve una colección agrupada por propiedad, de la más antigua a la más reciente.
+    private function tareasBateria(array $propiedades)
+    {
+        if (!$propiedades) {
+            return collect();
+        }
+
+        return DB::table('vm_tareas_mantenimiento')
+            ->whereIn('id_propiedades', $propiedades)
+            ->whereNotNull('breezeway_task_id')
+            ->whereRaw("nombre ~* 'nuki'")
+            ->whereRaw("nombre ~* '(bater|pila)'")
+            ->orderBy('fecha_planificada')
+            ->get(['id', 'breezeway_task_id', 'nombre', 'estado', 'fecha_planificada', 'fecha_finalizacion', 'id_propiedades'])
+            ->groupBy('id_propiedades');
+    }
+
+    // La tarea abierta más próxima de la propiedad, o null si no hay ninguna.
+    private function tareaVigente($tareas)
+    {
+        $abierta = $tareas?->first(fn($t) => in_array($t->estado, self::ESTADOS_ABIERTOS, true));
+
+        return $abierta ? $this->conUrl($abierta) : null;
+    }
+
+    // Añade el enlace a la tarea en Breezeway y la fecha ya como objeto de fecha.
+    private function conUrl($t)
+    {
+        $t->url = 'https://app.breezeway.io/task/' . $t->breezeway_task_id;
+        $t->fecha = $t->fecha_planificada ? Carbon::parse($t->fecha_planificada) : null;
+
+        return $t;
     }
 }

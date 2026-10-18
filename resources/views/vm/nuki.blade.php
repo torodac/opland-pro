@@ -136,6 +136,47 @@
         </table>
     </div>
 
+    <div style="font-size:13px;color:#555;margin:24px 0 8px;display:flex;align-items:center;gap:8px">
+        <img src="{{ asset('img/breezeway.svg') }}" alt="" style="width:14px;height:14px;object-fit:contain">
+        Histórico de tareas de batería en Breezeway: <strong>{{ $historico->count() }}</strong>
+    </div>
+
+    <div style="background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px;overflow:auto">
+        <table style="width:100%;border-collapse:collapse;min-width:560px">
+            <thead>
+                <tr style="background:rgba(0,0,0,.02)">
+                    <th style="text-align:left;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Planificada</th>
+                    <th style="text-align:left;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Tarea</th>
+                    <th style="text-align:left;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Estado</th>
+                    <th style="text-align:left;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Finalizada</th>
+                    <th style="text-align:left;padding:8px 12px;font-size:11px;color:#888;font-weight:500">Breezeway</th>
+                </tr>
+            </thead>
+            <tbody>
+            @forelse($historico as $h)
+                @php $abierta = in_array($h->estado, \App\Http\Controllers\Vm\NukiController::ESTADOS_ABIERTOS, true); @endphp
+                <tr class="nkf-fila">
+                    <td style="padding:8px 12px;font-size:12px;white-space:nowrap">{{ $h->fecha?->format('d/m/Y') ?? '—' }}</td>
+                    <td style="padding:8px 12px;font-size:13px">{{ $h->nombre }}</td>
+                    <td style="padding:8px 12px;font-size:12px;white-space:nowrap">
+                        <span class="nkf-badge" style="{{ $abierta ? 'background:#DBEAFE;color:#1E40AF' : 'background:#e7f6ec;color:#166534' }}">{{ $h->estado ?: 'Sin estado' }}</span>
+                    </td>
+                    <td style="padding:8px 12px;font-size:12px;white-space:nowrap;color:#555">{{ $h->fecha_finalizacion ? \Carbon\Carbon::parse($h->fecha_finalizacion)->format('d/m/Y') : '—' }}</td>
+                    <td style="padding:8px 12px;font-size:12px">
+                        <a href="{{ $h->url }}" target="_blank" rel="noopener" style="color:#1d4ed8;text-decoration:none;font-weight:600">Abrir ↗</a>
+                    </td>
+                </tr>
+            @empty
+                <tr>
+                    <td colspan="5" style="padding:24px;text-align:center;color:#777;font-size:13px">
+                        No hay tareas de batería de Nuki vinculadas a esta propiedad.
+                    </td>
+                </tr>
+            @endforelse
+            </tbody>
+        </table>
+    </div>
+
     <p style="font-size:11px;color:#888;margin-top:10px">
         Los datos vienen de Nuki (solo lectura) y se actualizan cada día a las 06:50. Los códigos se muestran
         ocultos y solo quien tiene acceso a esta pantalla puede verlos.
