@@ -11,8 +11,7 @@ use Illuminate\Support\Facades\Log;
 //
 // Reglas:
 // - Solo cerraduras con propiedad activa y con breezeway_home_id.
-// - No se crea si la propiedad ya tiene una tarea de batería abierta (sincronizada) ni si se creó
-//   una en los últimos 7 días (la sincronización tarda en traerla de vuelta).
+// - No se crea si la propiedad ya tiene una tarea de batería abierta (sincronizada).
 // - Asignada al coordinador de mantenimiento activo de menor id.
 // - Fecha límite a 2 días, prioridad alta, título "[O] Cambiar batería Nuki".
 //
@@ -58,7 +57,7 @@ class VmNukiTareasBreezewayCommand extends Command
         $fallos = 0;
 
         foreach ($cerraduras as $c) {
-            if ($this->tieneTareaAbierta($c->id_propiedades) || $this->creadaRecientemente($c->id_propiedades)) {
+            if ($this->tieneTareaAbierta($c->id_propiedades)) {
                 $omitidas++;
                 continue;
             }
@@ -108,14 +107,6 @@ class VmNukiTareasBreezewayCommand extends Command
             ->exists();
     }
 
-    // Ya pedimos una en los últimos 7 días, aunque todavía no haya vuelto a Opland.
-    private function creadaRecientemente(int $idPropiedades): bool
-    {
-        return DB::table('vm_nuki_tareas_breezeway')
-            ->where('id_propiedades', $idPropiedades)
-            ->where('creada_at', '>=', now()->subDays(7))
-            ->exists();
-    }
 
     // Devuelve el id de la tarea creada, o null si Breezeway no la ha aceptado.
     private function crearEnBreezeway(int $homeId, int $asignadoBreezeway): ?int

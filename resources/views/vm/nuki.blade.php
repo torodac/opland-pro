@@ -22,6 +22,12 @@
         .nkf-pct{font-size:40px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;text-align:right}
         .nkf-bar{height:8px;border-radius:99px;background:rgba(0,0,0,.08);overflow:hidden;margin-top:6px;min-width:160px}
         .nkf-bar>i{display:block;height:100%;border-radius:99px}
+        .nkf-tabs{display:flex;gap:4px;border-bottom:0.5px solid rgba(0,0,0,.1);margin:18px 0 14px}
+        .nkf-tab{padding:9px 14px;font-size:13px;color:#777;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;margin-bottom:-0.5px}
+        .nkf-tab:hover{color:#333}
+        .nkf-tab.on{color:#f97316;border-bottom-color:#f97316;font-weight:600}
+        .nkf-count{display:inline-block;margin-left:6px;font-size:11px;padding:1px 7px;border-radius:99px;background:rgba(0,0,0,.06);color:#555}
+        .nkf-tab.on .nkf-count{background:#FFEDD5;color:#C2410C}
         .nkf-note{background:#fff8d6;border:0.5px solid #eed77a;border-radius:10px;padding:10px 14px;font-size:13px;color:#713f12;margin:12px 0}
         .nkf-fila{border-top:0.5px solid rgba(0,0,0,.06)}
         .nkf-fila:hover{background:rgba(0,0,0,.025)}
@@ -66,6 +72,17 @@
         </div>
     </div>
 
+    {{-- Dos pestañas: Tareas (la que se ve por defecto) y Accesos. --}}
+    <div class="nkf-tabs" role="tablist">
+        <button type="button" class="nkf-tab on" data-tab="tareas" onclick="nkTab('tareas')">
+            Tareas <span class="nkf-count">{{ $historico->count() }}</span>
+        </button>
+        <button type="button" class="nkf-tab" data-tab="accesos" onclick="nkTab('accesos')">
+            Accesos <span class="nkf-count">{{ $accesos->count() }}</span>
+        </button>
+    </div>
+
+    <div data-panel="accesos" hidden>
     @if($sinCaducidad > 0)
         <div class="nkf-note">
             <strong>{{ $sinCaducidad }} {{ $sinCaducidad === 1 ? 'acceso no tiene' : 'accesos no tienen' }} fecha de caducidad.</strong>
@@ -135,8 +152,10 @@
             </tbody>
         </table>
     </div>
+    </div>
 
-    <div style="font-size:13px;color:#555;margin:24px 0 8px;display:flex;align-items:center;gap:8px">
+    <div data-panel="tareas">
+    <div style="font-size:13px;color:#555;margin:8px 0 8px;display:flex;align-items:center;gap:8px">
         <img src="{{ asset('img/breezeway.svg') }}" alt="" style="width:14px;height:14px;object-fit:contain">
         Histórico de tareas de batería en Breezeway: <strong>{{ $historico->count() }}</strong>
     </div>
@@ -177,6 +196,8 @@
         </table>
     </div>
 
+    </div>
+
     <p style="font-size:11px;color:#888;margin-top:10px">
         Los datos vienen de Nuki (solo lectura) y se actualizan cada día a las 06:50. Los códigos se muestran
         ocultos y solo quien tiene acceso a esta pantalla puede verlos.
@@ -184,6 +205,10 @@
 </div>
 
 <script>
+function nkTab(nombre) {
+    document.querySelectorAll('[data-panel]').forEach(p => { p.hidden = p.dataset.panel !== nombre; });
+    document.querySelectorAll('.nkf-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === nombre));
+}
 function nkToggleCodigo(btn) {
     const span = btn.previousElementSibling;
     const oculto = span.dataset.oculto === '1';
