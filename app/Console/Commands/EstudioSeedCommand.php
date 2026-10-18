@@ -72,10 +72,38 @@ class EstudioSeedCommand extends Command
                 'admin_user_id' => $user->id,
                 'createuser'    => $user->id,
                 'updateuser'    => $user->id,
-                'created_at'    => $ahora,
-                'updated_at'    => $ahora,
+                'createdat'     => $ahora,
+                'updatedat'     => $ahora,
             ]);
             $creadas++;
+        }
+
+        // Ficha en la tabla `usuarios` del proyecto, con su rol de estudiante
+        $rolId = DB::table('estudio_roles')->where('nombre', 'Estudiante')->where('deleted', 0)->value('id');
+        if (!$rolId) {
+            $rolId = DB::table('estudio_roles')->insertGetId([
+                'nombre'           => 'Estudiante',
+                'todos_registros'  => 'personales',
+                'createdat'        => $ahora,
+                'updatedat'        => $ahora,
+            ]);
+        }
+
+        $tieneFicha = DB::table('estudio_usuarios')->where('admin_user_id', $user->id)->where('deleted', 0)->exists();
+        if (!$tieneFicha) {
+            DB::table('estudio_usuarios')->insert([
+                'nombre'        => $user->name ?? $user->email,
+                'mail'          => $user->email,
+                'id_rol'        => $rolId,
+                'curso'         => $curso,
+                'acceso'        => 'APP y web',
+                'admin_user_id' => $user->id,
+                'createuser'    => $user->id,
+                'updateuser'    => $user->id,
+                'createdat'     => $ahora,
+                'updatedat'     => $ahora,
+            ]);
+            $this->line('Ficha de usuario creada.');
         }
 
         $this->info("Listo: {$creadas} asignaturas nuevas de {$curso} para {$this->argument('email')}.");

@@ -180,8 +180,8 @@ class EstudioPwaController extends Controller
         $this->propio('estudio_asignaturas', $user, $id);
 
         $temas = DB::table('estudio_temas')->where('id_asignatura', $id)->where('admin_user_id', $user->id)->pluck('id');
-        DB::table('estudio_tareas')->whereIn('id_tema', $temas)->where('admin_user_id', $user->id)->update(['deleted' => 1, 'updated_at' => now()]);
-        DB::table('estudio_temas')->whereIn('id', $temas)->update(['deleted' => 1, 'updated_at' => now()]);
+        DB::table('estudio_tareas')->whereIn('id_tema', $temas)->where('admin_user_id', $user->id)->update(['deleted' => 1, 'updatedat' => now()]);
+        DB::table('estudio_temas')->whereIn('id', $temas)->update(['deleted' => 1, 'updatedat' => now()]);
         $this->actualizar('estudio_asignaturas', $user, $id, ['deleted' => 1]);
 
         return response()->json(['ok' => true]);
@@ -217,7 +217,7 @@ class EstudioPwaController extends Controller
         $user = $this->authenticate($request);
         $this->propio('estudio_temas', $user, $id);
 
-        DB::table('estudio_tareas')->where('id_tema', $id)->where('admin_user_id', $user->id)->update(['deleted' => 1, 'updated_at' => now()]);
+        DB::table('estudio_tareas')->where('id_tema', $id)->where('admin_user_id', $user->id)->update(['deleted' => 1, 'updatedat' => now()]);
         $this->actualizar('estudio_temas', $user, $id, ['deleted' => 1]);
 
         return response()->json(['ok' => true]);
@@ -287,8 +287,8 @@ class EstudioPwaController extends Controller
             'admin_user_id' => $user->id,
             'createuser'    => $user->id,
             'updateuser'    => $user->id,
-            'created_at'    => $ahora,
-            'updated_at'    => $ahora,
+            'createdat'    => $ahora,
+            'updatedat'    => $ahora,
         ]);
 
         return response()->json(['cronometro' => $this->cronometroActivo($user->id)], 201);
@@ -324,8 +324,8 @@ class EstudioPwaController extends Controller
             'admin_user_id' => $user->id,
             'createuser'    => $user->id,
             'updateuser'    => $user->id,
-            'created_at'    => $ahora,
-            'updated_at'    => $ahora,
+            'createdat'    => $ahora,
+            'updatedat'    => $ahora,
         ]);
 
         return response()->json(['id' => $id], 201);
@@ -504,7 +504,7 @@ class EstudioPwaController extends Controller
         DB::table('estudio_sesiones')->where('id', $activa->id)->update([
             'fin'        => $ahora,
             'minutos'    => $minutos,
-            'updated_at' => $ahora,
+            'updatedat' => $ahora,
         ]);
 
         return DB::table('estudio_sesiones')->where('id', $activa->id)->first();
@@ -538,8 +538,8 @@ class EstudioPwaController extends Controller
             'admin_user_id' => $user->id,
             'createuser'    => $user->id,
             'updateuser'    => $user->id,
-            'created_at'    => $ahora,
-            'updated_at'    => $ahora,
+            'createdat'    => $ahora,
+            'updatedat'    => $ahora,
         ]));
     }
 
@@ -547,7 +547,7 @@ class EstudioPwaController extends Controller
     {
         DB::table($tabla)->where('id', $id)->update(array_merge($data, [
             'updateuser' => $user->id,
-            'updated_at' => now(),
+            'updatedat' => now(),
         ]));
     }
 
