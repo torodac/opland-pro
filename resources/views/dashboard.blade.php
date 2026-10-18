@@ -955,6 +955,15 @@ async function marcarSsccHecho(btn, id) {
                  casa equivocada. --}}
             <span style="color:#c1c5cb;">sin asociar</span>
           @endif
+          @php $tb = $c->propiedad_id ? $tareaBateria->get($c->propiedad_id) : null; @endphp
+          @if($tb)
+            <a href="https://app.breezeway.io/task/{{ $tb->breezeway_task_id }}" target="_blank" rel="noopener"
+               title="Abrir la tarea en Breezeway"
+               style="display:inline-flex;align-items:center;gap:5px;margin-left:6px;font-size:11px;font-weight:600;color:#1d4ed8;background:#EFF6FF;border:0.5px solid #BFDBFE;padding:1px 7px;border-radius:20px;text-decoration:none;white-space:nowrap;">
+              <img src="{{ asset('img/breezeway.svg') }}" alt="" style="width:12px;height:12px;object-fit:contain;">
+              {{ $tb->fecha_planificada ? \Carbon\Carbon::parse($tb->fecha_planificada)->format('d/m') : 'Breezeway' }}
+            </a>
+          @endif
         </td>
         <td style="text-align:right;white-space:nowrap;">
           @php
@@ -962,9 +971,6 @@ async function marcarSsccHecho(btn, id) {
             [$fondo, $tinta] = $b <= 10 ? ['#FBE9E9', '#9B1C1C'] : ($b <= 20 ? ['#FDF0E3', '#9A5B00'] : ['#FDF6E3', '#8A6400']);
           @endphp
           <span style="background:{{ $fondo }};color:{{ $tinta }};padding:2px 8px;border-radius:6px;font-weight:600;font-variant-numeric:tabular-nums;">{{ $b }}%</span>
-          @if($c->bateria_critica)
-            <span class="badge-sm" style="background:#FBE9E9;color:#9B1C1C;margin-left:4px;">critica</span>
-          @endif
         </td>
         <td style="color:#9ca3af;font-size:12px;white-space:nowrap;">
           {{ $c->leido_at ? \Carbon\Carbon::parse($c->leido_at)->diffForHumans() : '—' }}

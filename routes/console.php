@@ -62,7 +62,9 @@ Schedule::command('vm:sync-nuki')->dailyAt('06:45')->withoutOverlapping();
 
 // Autorizaciones de cada cerradura (quién, código, desde cuándo) para la pantalla Nuki. Va después
 // del estado de baterías. Solo lectura, igual que el de arriba.
-Schedule::command('vm:sync-nuki-accesos')->dailyAt('06:50')->withoutOverlapping();
+// Al terminar, da de alta en Breezeway las tareas de batería de las cerraduras por debajo del umbral.
+Schedule::command('vm:sync-nuki-accesos')->dailyAt('06:50')->withoutOverlapping()
+    ->then(fn () => \Illuminate\Support\Facades\Artisan::call('vm:nuki-tareas-breezeway'));
 
 // Cierra automáticamente los fichajes del día anterior que siguen abiertos
 Schedule::call(function () {

@@ -274,6 +274,22 @@ class DashboardController extends Controller
                        'c.leido_at', 'p.nombre as propiedad', 'p.id as propiedad_id'])
             : collect();
 
+        // Tarea de cambio de batería abierta más próxima de cada propiedad, para el icono de
+        // Breezeway de cada fila. Mismo criterio que la pantalla Nuki (NukiController).
+        $propiedadesBateria = $cerradurasBateria->pluck('propiedad_id')->filter()->unique()->values()->all();
+        $tareaBateria = $propiedadesBateria
+            ? DB::table('vm_tareas_mantenimiento')
+                ->whereIn('id_propiedades', $propiedadesBateria)
+                ->whereNotNull('breezeway_task_id')
+                ->whereIn('estado', NukiController::ESTADOS_ABIERTOS)
+                ->whereRaw("nombre ~* 'nuki'")
+                ->whereRaw("nombre ~* '(bater|pila)'")
+                ->orderBy('fecha_planificada')
+                ->get(['id_propiedades', 'breezeway_task_id', 'fecha_planificada'])
+                ->groupBy('id_propiedades')
+                ->map(fn($grupo) => $grupo->first())
+            : collect();
+
         // ── Personas de Breezeway sin usuario mapeado en Opland ──────────────
         $breezewayPendientes = DB::table('vm_breezeway_pendientes')
             ->where('deleted', 0)
@@ -590,7 +606,7 @@ class DashboardController extends Controller
             'conciliaciones',
             'tareasLimpieza', 'tareasMantPisc', 'breezewayPendientes', 'limpiezasSinReserva',
             'incidenciasFichaje', 'incidenciasAusencias', 'desviaciones', 'recordatoriosSscc',
-            'conflictosAusencias', 'informesPendientes', 'cerradurasBateria',
+            'conflictosAusencias', 'informesPendientes', 'cerradurasBateria', 'tareaBateria',
             'usuariosFichaje', 'puedeFicharSinLimite', 'fechaMinimaFichaje',
             'vmUsuario', 'proximasAusencias',
             'verReservas', 'verRRHH', 'verAusenciasSin', 'verLimpSinImp', 'verMantSinImp',
