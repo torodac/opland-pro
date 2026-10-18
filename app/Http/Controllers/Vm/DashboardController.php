@@ -270,7 +270,7 @@ class DashboardController extends Controller
                                     ->orWhere('c.bateria_critica', true))
                 ->orderByDesc('c.bateria_critica')
                 ->orderBy('c.bateria')
-                ->get(['c.nuki_smartlock_id', 'c.nombre', 'c.bateria', 'c.bateria_critica',
+                ->get(['c.id as cerradura_id', 'c.nuki_smartlock_id', 'c.nombre', 'c.bateria', 'c.bateria_critica',
                        'c.leido_at', 'p.nombre as propiedad', 'p.id as propiedad_id'])
             : collect();
 

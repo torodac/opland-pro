@@ -941,25 +941,25 @@ async function marcarSsccHecho(btn, id) {
     <p class="empty">Ninguna por debajo del umbral</p>
   @else
   <table class="db-table">
-    <thead><tr><th>Cerradura</th><th>Propiedad</th><th style="text-align:right;">Bateria</th><th>Leido</th></tr></thead>
+    <thead><tr><th>Propiedad</th><th>Breezeway</th><th style="text-align:right;">Bateria</th><th>Leido</th></tr></thead>
     <tbody>
       @foreach($cerradurasBateria as $c)
       <tr>
-        <td style="font-weight:500;">{{ $c->nombre ?: 'Cerradura ' . $c->nuki_smartlock_id }}</td>
-        <td style="color:#6b7280;">
-          @if($c->propiedad_id)
-            <a target="_blank" rel="noopener" href="{{ route('ficha', [$project->slug, 'propiedades', $c->propiedad_id]) }}" style="color:#185FA5;text-decoration:none;">{{ $c->propiedad }}</a>
-          @else
-            {{-- Sin propiedad atada: el nombre de la cerradura en Nuki no casa con ninguna de
-                 forma inequivoca. El aviso vale igual, y atarla mal mandaria a alguien a la
-                 casa equivocada. --}}
-            <span style="color:#c1c5cb;">sin asociar</span>
-          @endif
+        {{-- La fila lleva a la ficha Nuki de la cerradura. Sin propiedad atada, el nombre de la
+             cerradura en Nuki no casa de forma inequivoca con ninguna: el aviso vale igual, y
+             atarla mal mandaria a alguien a la casa equivocada. --}}
+        <td style="font-weight:500;">
+          <a target="_blank" rel="noopener" href="{{ route('vm.nuki_form', [$project->slug, $c->cerradura_id]) }}" style="color:#185FA5;text-decoration:none;">{{ $c->propiedad ?: ($c->nombre ?: 'Cerradura ' . $c->nuki_smartlock_id) }}</a>
+          @unless($c->propiedad_id)
+            <div style="font-size:11px;color:#c1c5cb;font-weight:400;">sin asociar</div>
+          @endunless
+        </td>
+        <td style="white-space:nowrap;">
           @php $tb = $c->propiedad_id ? $tareaBateria->get($c->propiedad_id) : null; @endphp
           @if($tb)
             <a href="https://app.breezeway.io/task/{{ $tb->breezeway_task_id }}" target="_blank" rel="noopener"
                title="Abrir la tarea en Breezeway"
-               style="display:inline-flex;align-items:center;gap:5px;margin-left:6px;font-size:11px;font-weight:600;color:#1d4ed8;background:#EFF6FF;border:0.5px solid #BFDBFE;padding:1px 7px;border-radius:20px;text-decoration:none;white-space:nowrap;">
+               style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#1d4ed8;background:#EFF6FF;border:0.5px solid #BFDBFE;padding:1px 7px;border-radius:20px;text-decoration:none;white-space:nowrap;">
               <img src="{{ asset('img/breezeway.svg') }}" alt="" style="width:12px;height:12px;object-fit:contain;">
               {{ $tb->fecha_planificada ? \Carbon\Carbon::parse($tb->fecha_planificada)->format('d/m') : 'Breezeway' }}
             </a>
