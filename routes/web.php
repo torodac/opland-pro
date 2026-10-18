@@ -179,6 +179,12 @@ Route::middleware('auth')->group(function () {
             ->where('id', '[0-9]+')->name('vm.dev-fianza.foto-informe');
         Route::post('dev-fianzas/{id}/retener', [\App\Http\Controllers\Vm\DevFianzasController::class, 'retener'])
             ->where('id', '[0-9]+')->name('vm.dev-fianza.retener');
+
+        // Gestión Nuki: tarjetas de cerraduras y su ficha de accesos. Solo lectura. El permiso lo
+        // da menu.access desde la entrada "Nuki" del menú (tabla virtual nuki_default).
+        Route::get('nuki', [\App\Http\Controllers\Vm\NukiController::class, 'listado'])->name('vm.nuki_list');
+        Route::get('nuki/{id}', [\App\Http\Controllers\Vm\NukiController::class, 'show'])
+            ->where('id', '[0-9]+')->name('vm.nuki_form');
         // Alarmas de las propiedades. Pantalla aparte de la ficha de la propiedad porque lleva
         // la palabra clave de la central y las credenciales de la app: el acceso de lectura lo da
         // menu.access desde la entrada del menu (tabla alarmas) y las de escritura comprueban

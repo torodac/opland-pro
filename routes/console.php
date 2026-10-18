@@ -60,6 +60,10 @@ Schedule::command('vm:avisar-limpiezas-sin-reserva')->dailyAt('08:00')->withoutO
 // en cada carga de pantalla. Solo lectura: el comando nunca abre ni cierra nada.
 Schedule::command('vm:sync-nuki')->dailyAt('06:45')->withoutOverlapping();
 
+// Autorizaciones de cada cerradura (quién, código, desde cuándo) para la pantalla Nuki. Va después
+// del estado de baterías. Solo lectura, igual que el de arriba.
+Schedule::command('vm:sync-nuki-accesos')->dailyAt('06:50')->withoutOverlapping();
+
 // Cierra automáticamente los fichajes del día anterior que siguen abiertos
 Schedule::call(function () {
     // Se ejecuta a las 08:00 — procesa fichajes del día anterior

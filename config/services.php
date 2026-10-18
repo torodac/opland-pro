@@ -83,10 +83,9 @@ return [
     'nuki' => [
         'token' => env('NUKI_API_TOKEN'),
 
-        // Porcentaje a partir del cual una cerradura sale como "bateria baja" en el dashboard.
-        // En el .env para poder ajustarlo sin desplegar: con el umbral mal puesto, o salta todo
-        // a la vez o no salta nunca.
-        'bateria_minima' => env('NUKI_BATERIA_MINIMA', 30),
+        // Porcentaje a partir del cual una cerradura sale como "bateria baja" en el dashboard y en
+        // la pantalla de gestión Nuki (tarjeta en rojo). Valor por defecto en código: 20.
+        'bateria_minima' => env('NUKI_BATERIA_MINIMA', 20),
     ],
 
     // Icnea. Dos juegos distintos de credenciales porque son dos interfaces:
