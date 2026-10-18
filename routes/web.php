@@ -183,6 +183,10 @@ Route::middleware('auth')->group(function () {
         // Gestión Nuki: tarjetas de cerraduras y su ficha de accesos. Solo lectura. El permiso lo
         // da menu.access desde la entrada "Nuki" del menú (tabla virtual nuki_default).
         Route::get('nuki', [\App\Http\Controllers\Vm\NukiController::class, 'listado'])->name('vm.nuki_list');
+        // Vuelve a leer las baterías de Nuki ahora, sin esperar a las 06:45. Solo lectura en Nuki.
+        // Atada al permiso de la tabla virtual, igual que el resto de acciones de la pantalla.
+        Route::post('nuki/sincronizar', [\App\Http\Controllers\Vm\NukiController::class, 'sincronizar'])
+            ->middleware('table.access:nuki_default')->name('vm.nuki_sync');
         Route::get('nuki/{id}', [\App\Http\Controllers\Vm\NukiController::class, 'show'])
             ->where('id', '[0-9]+')->name('vm.nuki_form');
         // Alarmas de las propiedades. Pantalla aparte de la ficha de la propiedad porque lleva

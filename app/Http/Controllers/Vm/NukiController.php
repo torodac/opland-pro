@@ -8,6 +8,7 @@ use App\Models\Project;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 
@@ -115,7 +116,19 @@ class NukiController extends Controller
             'umbral'   => $umbral,
             'q'        => $q,
             'filtro'   => $filtro,
+            'ultimaLectura' => $cerraduras->max('leido_at'),
         ]);
+    }
+
+    // Actualiza las baterías ahora mismo. Solo lee de Nuki (vm:sync-nuki). Las autorizaciones se
+    // siguen actualizando a las 06:50: traerlas aquí llevaría más de lo que aguanta una petición web.
+    public function sincronizar(Request $request, Project $project)
+    {
+        $codigo = Artisan::call('vm:sync-nuki');
+
+        return redirect()->route('vm.nuki_list', $project->slug)->with('status', $codigo === 0
+            ? 'Baterías de Nuki actualizadas.'
+            : 'No se pudo actualizar Nuki. Revisa el log.');
     }
 
     public function show(Request $request, Project $project, int $id)

@@ -60,6 +60,24 @@
 
 <div style="padding:0 0 3rem;">
 
+    @if(session('status'))
+        <div style="margin-bottom:1rem;padding:.7rem 1rem;border-radius:8px;background:#F1FAF4;
+                    border:0.5px solid #B7E0C4;color:#1B7F3B;font-size:13px">{{ session('status') }}</div>
+    @endif
+
+    {{-- Última lectura de Nuki y botón para volver a leer ahora, como el de Icnea en propiedades. --}}
+    <div class="flex items-center gap-3 mb-3">
+        <span class="text-xs text-gray-400">
+            Última lectura de Nuki: {{ $ultimaLectura ? \Carbon\Carbon::parse($ultimaLectura)->format('d/m/Y H:i') : 'nunca' }}
+        </span>
+        <form method="POST" action="{{ route('vm.nuki_sync', $project->slug) }}">
+            @csrf
+            <button type="submit" class="text-xs text-orange-500 hover:text-orange-700 hover:underline transition-colors">
+                Actualizar ahora
+            </button>
+        </form>
+    </div>
+
     {{-- Resumen: pulsar un contador filtra la lista. --}}
     <div class="nk-chips">
         <a class="nk-chip {{ $filtro === '' ? 'on' : '' }}" href="{{ $enlace(['filtro' => '']) }}">
