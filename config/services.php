@@ -115,11 +115,10 @@ return [
         'clase_from_nombre' => env('MAIL_CLASE_FROM_NAME', 'Al Salir de Clase VLC'),
     ],
 
-    // Devolución de fianzas. Filipinas no tiene dirección todavía: sin VM_FIANZAS_FILIPINAS_TO no
-    // se envía el correo de transferencias, y se deja constancia en el log.
+    // Devolución de fianzas. Filipinas y Recepción comparten el buzón info@.
     'vm_fianzas' => [
         'borja_to'         => env('VM_FIANZAS_BORJA_TO', 'borja@vacationmarbella.com'),
-        'filipinas_to'     => env('VM_FIANZAS_FILIPINAS_TO'),
+        'filipinas_to'     => env('VM_FIANZAS_FILIPINAS_TO', 'info@vacationmarbella.com'),
         'iban_enlace_dias' => (int) env('VM_FIANZAS_IBAN_ENLACE_DIAS', 7),
     ],
 
