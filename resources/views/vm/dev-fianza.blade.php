@@ -158,10 +158,11 @@
            Va antes que los botones porque es una elección previa, no un detalle de la confirmación. --}}
       <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px">
         Canal de cobro
-        <select id="df-canal" class="df-input" style="width:auto;padding:5px 8px">
-          <option value="">— elegir —</option>
+        {{-- En Airbnb el canal es fijo: el desplegable se ve, pero no se puede cambiar. --}}
+        <select id="df-canal" class="df-input" style="width:auto;padding:5px 8px" @disabled($esAirbnb)>
+          @unless($esAirbnb)<option value="">— elegir —</option>@endunless
           @foreach($canales as $canal)
-            <option value="{{ $canal }}">{{ $canal }}</option>
+            <option value="{{ $canal }}" @selected($esAirbnb)>{{ $canal }}</option>
           @endforeach
         </select>
       </label>
@@ -175,10 +176,17 @@
            en el CSS de esta misma vista. --}}
       <button type="button" class="df-btn" id="df-btn-retener" onclick="abrirRetener()"
               @disabled($conRetencion->isEmpty())
-              title="{{ $conRetencion->isEmpty() ? 'Marca primero el importe a retener en alguna foto' : 'Revisar y confirmar la retención' }}"
+              title="{{ $conRetencion->isEmpty() ? 'Selecciona alguna foto e indica el motivo e importe de retención.' : 'Revisar y confirmar la retención con evidencias' }}"
               style="border-color:#E3C9A3;background:#FDF8F1;color:#9A5B00">
-        Confirmar retención
+        Retención con evidencias
         <span id="df-btn-retener-n" style="font-weight:600">@if($conRetencion->isNotEmpty())({{ $fmt($totalRetencion) }})@endif</span>
+      </button>
+      {{-- Sin foto ni incidencia que la respalde: concepto e importe a mano. Siempre disponible
+           mientras la fianza esté pendiente. --}}
+      <button type="button" class="df-btn" id="df-btn-sin-evidencias" onclick="abrirRetencionSinEvidencias()"
+              title="Retención sin foto ni incidencia: indica concepto e importe."
+              style="border-color:#E3C9A3;background:#FDF8F1;color:#9A5B00">
+        Retención sin evidencias
       </button>
     </div>
   @elseif($pendiente)
@@ -425,6 +433,29 @@
 
 {{-- Modal de confirmación: el resumen de lo que se le va a cobrar al huésped, con la foto al
      lado de cada línea. Es la última pantalla antes de que el dinero se mueva. --}}
+<div id="df-sin" class="df-modal">
+  <div class="df-modal-box" style="max-width:460px">
+    <p style="font-weight:500;font-size:15px;margin:0 0 4px">Retención sin evidencias</p>
+    <p style="font-size:12px;color:#888;margin:0 0 14px">
+      Sin foto ni incidencia que la respalde. Fianza de la reserva: <strong>{{ $fmt($reserva->fianza) }}</strong>.
+    </p>
+    <label style="display:block;font-size:12px;color:#666;margin-bottom:10px">
+      Concepto
+      <input id="df-sin-concepto" type="text" maxlength="255" class="df-input" style="width:100%;margin-top:4px">
+    </label>
+    <label style="display:block;font-size:12px;color:#666">
+      Importe a retener (€)
+      <input id="df-sin-importe" type="number" min="0.01" step="0.01" class="df-input" style="width:100%;margin-top:4px">
+    </label>
+    <p id="df-sin-error" style="font-size:12px;color:#9B1C1C;margin:10px 0 0;display:none"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:1rem">
+      <button type="button" class="df-btn" onclick="cerrarRetencionSinEvidencias()">Cancelar</button>
+      <button type="button" class="df-btn" onclick="confirmarRetencionSinEvidencias()"
+              style="border-color:#E3C9A3;background:#FDF8F1;color:#9A5B00">Confirmar</button>
+    </div>
+  </div>
+</div>
+
 <div id="df-retener" class="df-modal">
   <div class="df-modal-box" style="max-width:580px">
     <p style="font-weight:500;font-size:15px;margin:0 0 4px">Confirmar retención</p>
@@ -645,8 +676,8 @@ function recontar() {
     const btn = document.getElementById('df-btn-retener');
     if (btn) {
         btn.disabled = conRet.length === 0;
-        btn.title = conRet.length ? 'Revisar y confirmar la retencion'
-                                  : 'Marca primero el importe a retener en alguna foto';
+        btn.title = conRet.length ? 'Revisar y confirmar la retención con evidencias'
+                                  : 'Selecciona alguna foto e indica el motivo e importe de retención.';
         document.getElementById('df-btn-retener-n').textContent = conRet.length ? '(' + eur(total) + ')' : '';
     }
 }
@@ -682,6 +713,43 @@ function abrirRetener() {
 }
 
 function cerrarRetener() { document.getElementById('df-retener').classList.remove('open'); }
+
+// ── Retención sin evidencias: concepto e importe a mano ─────────────────────
+function abrirRetencionSinEvidencias() {
+    document.getElementById('df-sin-concepto').value = '';
+    document.getElementById('df-sin-importe').value = '';
+    errorSinEvidencias('');
+    document.getElementById('df-sin').classList.add('open');
+    document.getElementById('df-sin-concepto').focus();
+}
+
+function cerrarRetencionSinEvidencias() { document.getElementById('df-sin').classList.remove('open'); }
+
+function errorSinEvidencias(txt) {
+    const p = document.getElementById('df-sin-error');
+    p.textContent = txt;
+    p.style.display = txt ? '' : 'none';
+}
+
+async function confirmarRetencionSinEvidencias() {
+    const concepto = document.getElementById('df-sin-concepto').value.trim();
+    const importe  = parseFloat(document.getElementById('df-sin-importe').value || '0') || 0;
+
+    // Se valida aquí para no hacer el viaje; el servidor vuelve a validar, que es el que decide.
+    if (!concepto) { errorSinEvidencias('Indica el concepto de la retención.'); return; }
+    if (!(importe > 0)) { errorSinEvidencias('Indica un importe mayor que cero.'); return; }
+    if (!confirm('¿Retener ' + eur(importe) + ' sin evidencias? Esta decisión no se rehace desde aquí.')) return;
+
+    const r = await fetch(BASE_DF + '/retener-sin-evidencias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_DF, 'Accept': 'application/json' },
+        body: JSON.stringify({ canal: document.getElementById('df-canal')?.value, concepto: concepto, importe: importe }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (j.error) { errorSinEvidencias(j.error); return; }
+    if (j.errors) { errorSinEvidencias(Object.values(j.errors).flat().join(' ')); return; }
+    location.href = '{{ route('vm.dev-fianzas', $project->slug) }}';
+}
 
 function escaparHtml(t) {
     const d = document.createElement('div');

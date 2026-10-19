@@ -188,6 +188,8 @@ Route::middleware('auth')->group(function () {
             ->where('id', '[0-9]+')->name('vm.dev-fianza.foto-informe');
         Route::post('dev-fianzas/{id}/retener', [\App\Http\Controllers\Vm\DevFianzasController::class, 'retener'])
             ->where('id', '[0-9]+')->name('vm.dev-fianza.retener');
+        Route::post('dev-fianzas/{id}/retener-sin-evidencias', [\App\Http\Controllers\Vm\DevFianzasController::class, 'retenerSinEvidencias'])
+            ->where('id', '[0-9]+')->name('vm.dev-fianza.retener-sin-evidencias');
 
         // Gestión Nuki: tarjetas de cerraduras y su ficha de accesos. Solo lectura. El permiso lo
         // da menu.access desde la entrada "Nuki" del menú (tabla virtual nuki_default).

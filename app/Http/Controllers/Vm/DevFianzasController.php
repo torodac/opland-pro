@@ -61,6 +61,10 @@ class DevFianzasController extends Controller
     // Cómo se devuelve la fianza. Icnea no da el método de pago, así que lo elige quien decide.
     public const CANALES_COBRO = ['TPV virtual', 'TPV físico', 'Transferencia'];
 
+    // Las reservas de Airbnb no tienen fianza que devolver desde Opland: su canal es fijo, no crean
+    // tareas, y la retención avisa solo a Borja para que reclame.
+    public const CANAL_AIRBNB = 'Airbnb';
+
     // Quién recibe la tarea según el canal. Carol es el rol Contabilidad (7); Leticia, el rol
     // Dirección de Operaciones (10); Recepción, el departamento 3. La transferencia no crea tarea
     // al decidir: la de Carol nace cuando el IBAN ya está en Opland.
@@ -68,6 +72,7 @@ class DevFianzasController extends Controller
         'TPV virtual'   => [['rol' => 7]],
         'TPV físico'    => [['departamento' => 3], ['rol' => 10]],
         'Transferencia' => [],
+        'Airbnb'        => [],
     ];
 
     public function index(Request $request, Project $project)
@@ -156,7 +161,8 @@ class DevFianzasController extends Controller
             'incidencias'   => $incidencias,
             'fotos'         => $fotos,
             'estado'        => self::estadoFianza($reserva),
-            'canales'       => self::CANALES_COBRO,
+            'esAirbnb'      => self::esAirbnb($reserva->channel),
+            'canales'       => self::esAirbnb($reserva->channel) ? [self::CANAL_AIRBNB] : self::CANALES_COBRO,
             'iban'          => FianzaIbanController::ibanParaVer($id, Auth::user()),
             'puedeEditar'   => Auth::user()?->canEditTable($project, 'dev_fianzas_default') ?? false,
         ]);
@@ -250,7 +256,7 @@ class DevFianzasController extends Controller
     {
         abort_unless(Auth::user()?->canEditTable($project, 'dev_fianzas_default'), 403);
 
-        $reserva = DB::table('vm_reservas')->where('id', $id)->first(['id', 'estado_fianza', 'fianza']);
+        $reserva = DB::table('vm_reservas')->where('id', $id)->first(['id', 'estado_fianza', 'fianza', 'channel']);
         abort_unless($reserva, 404);
 
         // Decidir sobre una reserva ya decidida no es un reintento inocente: el estado se cambia
@@ -263,7 +269,7 @@ class DevFianzasController extends Controller
             ], 422);
         }
 
-        $canal = $this->validarCanal($request);
+        $canal = $this->validarCanal($request, $reserva);
         if ($canal instanceof \Illuminate\Http\JsonResponse) {
             return $canal;
         }
@@ -297,7 +303,7 @@ class DevFianzasController extends Controller
     {
         abort_unless(Auth::user()?->canEditTable($project, 'dev_fianzas_default'), 403);
 
-        $reserva = DB::table('vm_reservas')->where('id', $id)->first(['id', 'estado_fianza', 'fianza']);
+        $reserva = DB::table('vm_reservas')->where('id', $id)->first(['id', 'estado_fianza', 'fianza', 'channel']);
         abort_unless($reserva, 404);
 
         if (!empty($reserva->estado_fianza)) {
@@ -307,7 +313,7 @@ class DevFianzasController extends Controller
             ], 422);
         }
 
-        $canal = $this->validarCanal($request);
+        $canal = $this->validarCanal($request, $reserva);
         if ($canal instanceof \Illuminate\Http\JsonResponse) {
             return $canal;
         }
@@ -322,14 +328,18 @@ class DevFianzasController extends Controller
         $total  = (float) $lineas->sum('retencion_importe');
         $fianza = (float) ($reserva->fianza ?? 0);
 
-        if ($fianza <= 0) {
-            return response()->json(['error' => 'Esta reserva no tiene fianza, así que no hay nada que retener.'], 422);
-        }
-        if ($total > $fianza + 0.005) {
-            return response()->json([
-                'error' => 'La retención (' . number_format($total, 2, ',', '.')
-                         . ' €) no puede superar la fianza (' . number_format($fianza, 2, ',', '.') . ' €).',
-            ], 422);
+        // En Airbnb no hay fianza que topar: la retención es una reclamación, y puede ser mayor
+        // que cero aunque la reserva no tenga fianza registrada.
+        if (!self::esAirbnb($reserva->channel)) {
+            if ($fianza <= 0) {
+                return response()->json(['error' => 'Esta reserva no tiene fianza, así que no hay nada que retener.'], 422);
+            }
+            if ($total > $fianza + 0.005) {
+                return response()->json([
+                    'error' => 'La retención (' . number_format($total, 2, ',', '.')
+                             . ' €) no puede superar la fianza (' . number_format($fianza, 2, ',', '.') . ' €).',
+                ], 422);
+            }
         }
 
         // El motivo se compone de los conceptos de las fotos: ese campo lo siguen leyendo el
@@ -411,7 +421,7 @@ class DevFianzasController extends Controller
             $filipinas = config('services.vm_fianzas.filipinas_to');
             if ($filipinas) {
                 Mail::to($filipinas)->send(new VmFianzaAvisoMail(
-                    'Número de cuenta para la devolución · reserva ' . $r->booking_id,
+                    'Cierre devolución de depósitos · reserva ' . $r->booking_id,
                     'emails.vm.fianza-iban-filipinas',
                     $datosBase + [
                         'enlace' => FianzaIbanController::enlaceParaFilipinas($reservaId),
@@ -424,11 +434,93 @@ class DevFianzasController extends Controller
         }
     }
 
+    /**
+     * Retención sin evidencias: concepto e importe escritos a mano, sin foto ni incidencia que los
+     * respalde. Es para cuando no hay nada que enseñar (por ejemplo, reservas de Airbnb sin fianza).
+     * Las mismas reglas de fianza y de canal que la retención con evidencias, y el mismo registro:
+     * el total va a fianza_retencion y el motivo, marcado como sin evidencias, a fianza_motivo_retencion.
+     */
+    public function retenerSinEvidencias(Request $request, Project $project, int $id)
+    {
+        abort_unless(Auth::user()?->canEditTable($project, 'dev_fianzas_default'), 403);
+
+        $reserva = DB::table('vm_reservas')->where('id', $id)->first(['id', 'estado_fianza', 'fianza', 'channel']);
+        abort_unless($reserva, 404);
+
+        if (!empty($reserva->estado_fianza)) {
+            return response()->json([
+                'error' => 'Esta reserva ya tiene decisión: "' . $reserva->estado_fianza . '". '
+                         . 'Para rehacerla, deja el estado en blanco desde la ficha de la reserva.',
+            ], 422);
+        }
+
+        $datos = $request->validate([
+            'concepto' => 'required|string|max:255',
+            'importe'  => 'required|numeric|min:0.01',
+        ], [], ['concepto' => 'concepto de la retención', 'importe' => 'importe a retener']);
+
+        $canal = $this->validarCanal($request, $reserva);
+        if ($canal instanceof \Illuminate\Http\JsonResponse) {
+            return $canal;
+        }
+
+        $total    = round((float) $datos['importe'], 2);
+        $concepto = trim($datos['concepto']);
+        $fianza   = (float) ($reserva->fianza ?? 0);
+
+        if (!self::esAirbnb($reserva->channel)) {
+            if ($fianza <= 0) {
+                return response()->json(['error' => 'Esta reserva no tiene fianza, así que no hay nada que retener.'], 422);
+            }
+            if ($total > $fianza + 0.005) {
+                return response()->json([
+                    'error' => 'La retención (' . number_format($total, 2, ',', '.')
+                             . ' €) no puede superar la fianza (' . number_format($fianza, 2, ',', '.') . ' €).',
+                ], 422);
+            }
+        }
+
+        $motivo = $concepto . ' (' . number_format($total, 2, ',', '.') . ' €) · sin evidencias';
+
+        DB::transaction(function () use ($id, $total, $motivo, $canal) {
+            DB::table('vm_reservas')->where('id', $id)->update([
+                'estado_fianza'           => self::ESTADO_RETENER,
+                'fianza_retencion'        => $total,
+                'fianza_motivo_retencion' => $motivo,
+                'fianza_canal_cobro'      => $canal,
+                'fianza_usuario'          => Auth::id(),
+                'fianza_fecha'            => now(),
+                'updatedat'               => now(),
+            ]);
+
+            $this->crearTareasDeCobro($id, $canal, self::SSCC_RETENCION,
+                'Retener ' . number_format($total, 2, ',', '.') . ' € de la fianza, sin evidencias (' . $canal . '): ' . $motivo);
+        });
+
+        $this->avisarDecision($id, $canal, $fianza, $total, $motivo);
+
+        return response()->json(['ok' => true, 'estado' => self::ESTADO_RETENER, 'total' => $total]);
+    }
+
     // ── Piezas compartidas por las dos decisiones ────────────────────────────
 
-    /** El canal de cobro elegido en la ficha. Devuelve el texto, o la respuesta de error. */
-    private function validarCanal(Request $request)
+    /** Una reserva de Airbnb, por el canal que manda Icnea (sin distinguir mayúsculas). */
+    public static function esAirbnb(?string $channel): bool
     {
+        return stripos((string) $channel, 'airbnb') !== false;
+    }
+
+    /**
+     * El canal de cobro de la decisión. En Airbnb es fijo y no se lee del formulario: el desplegable
+     * se muestra deshabilitado, y aunque llegara otro valor el servidor manda. Devuelve el texto, o
+     * la respuesta de error.
+     */
+    private function validarCanal(Request $request, object $reserva)
+    {
+        if (self::esAirbnb($reserva->channel)) {
+            return self::CANAL_AIRBNB;
+        }
+
         $datos = $request->validate([
             'canal' => 'required|string',
         ], [], ['canal' => 'canal de cobro']);
