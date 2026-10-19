@@ -42,6 +42,15 @@ Route::post('forgot-password', [App\Http\Controllers\PasswordResetController::cl
 Route::get('reset-password', [App\Http\Controllers\PasswordResetController::class, 'showReset'])->name('password.reset-form');
 Route::post('reset-password', [App\Http\Controllers\PasswordResetController::class, 'reset'])->name('password.reset');
 
+// Enlace para Filipinas: el número de cuenta de la devolución de una fianza. Sin login, pero con
+// firma temporal de Laravel y un token propio de la reserva; ver FianzaIbanController.
+Route::middleware(['signed', 'throttle:30,1'])->group(function () {
+    Route::get('fianza-iban/{id}', [\App\Http\Controllers\Vm\FianzaIbanController::class, 'formulario'])
+        ->where('id', '[0-9]+')->name('vm.fianza-iban');
+    Route::post('fianza-iban/{id}', [\App\Http\Controllers\Vm\FianzaIbanController::class, 'guardar'])
+        ->where('id', '[0-9]+')->name('vm.fianza-iban.guardar');
+});
+
 // Rutas protegidas
 Route::middleware('auth')->group(function () {
 

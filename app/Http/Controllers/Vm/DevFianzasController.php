@@ -3,10 +3,14 @@
 namespace App\Http\Controllers\Vm;
 
 use App\Http\Controllers\Controller;
+use App\Mail\VmFianzaAvisoMail;
 use App\Models\Project;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 // Devolución de fianzas: revisar lo que dejó cada huésped al salir y decidir si se le devuelve la
 // fianza entera o se le retiene parte.
@@ -54,11 +58,16 @@ class DevFianzasController extends Controller
     public const SSCC_DEVOLUCION = 'Devolución fianza';
     public const SSCC_RETENCION  = 'Retención fianza';
 
-    // A dónde va la tarea. "Contabilidad" es un ROL en este proyecto (id 7), no un departamento,
-    // así que se manda a Adm/Finanzas (6), que es donde ya van las SSCC de "Revisión Novación".
-    public const DEPARTAMENTOS = [
-        3 => 'Recepción',
-        6 => 'Contabilidad',
+    // Cómo se devuelve la fianza. Icnea no da el método de pago, así que lo elige quien decide.
+    public const CANALES_COBRO = ['TPV virtual', 'TPV físico', 'Transferencia'];
+
+    // Quién recibe la tarea según el canal. Carol es el rol Contabilidad (7); Leticia, el rol
+    // Dirección de Operaciones (10); Recepción, el departamento 3. La transferencia no crea tarea
+    // al decidir: la de Carol nace cuando el IBAN ya está en Opland.
+    public const TAREAS_POR_CANAL = [
+        'TPV virtual'   => [['rol' => 7]],
+        'TPV físico'    => [['departamento' => 3], ['rol' => 10]],
+        'Transferencia' => [],
     ];
 
     public function index(Request $request, Project $project)
@@ -147,7 +156,8 @@ class DevFianzasController extends Controller
             'incidencias'   => $incidencias,
             'fotos'         => $fotos,
             'estado'        => self::estadoFianza($reserva),
-            'departamentos' => self::DEPARTAMENTOS,
+            'canales'       => self::CANALES_COBRO,
+            'iban'          => FianzaIbanController::ibanParaVer($id, Auth::user()),
             'puedeEditar'   => Auth::user()?->canEditTable($project, 'dev_fianzas_default') ?? false,
         ]);
     }
@@ -253,23 +263,25 @@ class DevFianzasController extends Controller
             ], 422);
         }
 
-        $departamento = $this->validarDepartamento($request);
-        if ($departamento instanceof \Illuminate\Http\JsonResponse) {
-            return $departamento;
+        $canal = $this->validarCanal($request);
+        if ($canal instanceof \Illuminate\Http\JsonResponse) {
+            return $canal;
         }
 
-        DB::transaction(function () use ($id, $departamento, $reserva) {
+        DB::transaction(function () use ($id, $canal, $reserva) {
             DB::table('vm_reservas')->where('id', $id)->update([
                 'estado_fianza'       => self::ESTADO_APROBADA,
-                'fianza_departamento' => $departamento,
+                'fianza_canal_cobro'  => $canal,
                 'fianza_usuario'      => Auth::id(),
                 'fianza_fecha'        => now(),
                 'updatedat'           => now(),
             ]);
 
-            $this->crearTareaSscc($id, $departamento, self::SSCC_DEVOLUCION,
-                'Devolver la fianza íntegra (' . number_format((float) ($reserva->fianza ?? 0), 2, ',', '.') . ' €).');
+            $this->crearTareasDeCobro($id, $canal, self::SSCC_DEVOLUCION,
+                'Devolver la fianza íntegra (' . number_format((float) ($reserva->fianza ?? 0), 2, ',', '.') . ' €) por ' . $canal . '.');
         });
+
+        $this->avisarDecision($id, $canal, (float) ($reserva->fianza ?? 0), 0.0, '');
 
         return response()->json(['ok' => true, 'estado' => self::ESTADO_APROBADA]);
     }
@@ -295,9 +307,9 @@ class DevFianzasController extends Controller
             ], 422);
         }
 
-        $departamento = $this->validarDepartamento($request);
-        if ($departamento instanceof \Illuminate\Http\JsonResponse) {
-            return $departamento;
+        $canal = $this->validarCanal($request);
+        if ($canal instanceof \Illuminate\Http\JsonResponse) {
+            return $canal;
         }
 
         $lineas = $this->retencionesDeReserva($id);
@@ -326,49 +338,122 @@ class DevFianzasController extends Controller
                 . ' (' . number_format((float) $l->retencion_importe, 2, ',', '.') . ' €)')
             ->implode('; ');
 
-        DB::transaction(function () use ($id, $total, $motivo, $departamento, $lineas) {
+        DB::transaction(function () use ($id, $total, $motivo, $canal, $lineas) {
             DB::table('vm_reservas')->where('id', $id)->update([
                 'estado_fianza'           => self::ESTADO_RETENER,
                 'fianza_retencion'        => $total,
                 'fianza_motivo_retencion' => $motivo,
-                'fianza_departamento'     => $departamento,
+                'fianza_canal_cobro'      => $canal,
                 'fianza_usuario'          => Auth::id(),
                 'fianza_fecha'            => now(),
                 'updatedat'               => now(),
             ]);
 
-            $this->crearTareaSscc($id, $departamento, self::SSCC_RETENCION,
+            $this->crearTareasDeCobro($id, $canal, self::SSCC_RETENCION,
                 'Retener ' . number_format($total, 2, ',', '.') . ' € de la fianza, por '
-                . $lineas->count() . ' concepto(s): ' . $motivo);
+                . $lineas->count() . ' concepto(s) (' . $canal . '): ' . $motivo);
         });
+
+        $this->avisarDecision($id, $canal, $fianza, $total, $motivo);
 
         return response()->json(['ok' => true, 'estado' => self::ESTADO_RETENER, 'total' => $total]);
     }
 
-    // ── Piezas compartidas por las dos decisiones ────────────────────────────
-
-    /** El departamento al que va la tarea SSCC. Devuelve el id, o la respuesta de error. */
-    private function validarDepartamento(Request $request)
+    /**
+     * Los correos que salen al decidir. Ninguno bloquea la decisión: si uno falla, queda en el log
+     * y la fianza sigue decidida.
+     *
+     * - Huésped: solo si hay devolución monetaria (fianza menos retención, mayor que 0).
+     * - Borja: solo retenciones de reservas de Airbnb.
+     * - Filipinas: solo por transferencia, con el enlace para el número de cuenta.
+     */
+    private function avisarDecision(int $reservaId, string $canal, float $fianza, float $retencion, string $motivo): void
     {
-        $datos = $request->validate([
-            'departamento' => 'required|integer',
-        ], [], ['departamento' => 'departamento']);
-
-        $dep = (int) $datos['departamento'];
-        if (!array_key_exists($dep, self::DEPARTAMENTOS)) {
-            return response()->json(['error' => 'Elige a qué departamento se asigna la tarea.'], 422);
+        $r = DB::table('vm_reservas as r')
+            ->leftJoin('vm_propiedades as p', 'p.id', '=', 'r.id_propiedades')
+            ->where('r.id', $reservaId)
+            ->first(['r.booking_id', 'r.guest_name', 'r.guest_email', 'r.check_in_date',
+                     'r.check_out_date', 'r.channel', 'p.nombre as propiedad']);
+        if (!$r) {
+            return;
         }
 
-        return $dep;
+        $datosBase = [
+            'booking_id' => $r->booking_id,
+            'propiedad'  => $r->propiedad ?: 'sin propiedad',
+            'entrada'    => Carbon::parse($r->check_in_date)->format('d/m/Y'),
+            'salida'     => Carbon::parse($r->check_out_date)->format('d/m/Y'),
+        ];
+
+        $importe = max(0.0, $fianza - $retencion);
+        if ($importe > 0) {
+            if ($r->guest_email) {
+                Mail::to($r->guest_email)->send(new VmFianzaAvisoMail(
+                    'Devolución de su fianza · reserva ' . $r->booking_id,
+                    'emails.vm.fianza-huesped',
+                    $datosBase + ['nombre' => $r->guest_name, 'importe' => $importe,
+                                  'retencion' => $retencion, 'motivo' => $motivo],
+                ));
+            } else {
+                Log::warning('Fianza: sin correo del huésped, no se avisa', ['reserva' => $reservaId]);
+            }
+        }
+
+        if ($retencion > 0 && stripos((string) $r->channel, 'airbnb') !== false) {
+            Mail::to(config('services.vm_fianzas.borja_to'))->send(new VmFianzaAvisoMail(
+                'Retención de fianza Airbnb · reserva ' . $r->booking_id,
+                'emails.vm.fianza-retencion-airbnb',
+                $datosBase + ['huesped' => $r->guest_name, 'retencion' => $retencion, 'motivo' => $motivo],
+            ));
+        }
+
+        if ($canal === 'Transferencia') {
+            $filipinas = config('services.vm_fianzas.filipinas_to');
+            if ($filipinas) {
+                Mail::to($filipinas)->send(new VmFianzaAvisoMail(
+                    'Número de cuenta para la devolución · reserva ' . $r->booking_id,
+                    'emails.vm.fianza-iban-filipinas',
+                    $datosBase + [
+                        'enlace' => FianzaIbanController::enlaceParaFilipinas($reservaId),
+                        'caduca' => now()->addDays((int) config('services.vm_fianzas.iban_enlace_dias', 7))->format('d/m/Y'),
+                    ],
+                ));
+            } else {
+                Log::warning('Fianza por transferencia: falta VM_FIANZAS_FILIPINAS_TO, no se envía el enlace', ['reserva' => $reservaId]);
+            }
+        }
+    }
+
+    // ── Piezas compartidas por las dos decisiones ────────────────────────────
+
+    /** El canal de cobro elegido en la ficha. Devuelve el texto, o la respuesta de error. */
+    private function validarCanal(Request $request)
+    {
+        $datos = $request->validate([
+            'canal' => 'required|string',
+        ], [], ['canal' => 'canal de cobro']);
+
+        if (!in_array($datos['canal'], self::CANALES_COBRO, true)) {
+            return response()->json(['error' => 'Elige el canal de cobro: TPV virtual, TPV físico o transferencia.'], 422);
+        }
+
+        return $datos['canal'];
     }
 
     /**
-     * La tarea que hace que la decisión llegue a quien mueve el dinero.
+     * Las tareas que hacen que la decisión llegue a quien mueve el dinero, según el canal.
      *
-     * Lleva id_reservas porque de ahí sale el paso a "Devuelta": sin esa columna no habría forma
-     * de saber qué fianza cierra cada tarea.
+     * Cada una lleva id_reservas porque de ahí sale el paso a "Devuelta": la fianza solo se da por
+     * devuelta cuando están completadas todas sus tareas.
      */
-    private function crearTareaSscc(int $reservaId, int $departamento, string $tipo, string $descripcion): void
+    private function crearTareasDeCobro(int $reservaId, string $canal, string $tipo, string $descripcion): void
+    {
+        foreach (self::TAREAS_POR_CANAL[$canal] ?? [] as $destino) {
+            $this->crearTareaSscc($reservaId, $destino['departamento'] ?? null, $destino['rol'] ?? null, $tipo, $descripcion);
+        }
+    }
+
+    public function crearTareaSscc(int $reservaId, ?int $departamento, ?int $rol, string $tipo, string $descripcion): void
     {
         $reserva = DB::table('vm_reservas as r')
             ->leftJoin('vm_propiedades as p', 'p.id', '=', 'r.id_propiedades')
@@ -382,6 +467,7 @@ class DevFianzasController extends Controller
             'Tipo'              => $tipo,
             'estado'            => 'Nueva',
             'id_departamento'   => $departamento,
+            'id_rol'            => $rol,
             'id_reservas'       => $reservaId,
             'id_propiedades'    => $reserva->id_propiedades ?? null,
             'fecha_planificada' => now()->toDateString(),
@@ -514,6 +600,7 @@ class DevFianzasController extends Controller
                 r.id, r.booking_id, r.nombre, r.guest_name, r.check_out_date, r.check_in_date,
                 r.fianza, r.estado_fianza, r.fianza_retencion, r.fianza_motivo_retencion,
                 r.fianza_fecha, r.booking_status,
+                r.fianza_canal_cobro, r.fianza_iban_guardado_at,
                 p.nombre AS propiedad,
                 r.channel,
                 au.name  AS decidido_por,
@@ -550,9 +637,13 @@ class DevFianzasController extends Controller
                 -- silencio sobre si una fianza ya está devuelta.
                 --
                 -- Cancelada y Descartada no cuentan: ahí no se ha movido ningún dinero.
-                (SELECT count(*) FROM vm_tareas_sscc s
-                  WHERE s.id_reservas = r.id AND COALESCE(s.deleted, 0) = 0
-                    AND s.estado = 'Completada') AS sscc_finalizada
+                -- Con varias tareas (TPV físico tiene dos) la fianza solo está devuelta cuando
+                -- todas están completadas: basta una abierta para que siga pendiente.
+                (SELECT CASE WHEN count(*) > 0
+                             AND count(*) FILTER (WHERE s.estado = 'Completada') = count(*)
+                        THEN 1 ELSE 0 END
+                   FROM vm_tareas_sscc s
+                  WHERE s.id_reservas = r.id AND COALESCE(s.deleted, 0) = 0) AS sscc_finalizada
             ");
     }
 

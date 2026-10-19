@@ -154,13 +154,14 @@
 
   @if($pendiente && $puedeEditar)
     <div style="display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap">
-      {{-- El departamento decide a quién le llega la tarea de mover el dinero. Va antes que los
-           botones porque es una elección previa, no un detalle de la confirmación. --}}
+      {{-- El canal de cobro decide cómo se devuelve el dinero y a quién le llegan las tareas.
+           Va antes que los botones porque es una elección previa, no un detalle de la confirmación. --}}
       <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px">
-        Asignar a
-        <select id="df-departamento" class="df-input" style="width:auto;padding:5px 8px">
-          @foreach($departamentos as $depId => $depNombre)
-            <option value="{{ $depId }}">{{ $depNombre }}</option>
+        Canal de cobro
+        <select id="df-canal" class="df-input" style="width:auto;padding:5px 8px">
+          <option value="">— elegir —</option>
+          @foreach($canales as $canal)
+            <option value="{{ $canal }}">{{ $canal }}</option>
           @endforeach
         </select>
       </label>
@@ -187,6 +188,20 @@
       Ya decidida. Para rehacerla, deja el estado en blanco en
       <a href="{{ url($project->slug . '/reservas/' . $reserva->id) }}" style="color:#185FA5">la ficha de la reserva</a>.
     </p>
+  @endif
+
+  {{-- Transferencia: el número de cuenta llega por el enlace a Filipinas. Aquí se ve el estado de
+       ese dato; el IBAN en claro solo aparece a Dirección general, Contabilidad y admin. --}}
+  @if(($reserva->fianza_canal_cobro ?? null) === 'Transferencia')
+    <div style="margin-top:12px;font-size:13px;color:#555">
+      @if($iban)
+        <strong>IBAN:</strong> <span style="font-family:monospace">{{ $iban }}</span>
+      @elseif(!empty($reserva->fianza_iban_guardado_at))
+        <strong>IBAN:</strong> guardado (solo lo ven Dirección general, Contabilidad y admin).
+      @else
+        <strong>IBAN:</strong> pendiente. Filipinas lo introduce desde el enlace que se les envió.
+      @endif
+    </div>
   @endif
 </div>
 
@@ -678,7 +693,7 @@ async function confirmarRetener() {
     const r = await fetch(BASE_DF + '/retener', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_DF, 'Accept': 'application/json' },
-        body: JSON.stringify({ departamento: document.getElementById('df-departamento')?.value }),
+        body: JSON.stringify({ canal: document.getElementById('df-canal')?.value }),
     });
     const j = await r.json().catch(() => ({}));
     if (j.error) { alert(j.error); return; }
@@ -692,7 +707,7 @@ async function conforme() {
     const r = await fetch(BASE_DF + '/conforme', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_DF, 'Accept': 'application/json' },
-        body: JSON.stringify({ departamento: document.getElementById('df-departamento')?.value }),
+        body: JSON.stringify({ canal: document.getElementById('df-canal')?.value }),
     });
     const j = await r.json().catch(() => ({}));
     if (j.error) { alert(j.error); return; }
