@@ -548,6 +548,13 @@ class ListadoController extends Controller
         $visibleIds = $this->resolveVisibleUserIds($project);
         if ($visibleIds === null) return;
 
+        // Tareas SSCC: lo suyo, más las genéricas (sin control_user) de su departamento o de su rol.
+        // Una genérica de otro departamento o rol no le aparece.
+        if ($fullTable === $project->slug . '_tareas_sscc') {
+            $this->aplicarVisibilidadSscc($query, $project, $visibleIds);
+            return;
+        }
+
         $fieldType = $this->getControlUserFieldType($project, $fullTable);
 
         if ($fieldType === 'desplegable') {
@@ -566,6 +573,45 @@ class ListadoController extends Controller
                 }
             });
         }
+    }
+
+    /**
+     * Visibilidad de las tareas SSCC: las que tienen al usuario en control_user (o a su equipo, si su
+     * rol es de supervisión), y las genéricas sin control_user que son de su departamento o de su rol.
+     */
+    private function aplicarVisibilidadSscc($query, Project $project, array $visibleIds): void
+    {
+        $projectUserId = Auth::user()?->projectUserId($project);
+        $yo = $projectUserId
+            ? DB::table($project->slug . '_usuarios')->where('id', $projectUserId)->first(['id_rol', 'id_departamento'])
+            : null;
+
+        $cast = DB::connection()->getDriverName() === 'pgsql' ? '::text' : '';
+
+        $query->where(function ($q) use ($visibleIds, $yo, $cast) {
+            // control_user guarda ids como números ([2]) o como texto (["2"]): se comprueban los dos.
+            foreach ($visibleIds as $vid) {
+                if ($cast) {
+                    $q->orWhereRaw('control_user::jsonb @> ?::jsonb', ['[' . (int) $vid . ']'])
+                      ->orWhereRaw('control_user::jsonb @> ?::jsonb', ['["' . $vid . '"]']);
+                } else {
+                    $q->orWhereRaw('control_user LIKE ?', ["%{$vid}%"]);
+                }
+            }
+
+            $q->orWhere(function ($g) use ($yo, $cast) {
+                $g->where(function ($sinAsignar) use ($cast) {
+                    $sinAsignar->whereNull('control_user')
+                        ->orWhereRaw("control_user{$cast} = '[]'");
+                });
+                $g->where(function ($propias) use ($yo) {
+                    if ($yo?->id_departamento) $propias->orWhere('id_departamento', $yo->id_departamento);
+                    if ($yo?->id_rol)          $propias->orWhere('id_rol', $yo->id_rol);
+                    // Sin departamento ni rol no hay genéricas que enseñar: la condición queda vacía.
+                    $propias->orWhereRaw('1 = 0');
+                });
+            });
+        });
     }
 
     // Ids de usuario visibles para el usuario actual: null = sin restriccion (ve todos),
