@@ -192,7 +192,7 @@
                         };
                         $nombre = explode(' ', trim($r->guest_name))[0];
                     @endphp
-                    <a href="{{ route('ficha', [$project->slug, 'reservas', $r->id]) }}"
+                    <a href="{{ route('vm.reserva_form', [$project->slug, $r->id]) }}"
                        class="res-tip"
                        data-tip-nombre="{{ $r->guest_name }}"
                        data-tip-in="{{ $checkin->format('d/m/Y') }}"

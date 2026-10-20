@@ -59,7 +59,7 @@
                 <td style="padding:8px 12px;font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap">
                     {{-- stopPropagation: este enlace va a la ficha de la RESERVA, no a la de
                          revisión, y sin esto el clic en la fila se lo llevaría por delante. --}}
-                    <a href="{{ url($project->slug . '/reservas/' . $f->id) }}"
+                    <a href="{{ route('vm.reserva_form', [$project->slug, $f->id]) }}"
                        onclick="event.stopPropagation()"
                        style="color:#185FA5;text-decoration:none">{{ $f->booking_id }}</a>
                     {{-- Hay limpieza de salida: lo que hace que la reserva se pueda revisar de

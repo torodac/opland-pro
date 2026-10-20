@@ -334,6 +334,12 @@ Route::middleware('auth')->group(function () {
         Route::post('sscc_form/{id}/comentario', [\App\Http\Controllers\Vm\SsccController::class, 'guardarComentario'])
             ->where('id', '[0-9]+')->name('vm.sscc_form.comentario');
 
+        // Ficha de una reserva. Los datos vienen de Icnea; solo se edita la decisión de fianza.
+        Route::get('reservas_form/{id}', [\App\Http\Controllers\Vm\ReservaController::class, 'show'])
+            ->where('id', '[0-9]+')->name('vm.reserva_form');
+        Route::post('reservas_form/{id}/fianza', [\App\Http\Controllers\Vm\ReservaController::class, 'guardarFianza'])
+            ->where('id', '[0-9]+')->name('vm.reserva_form.fianza');
+
         Route::middleware('table.access:fichaje')->group(function () {
             Route::get('fichaje_list',       [\App\Http\Controllers\Vm\FichajeController::class, 'listado'])->name('vm.fichaje_list');
             Route::get('fichaje_form/nuevo', [\App\Http\Controllers\Vm\FichajeController::class, 'create'])->name('vm.fichaje_form.nuevo');

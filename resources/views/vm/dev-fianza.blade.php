@@ -86,7 +86,7 @@
     <div class="df-cell">
       <p class="df-lbl">Booking</p>
       <p class="df-val">
-        <a href="{{ url($project->slug . '/reservas/' . $reserva->id) }}" style="color:#185FA5;text-decoration:none">
+        <a href="{{ route('vm.reserva_form', [$project->slug, $reserva->id]) }}" style="color:#185FA5;text-decoration:none">
           {{ $reserva->booking_id }}
         </a>
       </p>
@@ -194,7 +194,7 @@
   @else
     <p style="font-size:12px;color:#bbb;margin:12px 0 0">
       Ya decidida. Para rehacerla, deja el estado en blanco en
-      <a href="{{ url($project->slug . '/reservas/' . $reserva->id) }}" style="color:#185FA5">la ficha de la reserva</a>.
+      <a href="{{ route('vm.reserva_form', [$project->slug, $reserva->id]) }}" style="color:#185FA5">la ficha de la reserva</a>.
     </p>
   @endif
 
