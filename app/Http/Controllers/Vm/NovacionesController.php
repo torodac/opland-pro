@@ -626,6 +626,7 @@ class NovacionesController extends Controller
             'estado'            => 'Nueva',
             'fecha_planificada' => $fechaFin,
             'id_propiedades'    => $propId,
+            'novacion_periodo'  => sprintf('%04d-%02d', $year, $month),
             'id_departamento'   => DB::table('vm_departamentos')->where('nombre', 'Adm/Finanzas')->value('id'),
             'hidden'            => 0,
             'deleted'           => 0,

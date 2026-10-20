@@ -120,6 +120,9 @@ return [
         'borja_to'         => env('VM_FIANZAS_BORJA_TO', 'borja@vacationmarbella.com'),
         'filipinas_to'     => env('VM_FIANZAS_FILIPINAS_TO', 'info@vacationmarbella.com'),
         'iban_enlace_dias' => (int) env('VM_FIANZAS_IBAN_ENLACE_DIAS', 7),
+        // TEMPORAL (pruebas): todos los correos de fianzas se envían a esta dirección en lugar de a
+        // los destinatarios reales. Para volver a los reales, dejar la variable vacía o quitar la línea.
+        'mail_override_to' => env('VM_FIANZAS_MAIL_OVERRIDE_TO', 'torodac@gmail.com'),
     ],
 
 ];

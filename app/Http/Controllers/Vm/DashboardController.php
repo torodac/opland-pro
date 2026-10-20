@@ -146,6 +146,9 @@ class DashboardController extends Controller
             return response()->json(['error' => 'No se pudo identificar tu usuario en este proyecto.'], 403);
         }
 
+        $previa = DB::table('vm_tareas_sscc')->where('id', $id)->where('deleted', 0)
+            ->first(['estado', 'Tipo', 'id_reservas']);
+
         $updated = DB::table('vm_tareas_sscc')
             ->where('id', $id)
             ->where('deleted', 0)
@@ -157,6 +160,20 @@ class DashboardController extends Controller
             ]);
         if (!$updated) {
             return response()->json(['error' => 'Tarea no encontrada.'], 404);
+        }
+
+        // Al cerrar la última tarea de una fianza, el dinero ya se ha movido: entonces, y solo
+        // entonces, sale el correo al huésped. Sin el paso a Completada desde otro estado no se repite.
+        if ($previa && $previa->estado !== 'Completada' && $previa->id_reservas
+            && in_array($previa->Tipo, [DevFianzasController::SSCC_DEVOLUCION, DevFianzasController::SSCC_RETENCION], true)) {
+            $pendientes = DB::table('vm_tareas_sscc')
+                ->where('id_reservas', $previa->id_reservas)
+                ->where('deleted', 0)
+                ->where('estado', '!=', 'Completada')
+                ->exists();
+            if (!$pendientes) {
+                app(DevFianzasController::class)->avisarHuespedDevolucion((int) $previa->id_reservas);
+            }
         }
 
         return response()->json(['ok' => true]);

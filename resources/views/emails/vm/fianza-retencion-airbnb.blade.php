@@ -9,4 +9,6 @@ Huésped: {{ $huesped ?? '—' }}</p>
 <p>Retenido: <strong>{{ number_format($retencion, 2, ',', '.') }} €</strong></p>
 <p>Motivo: {{ $motivo }}</p>
 
+<p>Ficha de la devolución: <a href="{{ $enlace }}">{{ $enlace }}</a></p>
+
 <p>Vacation Marbella</p>

@@ -370,6 +370,64 @@ class DevFianzasController extends Controller
     }
 
     /**
+     * Correo bilingüe al huésped con la devolución. Lo llama DashboardController::marcarSsccHecho
+     * cuando todas las tareas SSCC de la fianza están completadas: ahí es cuando el dinero se ha
+     * movido de verdad. Si no hay importe que devolver (fianza 0, o todo retenido), no hay correo.
+     */
+    public function avisarHuespedDevolucion(int $reservaId): void
+    {
+        $r = DB::table('vm_reservas as r')
+            ->leftJoin('vm_propiedades as p', 'p.id', '=', 'r.id_propiedades')
+            ->where('r.id', $reservaId)
+            ->first(['r.booking_id', 'r.guest_name', 'r.guest_email', 'r.check_in_date', 'r.check_out_date',
+                     'r.fianza', 'r.fianza_retencion', 'r.fianza_motivo_retencion', 'p.nombre as propiedad']);
+        if (!$r) {
+            return;
+        }
+
+        $retencion = (float) ($r->fianza_retencion ?? 0);
+        $importe   = max(0.0, (float) ($r->fianza ?? 0) - $retencion);
+        if ($importe <= 0) {
+            return;
+        }
+        if (!$r->guest_email) {
+            Log::warning('Fianza: sin correo del huésped, no se avisa de la devolución', ['reserva' => $reservaId]);
+            return;
+        }
+
+        Mail::to($this->destinatario($r->guest_email))->send(new VmFianzaAvisoMail(
+            'Devolución de su fianza · Deposit refund · reserva ' . $r->booking_id,
+            'emails.vm.fianza-huesped',
+            [
+                'nombre'     => $r->guest_name,
+                'booking_id' => $r->booking_id,
+                'propiedad'  => $r->propiedad ?: 'sin propiedad',
+                'entrada'    => Carbon::parse($r->check_in_date)->format('d/m/Y'),
+                'salida'     => Carbon::parse($r->check_out_date)->format('d/m/Y'),
+                'importe'    => $importe,
+                'retencion'  => $retencion,
+                'motivo'     => (string) ($r->fianza_motivo_retencion ?? ''),
+            ],
+        ));
+    }
+
+    /**
+     * A quién va realmente un correo de fianzas. Con VM_FIANZAS_MAIL_OVERRIDE_TO definida (ahora,
+     * temporalmente, para pruebas) todos van a esa dirección, y el destinatario real queda en el log.
+     */
+    private function destinatario(string $real): string
+    {
+        $override = (string) config('services.vm_fianzas.mail_override_to');
+        if ($override === '') {
+            return $real;
+        }
+
+        Log::info('Fianza: correo redirigido por prueba', ['destinatario_real' => $real, 'enviado_a' => $override]);
+
+        return $override;
+    }
+
+    /**
      * Los correos que salen al decidir. Ninguno bloquea la decisión: si uno falla, queda en el log
      * y la fianza sigue decidida.
      *
@@ -395,32 +453,22 @@ class DevFianzasController extends Controller
             'salida'     => Carbon::parse($r->check_out_date)->format('d/m/Y'),
         ];
 
-        $importe = max(0.0, $fianza - $retencion);
-        if ($importe > 0) {
-            if ($r->guest_email) {
-                Mail::to($r->guest_email)->send(new VmFianzaAvisoMail(
-                    'Devolución de su fianza · reserva ' . $r->booking_id,
-                    'emails.vm.fianza-huesped',
-                    $datosBase + ['nombre' => $r->guest_name, 'importe' => $importe,
-                                  'retencion' => $retencion, 'motivo' => $motivo],
-                ));
-            } else {
-                Log::warning('Fianza: sin correo del huésped, no se avisa', ['reserva' => $reservaId]);
-            }
-        }
+        // El correo al huésped no sale aquí: sale cuando Contabilidad cierra la SSCC (ver
+        // avisarHuespedDevolucion), que es cuando el dinero se ha movido de verdad.
 
         if ($retencion > 0 && stripos((string) $r->channel, 'airbnb') !== false) {
-            Mail::to(config('services.vm_fianzas.borja_to'))->send(new VmFianzaAvisoMail(
+            Mail::to($this->destinatario(config('services.vm_fianzas.borja_to')))->send(new VmFianzaAvisoMail(
                 'Retención de fianza Airbnb · reserva ' . $r->booking_id,
                 'emails.vm.fianza-retencion-airbnb',
-                $datosBase + ['huesped' => $r->guest_name, 'retencion' => $retencion, 'motivo' => $motivo],
+                $datosBase + ['huesped' => $r->guest_name, 'retencion' => $retencion, 'motivo' => $motivo,
+                              'enlace' => url('vm/dev-fianzas/' . $reservaId)],
             ));
         }
 
         if ($canal === 'Transferencia') {
             $filipinas = config('services.vm_fianzas.filipinas_to');
             if ($filipinas) {
-                Mail::to($filipinas)->send(new VmFianzaAvisoMail(
+                Mail::to($this->destinatario($filipinas))->send(new VmFianzaAvisoMail(
                     'Cierre devolución de depósitos · reserva ' . $r->booking_id,
                     'emails.vm.fianza-iban-filipinas',
                     $datosBase + [
@@ -550,9 +598,11 @@ class DevFianzasController extends Controller
         $reserva = DB::table('vm_reservas as r')
             ->leftJoin('vm_propiedades as p', 'p.id', '=', 'r.id_propiedades')
             ->where('r.id', $reservaId)
-            ->first(['r.booking_id', 'r.id_propiedades', 'p.nombre as propiedad']);
+            ->first(['r.booking_id', 'r.id_propiedades', 'r.check_out_date', 'p.nombre as propiedad']);
 
         DB::table('vm_tareas_sscc')->insert([
+            // La novación a la que pertenece la fianza es la del mes de su salida.
+            'novacion_periodo'  => $reserva->check_out_date ? Carbon::parse($reserva->check_out_date)->format('Y-m') : null,
             'nombre'            => $tipo . ' · reserva ' . ($reserva->booking_id ?? $reservaId)
                                  . ' (' . ($reserva->propiedad ?: 'sin propiedad') . ')',
             'descripcion'       => $descripcion,
