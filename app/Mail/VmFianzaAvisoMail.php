@@ -4,6 +4,7 @@ namespace App\Mail;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
+use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
@@ -30,5 +31,20 @@ class VmFianzaAvisoMail extends Mailable
     public function content(): Content
     {
         return new Content(view: $this->vista, with: $this->datos);
+    }
+
+    /**
+     * Fotos que justifican una retención. Llegan como rutas de fichero en $datos['adjuntos'], y
+     * solo las que existen en disco: una ruta rota no tumba el envío.
+     *
+     * @return array<int, Attachment>
+     */
+    public function attachments(): array
+    {
+        return collect($this->datos['adjuntos'] ?? [])
+            ->filter(fn(string $ruta) => is_file($ruta))
+            ->map(fn(string $ruta) => Attachment::fromPath($ruta)->as(basename($ruta)))
+            ->values()
+            ->all();
     }
 }

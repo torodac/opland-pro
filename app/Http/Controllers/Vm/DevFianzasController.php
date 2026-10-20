@@ -65,6 +65,10 @@ class DevFianzasController extends Controller
     // tareas, y la retención avisa solo a Borja para que reclame.
     public const CANAL_AIRBNB = 'Airbnb';
 
+    // Marca que queda en el motivo interno de una retención sin evidencias. Es para el equipo, no
+    // para el huésped: el correo al huésped la quita.
+    public const SUFIJO_SIN_EVIDENCIAS = ' · sin evidencias';
+
     // Quién recibe la tarea según el canal. Carol es el rol Contabilidad (7); Leticia, el rol
     // Dirección de Operaciones (10); Recepción, el departamento 3. La transferencia no crea tarea
     // al decidir: la de Carol nace cuando el IBAN ya está en Opland.
@@ -406,9 +410,32 @@ class DevFianzasController extends Controller
                 'salida'     => Carbon::parse($r->check_out_date)->format('d/m/Y'),
                 'importe'    => $importe,
                 'retencion'  => $retencion,
-                'motivo'     => (string) ($r->fianza_motivo_retencion ?? ''),
+                // El motivo interno marca las retenciones sin evidencias; al huésped no se le enseña esa marca.
+                'motivo'     => str_replace(self::SUFIJO_SIN_EVIDENCIAS, '', (string) ($r->fianza_motivo_retencion ?? '')),
+                'adjuntos'   => $this->rutasFotosRetencion($reservaId),
             ],
         ));
+    }
+
+    /**
+     * Las fotos que justifican la retención, como rutas en disco, para adjuntarlas al correo al
+     * huésped. Sin retención con foto (p. ej. una retención sin evidencias), no hay nada que adjuntar.
+     *
+     * @return array<int, string>
+     */
+    private function rutasFotosRetencion(int $reservaId): array
+    {
+        $rutas = [];
+        foreach ($this->retencionesDeReserva($reservaId) as $foto) {
+            $ruta = storage_path('app/public/' . $foto->file_foto);
+            if (is_file($ruta)) {
+                $rutas[] = $ruta;
+            } else {
+                Log::warning('Fianza: foto de retención no encontrada, no se adjunta', ['reserva' => $reservaId, 'foto' => $foto->file_foto]);
+            }
+        }
+
+        return $rutas;
     }
 
     /**
@@ -528,7 +555,7 @@ class DevFianzasController extends Controller
             }
         }
 
-        $motivo = $concepto . ' (' . number_format($total, 2, ',', '.') . ' €) · sin evidencias';
+        $motivo = $concepto . ' (' . number_format($total, 2, ',', '.') . ' €)' . self::SUFIJO_SIN_EVIDENCIAS;
 
         DB::transaction(function () use ($id, $total, $motivo, $canal) {
             DB::table('vm_reservas')->where('id', $id)->update([
