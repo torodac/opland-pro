@@ -50,80 +50,80 @@
     @endif
   </div>
 
-  {{-- Los datos de la reserva vienen de Icnea: solo lectura --}}
+  @foreach($secciones as $titulo => $filas)
+    @php($esFianza = $titulo === 'Fianza')
+    <section class="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+      <h2 class="text-sm font-semibold text-gray-700">{{ $titulo }}</h2>
+
+      @if($esFianza)
+        <div class="rounded-lg bg-amber-50 text-amber-800 text-xs px-3 py-2">
+          Cambiar la decisión aquí no crea tareas SSCC ni envía correos. Para decidir, usa Dev. fianzas.
+        </div>
+        <form id="form-fianza" method="POST" action="{{ route('vm.reserva_form.fianza', [$project->slug, $reserva->id]) }}">
+          @csrf
+      @endif
+
+      <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+        @foreach($filas as $fila)
+          <dt class="text-gray-500">{{ $fila['etiqueta'] }}</dt>
+          <dd class="text-gray-900 break-words">
+            @if($fila['editable'])
+              <span class="v-field">{{ $fila['valor'] }}</span>
+              @switch($fila['campo'])
+                @case('estado_fianza')
+                  <select name="estado_fianza" class="e-field w-full rounded-lg border border-gray-300 text-sm p-1.5" style="display:none">
+                    <option value="">— Selecciona —</option>
+                    @foreach($estados as $e)
+                      <option value="{{ $e }}" @selected(old('estado_fianza', $reserva->estado_fianza) === $e)>{{ $e }}</option>
+                    @endforeach
+                  </select>
+                  @break
+                @case('fianza_retencion')
+                  <input type="number" step="0.01" min="0" name="fianza_retencion"
+                         value="{{ old('fianza_retencion', $reserva->fianza_retencion) }}"
+                         class="e-field w-full rounded-lg border border-gray-300 text-sm p-1.5" style="display:none">
+                  @break
+                @case('fianza_motivo_retencion')
+                  <input type="text" maxlength="500" name="fianza_motivo_retencion"
+                         value="{{ old('fianza_motivo_retencion', $reserva->fianza_motivo_retencion) }}"
+                         class="e-field w-full rounded-lg border border-gray-300 text-sm p-1.5" style="display:none">
+                  @break
+                @case('fianza_usuario')
+                  <select name="fianza_usuario" class="e-field w-full rounded-lg border border-gray-300 text-sm p-1.5" style="display:none">
+                    <option value="">— Ninguno —</option>
+                    @foreach($usuarios as $u)
+                      <option value="{{ $u->id }}" @selected((string) old('fianza_usuario', $reserva->fianza_usuario) === (string) $u->id)>{{ $u->name }}</option>
+                    @endforeach
+                  </select>
+                  @break
+                @case('fianza_fecha')
+                  <input type="datetime-local" name="fianza_fecha"
+                         value="{{ old('fianza_fecha', $reserva->fianza_fecha ? \Carbon\Carbon::parse($reserva->fianza_fecha)->format('Y-m-d\TH:i') : '') }}"
+                         class="e-field w-full rounded-lg border border-gray-300 text-sm p-1.5" style="display:none">
+                  @break
+              @endswitch
+            @else
+              {{ $fila['valor'] }}
+            @endif
+          </dd>
+        @endforeach
+      </dl>
+
+      @if($esFianza)
+        </form>
+      @endif
+    </section>
+  @endforeach
+
+  {{-- Traza de cambios: lo que ha cambiado la sincronización con Icnea, lo más reciente primero --}}
   <section class="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
-    <h2 class="text-sm font-semibold text-gray-700">Reserva</h2>
-    <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-      <dt class="text-gray-500">Huésped</dt><dd class="text-gray-900">{{ $reserva->guest_name ?: '—' }}</dd>
-      <dt class="text-gray-500">Correo del huésped</dt><dd class="text-gray-900">{{ $reserva->guest_email ?: '—' }}</dd>
-      <dt class="text-gray-500">Entrada</dt><dd class="text-gray-900">{{ $reserva->check_in_date ? \Carbon\Carbon::parse($reserva->check_in_date)->format('d/m/Y') : '—' }}</dd>
-      <dt class="text-gray-500">Salida</dt><dd class="text-gray-900">{{ $reserva->check_out_date ? \Carbon\Carbon::parse($reserva->check_out_date)->format('d/m/Y') : '—' }}</dd>
-      <dt class="text-gray-500">Estado de la reserva</dt><dd class="text-gray-900">{{ $reserva->booking_status ?: '—' }}</dd>
-      <dt class="text-gray-500">Fianza</dt><dd class="text-gray-900">{{ $reserva->fianza !== null ? number_format((float) $reserva->fianza, 2, ',', '.') . ' €' : '—' }}</dd>
-    </dl>
+    <h2 class="text-sm font-semibold text-gray-700">Traza de cambios</h2>
+    @forelse($traza as $linea)
+      <p class="text-sm text-gray-900 break-words">{{ $linea }}</p>
+    @empty
+      <p class="text-sm text-gray-500">Sin cambios registrados.</p>
+    @endforelse
   </section>
-
-  {{-- Decisión de fianza: la única parte editable --}}
-  <form id="form-fianza" method="POST" action="{{ route('vm.reserva_form.fianza', [$project->slug, $reserva->id]) }}"
-        class="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
-    @csrf
-    <h2 class="text-sm font-semibold text-gray-700">Fianza</h2>
-
-    <div class="rounded-lg bg-amber-50 text-amber-800 text-xs px-3 py-2">
-      Cambiar la decisión aquí no crea tareas SSCC ni envía correos. Para decidir, usa Dev. fianzas.
-    </div>
-
-    <dl class="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
-      <dt class="text-gray-500">Estado</dt>
-      <dd>
-        <span class="v-field text-gray-900">{{ $reserva->estado_fianza ?: '—' }}</span>
-        <select name="estado_fianza" class="e-field w-full rounded-lg border border-gray-300 text-sm p-1.5" style="display:none">
-          <option value="">— Selecciona —</option>
-          @foreach($estados as $e)
-            <option value="{{ $e }}" @selected(old('estado_fianza', $reserva->estado_fianza) === $e)>{{ $e }}</option>
-          @endforeach
-        </select>
-      </dd>
-
-      <dt class="text-gray-500">Canal de cobro</dt>
-      <dd class="text-gray-900">{{ $reserva->fianza_canal_cobro ?: '—' }}</dd>
-
-      <dt class="text-gray-500">Retención (€)</dt>
-      <dd>
-        <span class="v-field text-gray-900">{{ $reserva->fianza_retencion !== null ? number_format((float) $reserva->fianza_retencion, 2, ',', '.') . ' €' : '—' }}</span>
-        <input type="number" step="0.01" min="0" name="fianza_retencion"
-               value="{{ old('fianza_retencion', $reserva->fianza_retencion) }}"
-               class="e-field w-full rounded-lg border border-gray-300 text-sm p-1.5" style="display:none">
-      </dd>
-
-      <dt class="text-gray-500">Motivo de la retención</dt>
-      <dd>
-        <span class="v-field text-gray-900 whitespace-pre-line">{{ $reserva->fianza_motivo_retencion ?: '—' }}</span>
-        <input type="text" maxlength="500" name="fianza_motivo_retencion"
-               value="{{ old('fianza_motivo_retencion', $reserva->fianza_motivo_retencion) }}"
-               class="e-field w-full rounded-lg border border-gray-300 text-sm p-1.5" style="display:none">
-      </dd>
-
-      <dt class="text-gray-500">Decidido por</dt>
-      <dd>
-        <span class="v-field text-gray-900">{{ optional($usuarios->firstWhere('id', $reserva->fianza_usuario))->name ?: '—' }}</span>
-        <select name="fianza_usuario" class="e-field w-full rounded-lg border border-gray-300 text-sm p-1.5" style="display:none">
-          <option value="">— Ninguno —</option>
-          @foreach($usuarios as $u)
-            <option value="{{ $u->id }}" @selected((string) old('fianza_usuario', $reserva->fianza_usuario) === (string) $u->id)>{{ $u->name }}</option>
-          @endforeach
-        </select>
-      </dd>
-
-      <dt class="text-gray-500">Fecha de decisión</dt>
-      <dd>
-        <span class="v-field text-gray-900">{{ $reserva->fianza_fecha ? \Carbon\Carbon::parse($reserva->fianza_fecha)->format('d/m/Y H:i') : '—' }}</span>
-        <input type="datetime-local" name="fianza_fecha"
-               value="{{ old('fianza_fecha', $reserva->fianza_fecha ? \Carbon\Carbon::parse($reserva->fianza_fecha)->format('Y-m-d\TH:i') : '') }}"
-               class="e-field w-full rounded-lg border border-gray-300 text-sm p-1.5" style="display:none">
-      </dd>
-    </dl>
-  </form>
 
   {{-- Limpiezas de salida de la reserva --}}
   <section class="bg-white rounded-xl border border-gray-200 p-4 space-y-3">

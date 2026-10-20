@@ -45,10 +45,36 @@ class ReservaController extends Controller
         // El estado que se enseña es el derivado, igual que en Dev. fianzas.
         $reserva->sscc_finalizada = ($sscc->count() > 0 && $sscc->every(fn($t) => $t->estado === 'Completada')) ? 1 : 0;
 
+        $nombres = DB::table('admin_users')->pluck('name', 'id')->all();
+
+        $secciones = [];
+        foreach (self::SECCIONES as $titulo => $campos) {
+            $filas = [];
+            foreach ($campos as $campo) {
+                $valor = match ($campo) {
+                    'fianza_iban_cifrado' => $this->valorIban($id, $reserva),
+                    default               => $this->formatea($campo, $reserva->$campo ?? null, $nombres),
+                };
+                $filas[] = [
+                    'campo'     => $campo,
+                    'etiqueta'  => self::ETIQUETAS[$campo] ?? $campo,
+                    'valor'     => $valor,
+                    'editable'  => in_array($campo, self::CAMPOS_EDITABLES, true),
+                ];
+            }
+            $secciones[$titulo] = $filas;
+        }
+
+        // La traza de cambios viene de la sincronización con Icnea: una entrada por línea,
+        // «fecha · campo: antes → después». La más reciente, primero.
+        $traza = array_values(array_reverse(array_filter(array_map('trim', explode("\n", (string) $reserva->trace)))));
+
         return view('vm.reserva', [
             'project'     => $project,
             'reserva'     => $reserva,
             'estado'      => DevFianzasController::estadoFianza($reserva),
+            'secciones'   => $secciones,
+            'traza'       => $traza,
             'limpiezas'   => $limpiezas,
             'sscc'        => $sscc,
             'usuarios'    => DB::table('admin_users')->orderBy('name')->get(['id', 'name']),
@@ -56,6 +82,85 @@ class ReservaController extends Controller
             'puedeEditar' => Auth::user()?->canEditTable($project, 'dev_fianzas_default') ?? false,
         ]);
     }
+
+    /**
+     * Valor que se enseña del número de cuenta. El descifrado solo lo ve quien puede: el resto ve que
+     * está guardado. El token del enlace de Filipinas nunca se muestra; no aparece en SECCIONES.
+     */
+    private function valorIban(int $id, object $reserva): string
+    {
+        if (empty($reserva->fianza_iban_cifrado)) {
+            return '—';
+        }
+        $iban = FianzaIbanController::ibanParaVer($id, Auth::user());
+
+        return $iban ?? 'Guardado (solo lo ven Dirección general, Contabilidad y admin)';
+    }
+
+    /** Un valor de la reserva en el formato que se enseña en la ficha. */
+    private function formatea(string $campo, mixed $valor, array $nombres): string
+    {
+        if ($valor === null || $valor === '') {
+            return '—';
+        }
+        if (in_array($campo, ['createuser', 'updateuser', 'fianza_usuario', 'novacion_user'], true)) {
+            return $nombres[$valor] ?? ('#' . $valor);
+        }
+        if (in_array($campo, ['liquidado', 'novacion', 'deleted', 'hidden', 'blocked'], true)) {
+            return ((int) $valor) === 1 ? 'Sí' : 'No';
+        }
+        if (in_array($campo, ['fianza', 'fianza_retencion', 'base_propietario', 'base_calculo'], true)) {
+            return number_format((float) $valor, 2, ',', '.') . ' €';
+        }
+        if (in_array($campo, ['novacion_iva_pct', 'novacion_porc_honorarios'], true)) {
+            return number_format((float) $valor, 2, ',', '.') . ' %';
+        }
+        if (in_array($campo, ['booking_date', 'check_in_date', 'check_out_date'], true)) {
+            return \Carbon\Carbon::parse($valor)->format('d/m/Y');
+        }
+        if (in_array($campo, ['createdat', 'updatedat', 'icnea_updatedat', 'novacion_at', 'fianza_fecha', 'fianza_iban_guardado_at'], true)) {
+            return \Carbon\Carbon::parse($valor)->format('d/m/Y H:i');
+        }
+
+        return (string) $valor;
+    }
+
+    // Campos de la reserva agrupados como se muestran. Todos los de vm_reservas salen aquí, salvo la
+    // traza (que va aparte) y el token del enlace de Filipinas (que nunca se muestra).
+    public const SECCIONES = [
+        'Reserva' => ['booking_id', 'booking_status', 'booking_date', 'check_in_date', 'check_out_date',
+                      'number_of_adults', 'number_of_children', 'number_of_infants', 'checkin_status'],
+        'Huésped' => ['guest_name', 'guest_email', 'guest_phone', 'guest_language'],
+        'Propiedad y canal' => ['propiedad', 'vm_propiedades_nombre', 'id_propiedades', 'channel', 'channel_booking_id', 'icnea_lodging_id'],
+        'Fianza' => ['fianza', 'estado_fianza', 'fianza_retencion', 'fianza_motivo_retencion', 'fianza_usuario',
+                     'fianza_fecha', 'fianza_canal_cobro', 'fianza_iban_cifrado', 'fianza_iban_guardado_at', 'fianza_departamento'],
+        'Novación y liquidación' => ['liquidado', 'novacion', 'base_propietario', 'base_calculo', 'novacion_iva_pct',
+                                     'novacion_porc_honorarios', 'novacion_at', 'novacion_user'],
+        'Registro' => ['id', 'nombre', 'createdat', 'createuser', 'updatedat', 'updateuser', 'icnea_updatedat',
+                       'deleted', 'hidden', 'blocked'],
+    ];
+
+    public const CAMPOS_EDITABLES = ['estado_fianza', 'fianza_retencion', 'fianza_motivo_retencion', 'fianza_usuario', 'fianza_fecha'];
+
+    public const ETIQUETAS = [
+        'booking_id' => 'Booking', 'booking_status' => 'Estado de la reserva', 'booking_date' => 'Fecha de reserva',
+        'check_in_date' => 'Entrada', 'check_out_date' => 'Salida', 'number_of_adults' => 'Adultos',
+        'number_of_children' => 'Niños', 'number_of_infants' => 'Bebés', 'checkin_status' => 'Estado del check-in',
+        'guest_name' => 'Nombre', 'guest_email' => 'Correo', 'guest_phone' => 'Teléfono', 'guest_language' => 'Idioma',
+        'propiedad' => 'Propiedad', 'vm_propiedades_nombre' => 'Propiedad (Icnea)', 'id_propiedades' => 'Id propiedad',
+        'channel' => 'Canal', 'channel_booking_id' => 'Id en el canal', 'icnea_lodging_id' => 'Id alojamiento Icnea',
+        'fianza' => 'Fianza', 'estado_fianza' => 'Estado fianza', 'fianza_retencion' => 'Retención',
+        'fianza_motivo_retencion' => 'Motivo de la retención', 'fianza_usuario' => 'Decidido por',
+        'fianza_fecha' => 'Fecha de decisión', 'fianza_canal_cobro' => 'Canal de cobro',
+        'fianza_iban_cifrado' => 'Número de cuenta (IBAN)', 'fianza_iban_guardado_at' => 'IBAN guardado el',
+        'fianza_departamento' => 'Departamento de la fianza (anterior)',
+        'liquidado' => 'Liquidado', 'novacion' => 'Novación', 'base_propietario' => 'Base del propietario',
+        'base_calculo' => 'Base de cálculo', 'novacion_iva_pct' => 'IVA de la novación',
+        'novacion_porc_honorarios' => 'Honorarios de la novación', 'novacion_at' => 'Novada el', 'novacion_user' => 'Novada por',
+        'id' => 'Id', 'nombre' => 'Nombre interno', 'createdat' => 'Creada', 'createuser' => 'Creada por',
+        'updatedat' => 'Modificada', 'updateuser' => 'Modificada por', 'icnea_updatedat' => 'Actualizada en Icnea',
+        'deleted' => 'Borrada', 'hidden' => 'Oculta', 'blocked' => 'Bloqueada',
+    ];
 
     /** Guarda la decisión de fianza tal como se edita en la ficha. Solo cambia los cinco campos de fianza. */
     public function guardarFianza(Request $request, Project $project, int $id)
