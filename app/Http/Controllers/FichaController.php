@@ -127,6 +127,11 @@ class FichaController extends Controller
 
     public function show(Project $project, string $table, int $id)
     {
+        // Las SSCC tienen su propia ficha, que no permite cambiar el estado a mano.
+        if ($table === 'tareas_sscc' && $project->slug === 'vm') {
+            return redirect()->route('vm.sscc_form', [$project->slug, $id]);
+        }
+
         $projectTable = $this->resolveTable($project, $table);
         abort_unless(Auth::user()?->canViewTable($project, $table), 403);
         $fullTable    = $projectTable->getFullTableName();
@@ -357,6 +362,12 @@ class FichaController extends Controller
         abort_if($registro?->blocked ?? false, 403, 'Este registro está bloqueado y no puede editarse.');
         $this->validateRequired($request, $projectTable);
         $data = $this->filterData($request, $projectTable);
+
+        // El estado de una SSCC solo lo cambia el dashboard (marcarSsccHecho), que desencadena lo
+        // que depende de él. Aquí se descarta, aunque la petición lo traiga.
+        if ($table === 'tareas_sscc' && $project->slug === 'vm') {
+            unset($data['estado']);
+        }
 
         if ($err = \App\Services\AutoreferenciaGuard::error($project, $projectTable, $data, [$id])) {
             return back()->withErrors([\App\Services\AutoreferenciaGuard::campos($project, $projectTable)[0] => $err])->withInput();
@@ -807,6 +818,9 @@ class FichaController extends Controller
         $allowed   = $projectTable->fields->pluck('name')->toArray();
 
         abort_if(!in_array($fieldName, $allowed), 422, 'Campo no permitido.');
+        // El estado de una SSCC no se cambia en línea: solo desde el dashboard.
+        abort_if($table === 'tareas_sscc' && $project->slug === 'vm' && $fieldName === 'estado',
+            403, 'El estado de una SSCC se cambia desde el dashboard.');
 
         $registro = DB::table($projectTable->getFullTableName())->where('id', $id)->first();
         abort_if($registro?->blocked ?? false, 403, 'Este registro está bloqueado y no puede editarse.');

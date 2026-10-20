@@ -328,6 +328,12 @@ Route::middleware('auth')->group(function () {
             ->where(['tipo' => 'limpieza|mantenimiento|piscina', 'id' => '[0-9]+'])
             ->name('vm.tarea.update');
 
+        // Ficha de una tarea SSCC. Solo lectura del estado: marcarla como hecha se hace desde el dashboard.
+        Route::get('sscc_form/{id}', [\App\Http\Controllers\Vm\SsccController::class, 'show'])
+            ->where('id', '[0-9]+')->name('vm.sscc_form');
+        Route::post('sscc_form/{id}/comentario', [\App\Http\Controllers\Vm\SsccController::class, 'guardarComentario'])
+            ->where('id', '[0-9]+')->name('vm.sscc_form.comentario');
+
         Route::middleware('table.access:fichaje')->group(function () {
             Route::get('fichaje_list',       [\App\Http\Controllers\Vm\FichajeController::class, 'listado'])->name('vm.fichaje_list');
             Route::get('fichaje_form/nuevo', [\App\Http\Controllers\Vm\FichajeController::class, 'create'])->name('vm.fichaje_form.nuevo');
