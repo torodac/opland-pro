@@ -36,10 +36,13 @@ class SsccController extends Controller
                 'icono'    => 'ti-shield-dollar',
             ];
         }
-        if ($tarea->Tipo === 'Revisión Novación' && $tarea->id_propiedades && $tarea->novacion_periodo) {
-            [$anio, $mes] = array_map('intval', explode('-', $tarea->novacion_periodo));
+        // Las revisiones creadas antes de existir novacion_periodo no lo tienen: su mes es el de la
+        // fecha planificada, que es el último día del mes de la novación.
+        $periodo = $tarea->novacion_periodo ?: ($tarea->fecha_planificada ? substr((string) $tarea->fecha_planificada, 0, 7) : null);
+        if ($tarea->Tipo === 'Revisión Novación' && $tarea->id_propiedades && $periodo) {
+            [$anio, $mes] = array_map('intval', explode('-', $periodo));
             $enlaces[] = [
-                'etiqueta' => 'Novación de ' . ($propiedad ?: 'la propiedad') . ' · ' . $tarea->novacion_periodo,
+                'etiqueta' => 'Novación de ' . ($propiedad ?: 'la propiedad') . ' · ' . $periodo,
                 'url'      => route('novaciones', ['project' => $project->slug, 'year' => $anio, 'month' => $mes, 'prop_id' => $tarea->id_propiedades]),
                 'icono'    => 'ti-file-invoice',
             ];
@@ -52,14 +55,21 @@ class SsccController extends Controller
             'departamento' => $departamento,
             'rol'          => $rol,
             'enlaces'      => $enlaces,
-            'puedeComentar' => Auth::user()?->canEditTable($project, 'tareas_sscc') ?? false,
+            'puedeComentar' => Auth::user()?->canViewTable($project, 'tareas_sscc') ?? false,
+            // Marcar como hecha lo hace el dashboard, que exige un usuario de VM. Sin él no hay botón.
+            'puedeHecho'    => $tarea->estado !== 'Completada' && DB::table('vm_usuarios')
+                ->where('admin_user_id', Auth::id())->where(fn($q) => $q->where('deleted', 0)->orWhereNull('deleted'))
+                ->exists(),
         ]);
     }
 
-    /** Guarda el comentario. Es lo único que esta ficha escribe; el estado no pasa por aquí. */
+    /**
+     * Guarda el comentario. Es lo único que esta ficha escribe; el estado no pasa por aquí. Lo puede
+     * escribir quien puede ver la ficha: el comentario es una nota, no un cambio sobre la tarea.
+     */
     public function guardarComentario(Request $request, Project $project, int $id)
     {
-        abort_unless(Auth::user()?->canEditTable($project, 'tareas_sscc'), 403);
+        abort_unless(Auth::user()?->canViewTable($project, 'tareas_sscc'), 403);
 
         $tarea = DB::table('vm_tareas_sscc')->where('id', $id)->where('deleted', 0)->first(['id', 'blocked']);
         abort_unless($tarea, 404);
