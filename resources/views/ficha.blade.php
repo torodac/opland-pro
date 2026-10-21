@@ -33,6 +33,12 @@
                    title="Ver formulario de fichaje">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
                 </a>
+                @elseif($projectTable->name === 'reservas' && $project->slug === 'vm')
+                <a href="{{ route('vm.reserva_form', [$project->slug, $registro->id]) }}"
+                   class="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors mr-1"
+                   title="Ver formulario de reserva">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                </a>
                 @elseif($projectTable->name === 'usuarios' && $project->slug === 'vm')
                 <a href="{{ route('vm.usuario_form', [$project->slug, $registro->id]) }}"
                    class="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors mr-1"

@@ -53,6 +53,8 @@ class ReservaController extends Controller
             foreach ($campos as $campo) {
                 $valor = match ($campo) {
                     'fianza_iban_cifrado' => $this->valorIban($id, $reserva),
+                    'estancia'            => $this->estancia($reserva),
+                    'ocupacion'           => $this->ocupacion($reserva),
                     default               => $this->formatea($campo, $reserva->$campo ?? null, $nombres),
                 };
                 $filas[] = [
@@ -60,6 +62,10 @@ class ReservaController extends Controller
                     'etiqueta'  => self::ETIQUETAS[$campo] ?? $campo,
                     'valor'     => $valor,
                     'editable'  => in_array($campo, self::CAMPOS_EDITABLES, true),
+                    // El canal se muestra con su logo, igual que en Dev. fianzas.
+                    'logo'      => $campo === 'channel' ? iconoCanal($reserva->channel) : null,
+                    // Icono de Tabler que va delante del valor de algunos campos de la reserva.
+                    'icono'     => self::ICONOS[$campo] ?? null,
                 ];
             }
             $secciones[$titulo] = $filas;
@@ -75,12 +81,37 @@ class ReservaController extends Controller
             'estado'      => DevFianzasController::estadoFianza($reserva),
             'secciones'   => $secciones,
             'traza'       => $traza,
+            'auditoria'   => $this->auditoria($id),
             'limpiezas'   => $limpiezas,
             'sscc'        => $sscc,
             'usuarios'    => DB::table('admin_users')->orderBy('name')->get(['id', 'name']),
             'estados'     => self::ESTADOS_EDITABLES,
             'puedeEditar' => Auth::user()?->canEditTable($project, 'dev_fianzas_default') ?? false,
         ]);
+    }
+
+    /** Adultos, niños y bebés en un único campo: «2 adultos · 1 niño · 0 bebés». */
+    private function ocupacion(object $reserva): string
+    {
+        $partes = [
+            ((int) $reserva->number_of_adults) . ' ' . (((int) $reserva->number_of_adults) === 1 ? 'adulto' : 'adultos'),
+            ((int) $reserva->number_of_children) . ' ' . (((int) $reserva->number_of_children) === 1 ? 'niño' : 'niños'),
+            ((int) $reserva->number_of_infants) . ' ' . (((int) $reserva->number_of_infants) === 1 ? 'bebé' : 'bebés'),
+        ];
+
+        return implode(' · ', $partes);
+    }
+
+    /** Entrada y salida en un único campo: «dd/mm/aaaa → dd/mm/aaaa». */
+    private function estancia(object $reserva): string
+    {
+        if (empty($reserva->check_in_date) && empty($reserva->check_out_date)) {
+            return '—';
+        }
+        $entrada = $reserva->check_in_date ? \Carbon\Carbon::parse($reserva->check_in_date)->format('d/m/Y') : '—';
+        $salida  = $reserva->check_out_date ? \Carbon\Carbon::parse($reserva->check_out_date)->format('d/m/Y') : '—';
+
+        return $entrada . ' → ' . $salida;
     }
 
     /**
@@ -95,6 +126,69 @@ class ReservaController extends Controller
         $iban = FianzaIbanController::ibanParaVer($id, Auth::user());
 
         return $iban ?? 'Guardado (solo lo ven Dirección general, Contabilidad y admin)';
+    }
+
+    public const ACCIONES_AUDITORIA = [
+        'decision_conforme'   => 'Conformidad (devolución íntegra)',
+        'decision_retencion'  => 'Retención',
+        'foto_marcada'        => 'Foto marcada para retención',
+        'foto_quitada'        => 'Foto desmarcada',
+        'tarea_creada'        => 'Tarea SSCC creada',
+        'tarea_completada'    => 'Tarea SSCC marcada como hecha',
+        'correo_enviado'      => 'Correo enviado',
+        'enlace_iban'         => 'Enlace para el número de cuenta generado',
+        'iban_guardado'       => 'Número de cuenta guardado desde el enlace',
+        'edicion_manual'      => 'Edición manual de la fianza',
+    ];
+
+    /**
+     * Los pasos del proceso de devolución de la reserva, lo más reciente primero. Solo lectura: el
+     * registro no se edita ni se borra desde ninguna pantalla.
+     */
+    private function auditoria(int $id): array
+    {
+        $filas = DB::table('vm_reservas_auditoria as a')
+            ->leftJoin('admin_users as u', 'u.id', '=', 'a.id_usuario')
+            ->where('a.id_reservas', $id)
+            ->orderByDesc('a.id')
+            ->get(['a.accion', 'a.detalle', 'a.created_at', 'u.name as usuario']);
+
+        return $filas->map(fn($f) => [
+            'fecha'   => \Carbon\Carbon::parse($f->created_at)->format('d/m/Y H:i'),
+            'usuario' => $f->usuario ?: 'Automático',
+            'accion'  => self::ACCIONES_AUDITORIA[$f->accion] ?? $f->accion,
+            'texto'   => $this->detalleTexto(json_decode((string) $f->detalle, true) ?: []),
+        ])->all();
+    }
+
+    /** Un detalle del registro como texto legible: «clave: valor», y los cambios como «campo: antes → después». */
+    private function detalleTexto(array $detalle): string
+    {
+        $partes = [];
+        foreach ($detalle as $clave => $valor) {
+            if ($clave === 'campos' && is_array($valor)) {
+                foreach ($valor as $campo => $cambio) {
+                    $partes[] = (self::ETIQUETAS[$campo] ?? $campo) . ': '
+                        . ($cambio['antes'] ?? '—') . ' → ' . ($cambio['despues'] ?? '—');
+                }
+                continue;
+            }
+            if ($valor === null || $valor === '') {
+                continue;
+            }
+            $texto = is_bool($valor) ? ($valor ? 'Sí' : 'No') : (string) $valor;
+            $partes[] = match ($clave) {
+                'canal' => 'canal ' . $texto,
+                'importe', 'retencion', 'fianza' => $clave . ' ' . number_format((float) $texto, 2, ',', '.') . ' €',
+                'destinatario' => 'a ' . $texto,
+                'caduca_dias' => 'caduca en ' . $texto . ' días',
+                'sin_evidencias' => $valor ? 'sin evidencias' : null,
+                'motivo' => 'motivo: ' . $texto,
+                default => $clave . ': ' . $texto,
+            };
+        }
+
+        return implode(' · ', array_filter($partes));
     }
 
     /** Un valor de la reserva en el formato que se enseña en la ficha. */
@@ -128,22 +222,29 @@ class ReservaController extends Controller
     // Campos de la reserva agrupados como se muestran. Todos los de vm_reservas salen aquí, salvo la
     // traza (que va aparte) y el token del enlace de Filipinas (que nunca se muestra).
     public const SECCIONES = [
-        'Reserva' => ['booking_id', 'booking_status', 'booking_date', 'check_in_date', 'check_out_date',
-                      'number_of_adults', 'number_of_children', 'number_of_infants', 'checkin_status'],
-        'Huésped' => ['guest_name', 'guest_email', 'guest_phone', 'guest_language'],
-        'Propiedad y canal' => ['propiedad', 'vm_propiedades_nombre', 'id_propiedades', 'channel', 'channel_booking_id', 'icnea_lodging_id'],
-        'Fianza' => ['fianza', 'estado_fianza', 'fianza_retencion', 'fianza_motivo_retencion', 'fianza_usuario',
+        'Reserva' => ['booking_id', 'booking_status', 'booking_date', 'estancia',
+                      'ocupacion', 'checkin_status',
+                      'guest_name', 'guest_email', 'guest_phone', 'guest_language',
+                      'propiedad', 'vm_propiedades_nombre', 'id_propiedades', 'channel', 'channel_booking_id', 'icnea_lodging_id'],
+        'Importes reserva' => ['fianza', 'base_propietario', 'base_calculo', 'novacion_iva_pct', 'novacion_porc_honorarios'],
+        'Fianza' => ['estado_fianza', 'fianza_retencion', 'fianza_motivo_retencion', 'fianza_usuario',
                      'fianza_fecha', 'fianza_canal_cobro', 'fianza_iban_cifrado', 'fianza_iban_guardado_at', 'fianza_departamento'],
-        'Novación y liquidación' => ['liquidado', 'novacion', 'base_propietario', 'base_calculo', 'novacion_iva_pct',
-                                     'novacion_porc_honorarios', 'novacion_at', 'novacion_user'],
+        'Novación y liquidación' => ['liquidado', 'novacion', 'novacion_at', 'novacion_user'],
+        // Registro va al final de la ficha: lo ve quien necesita la trazabilidad, no quien decide.
         'Registro' => ['id', 'nombre', 'createdat', 'createuser', 'updatedat', 'updateuser', 'icnea_updatedat',
                        'deleted', 'hidden', 'blocked'],
     ];
 
-    public const CAMPOS_EDITABLES = ['estado_fianza', 'fianza_retencion', 'fianza_motivo_retencion', 'fianza_usuario', 'fianza_fecha'];
+    public const ICONOS = [
+        'guest_name' => 'ti-user', 'guest_phone' => 'ti-phone', 'guest_email' => 'ti-mail',
+        'guest_language' => 'ti-language', 'propiedad' => 'ti-home',
+    ];
+
+    public const CAMPOS_EDITABLES =['estado_fianza', 'fianza_retencion', 'fianza_motivo_retencion', 'fianza_usuario', 'fianza_fecha'];
 
     public const ETIQUETAS = [
         'booking_id' => 'Booking', 'booking_status' => 'Estado de la reserva', 'booking_date' => 'Fecha de reserva',
+        'estancia' => 'Estancia', 'ocupacion' => 'Ocupación',
         'check_in_date' => 'Entrada', 'check_out_date' => 'Salida', 'number_of_adults' => 'Adultos',
         'number_of_children' => 'Niños', 'number_of_infants' => 'Bebés', 'checkin_status' => 'Estado del check-in',
         'guest_name' => 'Nombre', 'guest_email' => 'Correo', 'guest_phone' => 'Teléfono', 'guest_language' => 'Idioma',
@@ -167,7 +268,7 @@ class ReservaController extends Controller
     {
         abort_unless(Auth::user()?->canEditTable($project, 'dev_fianzas_default'), 403);
 
-        $reserva = DB::table('vm_reservas')->where('id', $id)->first(['id', 'fianza']);
+        $reserva = DB::table('vm_reservas')->where('id', $id)->first(['id', 'fianza', ...self::CAMPOS_EDITABLES]);
         abort_unless($reserva, 404);
 
         $datos = $request->validate([
@@ -202,6 +303,19 @@ class ReservaController extends Controller
             'fianza_fecha'            => $vacioANulo($datos['fianza_fecha'] ?? null),
             'updatedat'               => now(),
         ]);
+
+        // Lo que cambió a mano, con su valor antes y después. Si no cambia nada, no se registra.
+        $cambios = [];
+        foreach (self::CAMPOS_EDITABLES as $campo) {
+            $antes = $reserva->$campo;
+            $despues = DB::table('vm_reservas')->where('id', $id)->value($campo);
+            if ((string) $antes !== (string) $despues) {
+                $cambios[$campo] = ['antes' => $antes, 'despues' => $despues];
+            }
+        }
+        if ($cambios) {
+            \App\Services\FianzaAuditoria::registrar($id, 'edicion_manual', ['campos' => $cambios]);
+        }
 
         return redirect()->route('vm.reserva_form', [$project->slug, $id])->with('ok', 'Fianza guardada.');
     }
