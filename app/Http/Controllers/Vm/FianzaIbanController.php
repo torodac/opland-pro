@@ -89,11 +89,11 @@ class FianzaIbanController extends Controller
         }
 
         $iban = strtoupper(preg_replace('/\s+/', '', (string) $request->input('iban', '')));
-        if (!self::ibanValido($iban)) {
+        if ($motivo = self::ibanError($iban)) {
             return view('vm.fianza-iban', [
                 'reserva' => $reserva,
                 'yaGuardado' => false,
-                'error' => 'El número de cuenta no es válido. Revísalo: tiene que ser un IBAN completo.',
+                'error' => $motivo,
             ]);
         }
 
@@ -102,6 +102,9 @@ class FianzaIbanController extends Controller
             'fianza_iban_guardado_at' => now(),
             'updatedat'               => now(),
         ]);
+
+        // Constancia del paso, sin el número de cuenta: el IBAN no se escribe en el registro.
+        \App\Services\FianzaAuditoria::registrar($id, 'iban_guardado', ['via' => 'enlace']);
 
         // La tarea de devolución de Carol nace aquí, porque por transferencia no hay nada que
         // mover hasta que se sabe a qué cuenta.
@@ -135,17 +138,67 @@ class FianzaIbanController extends Controller
     }
 
     /**
-     * Valida un IBAN: estructura por país (ES = 24 caracteres) y el módulo 97 de ISO 13616.
-     * Comprueba que está bien escrito; no que la cuenta exista ni sea del huésped.
+     * Formatos de los países que se aceptan: longitud total y la estructura del número sin el país
+     * ni los dígitos de control. Mismos motivos de error que el comprobador de iban.com.
      */
+    public const FORMATOS = [
+        'ES' => [24, '^\d{20}$'],
+        'GB' => [22, '^[A-Z]{4}\d{14}$'],
+        'IE' => [22, '^[A-Z]{4}\d{14}$'],
+        'DE' => [22, '^\d{18}$'],
+        'FR' => [27, '^\d{10}[A-Z0-9]{11}\d{2}$'],
+        'IT' => [27, '^[A-Z]\d{10}[A-Z0-9]{12}$'],
+        'NL' => [18, '^[A-Z]{4}\d{10}$'],
+        'PT' => [25, '^\d{21}$'],
+        'BE' => [16, '^\d{12}$'],
+    ];
+
+    /**
+     * El motivo por el que un IBAN no vale, en castellano, o null si vale. Comprueba la escritura,
+     * el país, la longitud, la estructura y los dígitos de control. No comprueba que la cuenta exista.
+     */
+    public static function ibanError(string $raw): ?string
+    {
+        $iban = strtoupper(preg_replace('/\s+/', '', $raw));
+
+        if ($iban === '') {
+            return 'Escribe el número de cuenta.';
+        }
+        if (!preg_match('/^[A-Z0-9]+$/', $iban)) {
+            return 'El número solo puede contener letras y cifras.';
+        }
+        if (!preg_match('/^[A-Z]{2}[0-9]{2}/', $iban)) {
+            return 'Debe empezar por el código de país (2 letras) y 2 cifras de control.';
+        }
+
+        $pais = substr($iban, 0, 2);
+        if (!isset(self::FORMATOS[$pais])) {
+            return 'País no compatible con IBAN (' . $pais . ').';
+        }
+
+        [$largo, $estructura] = self::FORMATOS[$pais];
+        if (strlen($iban) !== $largo) {
+            return 'Longitud inválida: ' . $pais . ' debe tener ' . $largo . ' caracteres (tiene ' . strlen($iban) . ').';
+        }
+        if (!preg_match('/' . $estructura . '/', substr($iban, 4))) {
+            return 'Estructura inválida: la cuenta no tiene el formato de ' . $pais . '.';
+        }
+        if (!self::mod97Valido($iban)) {
+            return 'Dígitos de verificación inválidos: revisa el número.';
+        }
+
+        return null;
+    }
+
+    /** Un IBAN es válido si no tiene ningún motivo de error. */
     public static function ibanValido(string $iban): bool
     {
-        if (!preg_match('/^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/', $iban)) {
-            return false;
-        }
-        if (str_starts_with($iban, 'ES') && strlen($iban) !== 24) {
-            return false;
-        }
+        return self::ibanError($iban) === null;
+    }
+
+    /** Módulo 97 (ISO 13616): dígitos de control. */
+    public static function mod97Valido(string $iban): bool
+    {
 
         $reordenado = substr($iban, 4) . substr($iban, 0, 4);
         $resto = 0;

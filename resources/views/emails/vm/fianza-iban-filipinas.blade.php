@@ -5,7 +5,7 @@
 
 <p>Necesitamos el número de cuenta del huésped. Entre en este enlace, compruebe los datos y escriba el IBAN:</p>
 
-<p><a href="{{ $enlace }}">{{ $enlace }}</a></p>
+<p><a href="{{ $enlace }}">Abrir enlace</a></p>
 
 <p>El enlace caduca el {{ $caduca }}. Si ya no funciona, avísenos y le enviamos uno nuevo.</p>
 
@@ -20,7 +20,7 @@
 
 <p>We need the guest's bank account number. Please open this link, check the booking details and enter the IBAN:</p>
 
-<p><a href="{{ $enlace }}">{{ $enlace }}</a></p>
+<p><a href="{{ $enlace }}">Open link</a></p>
 
 <p>The link expires on {{ $caduca }}. If it no longer works, let us know and we will send you a new one.</p>
 
