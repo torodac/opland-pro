@@ -159,14 +159,16 @@
       <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:6px">
         Canal de cobro
         {{-- En Airbnb el canal es fijo: el desplegable se ve, pero no se puede cambiar. --}}
-        <select id="df-canal" class="df-input" style="width:auto;padding:5px 8px" @disabled($esAirbnb)>
+        <select id="df-canal" class="df-input" style="width:auto;padding:5px 8px" onchange="actualizarBotones()" @disabled($esAirbnb)>
           @unless($esAirbnb)<option value="">— elegir —</option>@endunless
           @foreach($canales as $canal)
             <option value="{{ $canal }}" @selected($esAirbnb)>{{ $canal }}</option>
           @endforeach
         </select>
       </label>
-      <button type="button" class="df-btn" onclick="conforme()"
+      {{-- Sin canal de cobro no se puede decidir: el botón queda deshabilitado hasta elegirlo. --}}
+      <button type="button" class="df-btn" id="df-btn-conforme" onclick="conforme()"
+              @disabled(! $esAirbnb)
               style="border-color:#B7E0C4;background:#F1FAF4;color:#1B7F3B">
         Conforme
       </button>
@@ -175,7 +177,7 @@
            CSS compilado de este proyecto, así que el aspecto se fuerza desde `.df-btn[disabled]`
            en el CSS de esta misma vista. --}}
       <button type="button" class="df-btn" id="df-btn-retener" onclick="abrirRetener()"
-              @disabled($conRetencion->isEmpty())
+              @disabled($conRetencion->isEmpty() || ! $esAirbnb)
               title="{{ $conRetencion->isEmpty() ? 'Selecciona alguna foto e indica el motivo e importe de retención.' : 'Revisar y confirmar la retención con evidencias' }}"
               style="border-color:#E3C9A3;background:#FDF8F1;color:#9A5B00">
         Retención con evidencias
@@ -184,6 +186,7 @@
       {{-- Sin foto ni incidencia que la respalde: concepto e importe a mano. Siempre disponible
            mientras la fianza esté pendiente. --}}
       <button type="button" class="df-btn" id="df-btn-sin-evidencias" onclick="abrirRetencionSinEvidencias()"
+              @disabled(! $esAirbnb)
               title="Retención sin foto ni incidencia: indica concepto e importe."
               style="border-color:#E3C9A3;background:#FDF8F1;color:#9A5B00">
         Retención sin evidencias
@@ -662,6 +665,21 @@ function eur(n) {
 
 // Recalcula de DF_FOTOS en vez de ir sumando y restando: sumar incrementos acaba desviandose en
 // cuanto una peticion falla a medias, y aqui el numero que se desvia es dinero.
+// El canal de cobro es lo primero que se elige: sin él no se decide por ningún camino.
+function canalElegido() {
+    const s = document.getElementById('df-canal');
+    return !!(s && s.value);
+}
+
+function actualizarBotones() {
+    const ok = canalElegido();
+    ['df-btn-conforme', 'df-btn-sin-evidencias'].forEach(id => {
+        const b = document.getElementById(id);
+        if (b) b.disabled = !ok;
+    });
+    recontar();
+}
+
 function recontar() {
     const marcadas = DF_FOTOS.filter(f => f.marcada);
     const conRet   = DF_FOTOS.filter(f => (f.importe || 0) > 0);
@@ -675,7 +693,7 @@ function recontar() {
 
     const btn = document.getElementById('df-btn-retener');
     if (btn) {
-        btn.disabled = conRet.length === 0;
+        btn.disabled = conRet.length === 0 || !canalElegido();
         btn.title = conRet.length ? 'Revisar y confirmar la retención con evidencias'
                                   : 'Selecciona alguna foto e indica el motivo e importe de retención.';
         document.getElementById('df-btn-retener-n').textContent = conRet.length ? '(' + eur(total) + ')' : '';
@@ -782,5 +800,6 @@ async function conforme() {
     location.href = '{{ route('vm.dev-fianzas', $project->slug) }}';
 }
 
+actualizarBotones();
 </script>
 </x-app-layout>
