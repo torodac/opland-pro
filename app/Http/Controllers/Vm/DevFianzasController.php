@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Vm;
 
 use App\Http\Controllers\Controller;
 use App\Mail\VmFianzaAvisoMail;
+use App\Services\FianzaAuditoria;
 use App\Models\Project;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -211,6 +212,9 @@ class DevFianzasController extends Controller
                 'updatedat'             => now(),
             ]);
 
+            if ($reservaDeFoto = $this->reservaDeFoto($id)) {
+                FianzaAuditoria::registrar($reservaDeFoto, 'foto_quitada', ['foto' => $id]);
+            }
             return response()->json(['ok' => true, 'marcada' => false, 'concepto' => null, 'importe' => null]);
         }
 
@@ -246,6 +250,12 @@ class DevFianzasController extends Controller
             'retencion_importe'     => $importe > 0 ? $importe : null,
             'updatedat'             => now(),
         ]);
+
+        if ($reservaId) {
+            FianzaAuditoria::registrar($reservaId, 'foto_marcada', [
+                'foto' => $id, 'concepto' => $importe > 0 ? $concepto : null, 'importe' => $importe > 0 ? $importe : null,
+            ]);
+        }
 
         return response()->json([
             'ok'       => true,
@@ -399,6 +409,7 @@ class DevFianzasController extends Controller
             return;
         }
 
+        FianzaAuditoria::registrar($reservaId, 'correo_enviado', ['tipo' => 'devolucion_huesped', 'destinatario' => $r->guest_email]);
         Mail::to($this->destinatario($r->guest_email))->send(new VmFianzaAvisoMail(
             'Devolución de su fianza · Deposit refund · reserva ' . $r->booking_id,
             'emails.vm.fianza-huesped',
@@ -473,6 +484,15 @@ class DevFianzasController extends Controller
             return;
         }
 
+        // Un paso de la decisión, para la auditoría de la reserva. La marca de sin evidencias viaja en el motivo.
+        FianzaAuditoria::registrar($reservaId, $retencion > 0 ? 'decision_retencion' : 'decision_conforme', [
+            'canal'          => $canal,
+            'fianza'         => $fianza,
+            'retencion'      => $retencion,
+            'motivo'         => str_replace(self::SUFIJO_SIN_EVIDENCIAS, '', $motivo),
+            'sin_evidencias' => str_contains($motivo, self::SUFIJO_SIN_EVIDENCIAS),
+        ]);
+
         $datosBase = [
             'booking_id' => $r->booking_id,
             'propiedad'  => $r->propiedad ?: 'sin propiedad',
@@ -484,6 +504,7 @@ class DevFianzasController extends Controller
         // avisarHuespedDevolucion), que es cuando el dinero se ha movido de verdad.
 
         if ($retencion > 0 && stripos((string) $r->channel, 'airbnb') !== false) {
+            FianzaAuditoria::registrar($reservaId, 'correo_enviado', ['tipo' => 'retencion_airbnb', 'destinatario' => config('services.vm_fianzas.borja_to')]);
             Mail::to($this->destinatario(config('services.vm_fianzas.borja_to')))->send(new VmFianzaAvisoMail(
                 'Retención de fianza Airbnb · reserva ' . $r->booking_id,
                 'emails.vm.fianza-retencion-airbnb',
@@ -495,6 +516,8 @@ class DevFianzasController extends Controller
         if ($canal === 'Transferencia') {
             $filipinas = config('services.vm_fianzas.filipinas_to');
             if ($filipinas) {
+                FianzaAuditoria::registrar($reservaId, 'enlace_iban', ['caduca_dias' => (int) config('services.vm_fianzas.iban_enlace_dias', 7)]);
+                FianzaAuditoria::registrar($reservaId, 'correo_enviado', ['tipo' => 'transferencia_iban', 'destinatario' => $filipinas]);
                 Mail::to($this->destinatario($filipinas))->send(new VmFianzaAvisoMail(
                     'Cierre devolución de depósitos · reserva ' . $r->booking_id,
                     'emails.vm.fianza-iban-filipinas',
@@ -627,7 +650,7 @@ class DevFianzasController extends Controller
             ->where('r.id', $reservaId)
             ->first(['r.booking_id', 'r.id_propiedades', 'r.check_out_date', 'p.nombre as propiedad']);
 
-        DB::table('vm_tareas_sscc')->insert([
+        $tareaId = DB::table('vm_tareas_sscc')->insertGetId([
             // La novación a la que pertenece la fianza es la del mes de su salida.
             'novacion_periodo'  => $reserva->check_out_date ? Carbon::parse($reserva->check_out_date)->format('Y-m') : null,
             'nombre'            => $tipo . ' · reserva ' . ($reserva->booking_id ?? $reservaId)
@@ -646,6 +669,10 @@ class DevFianzasController extends Controller
             'createuser'        => Auth::id(),
             'createdat'         => now(),
             'updatedat'         => now(),
+        ]);
+
+        FianzaAuditoria::registrar($reservaId, 'tarea_creada', [
+            'id' => $tareaId, 'tipo' => $tipo, 'departamento' => $departamento, 'rol' => $rol,
         ]);
     }
 

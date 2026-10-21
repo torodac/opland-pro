@@ -162,6 +162,12 @@ class DashboardController extends Controller
             return response()->json(['error' => 'Tarea no encontrada.'], 404);
         }
 
+        if ($previa && $previa->id_reservas) {
+            \App\Services\FianzaAuditoria::registrar((int) $previa->id_reservas, 'tarea_completada', [
+                'id' => $id, 'tipo' => $previa->Tipo,
+            ]);
+        }
+
         // Al cerrar la última tarea de una fianza, el dinero ya se ha movido: entonces, y solo
         // entonces, sale el correo al huésped. Sin el paso a Completada desde otro estado no se repite.
         if ($previa && $previa->estado !== 'Completada' && $previa->id_reservas
