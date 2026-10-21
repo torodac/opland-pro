@@ -230,12 +230,19 @@ Route::middleware('auth')->group(function () {
         Route::get('informe-imputaciones', [InformeImputacionesController::class, 'index'])->name('informe-imputaciones');
         Route::get('informe-imputaciones/pdf', [InformeImputacionesController::class, 'pdf'])->name('informe-imputaciones.pdf');
         Route::get('informe-imputaciones/pdf-todos', [InformeImputacionesController::class, 'pdfTodos'])->name('informe-imputaciones.pdf-todos');
-        Route::post('informe-imputaciones/validar', [InformeImputacionesController::class, 'validar'])->name('informe-imputaciones.validar');
-        Route::post('informe-imputaciones/anular-validacion', [InformeImputacionesController::class, 'anularValidacion'])->name('informe-imputaciones.anular-validacion');
-        Route::post('informe-imputaciones/firmar-aprueba', [InformeImputacionesController::class, 'firmarAprueba'])->name('informe-imputaciones.firmar-aprueba');
-        Route::post('informe-imputaciones/firmar-coordinador', [InformeImputacionesController::class, 'firmarCoordinador'])->name('informe-imputaciones.firmar-coordinador');
-        Route::post('informe-imputaciones/firmar-trabajador', [InformeImputacionesController::class, 'firmarTrabajador'])->name('informe-imputaciones.firmar-trabajador');
-        Route::post('informe-imputaciones/firmar-direccion', [InformeImputacionesController::class, 'firmarDireccion'])->name('informe-imputaciones.firmar-direccion');
+        // Las acciones del circuito cuelgan de "informe-imputaciones_list" y NO de
+        // "informe-imputaciones" porque son dos pantallas distintas a efectos de permisos
+        // (dos items de menu, dos tablas) y el boton vive en la lista. Colgando del informe,
+        // 'menu.access' exigia una pantalla que 18 personas no tienen -- Limpiadora, Operario
+        // mantenimiento, SSCC y Proveedor limpieza -- y no podian firmar su propio informe:
+        // el 403 llegaba como HTML y el aviso decia solo "No se pudo completar la accion".
+        // Los nombres de ruta no cambian, asi que las vistas siguen igual.
+        Route::post('informe-imputaciones_list/validar', [InformeImputacionesController::class, 'validar'])->name('informe-imputaciones.validar');
+        Route::post('informe-imputaciones_list/anular-validacion', [InformeImputacionesController::class, 'anularValidacion'])->name('informe-imputaciones.anular-validacion');
+        Route::post('informe-imputaciones_list/firmar-aprueba', [InformeImputacionesController::class, 'firmarAprueba'])->name('informe-imputaciones.firmar-aprueba');
+        Route::post('informe-imputaciones_list/firmar-coordinador', [InformeImputacionesController::class, 'firmarCoordinador'])->name('informe-imputaciones.firmar-coordinador');
+        Route::post('informe-imputaciones_list/firmar-trabajador', [InformeImputacionesController::class, 'firmarTrabajador'])->name('informe-imputaciones.firmar-trabajador');
+        Route::post('informe-imputaciones_list/firmar-direccion', [InformeImputacionesController::class, 'firmarDireccion'])->name('informe-imputaciones.firmar-direccion');
 
         Route::get('km',                   [KmController::class, 'index'])->name('km');
         Route::get('km/informe',           [KmController::class, 'informe'])->name('km.informe');

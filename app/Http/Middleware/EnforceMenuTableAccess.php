@@ -48,6 +48,13 @@ class EnforceMenuTableAccess
         $tabla = self::tablaDeLaUrl($project, '/' . ltrim($request->path(), '/'));
 
         if ($tabla !== null && !auth()->user()->canViewTable($project, $tabla)) {
+            // En JSON y no en HTML cuando quien pregunta es una petición de la propia pantalla:
+            // el abort() normal devuelve una página, el fetch no la sabe leer y el aviso acaba
+            // diciendo "No se pudo completar la acción", que no dice nada. Costó un diagnóstico
+            // entero (firma del informe mensual, 2026-10-21) averiguar que detrás había un 403.
+            if ($request->expectsJson()) {
+                return response()->json(['error' => 'No tienes acceso a esta sección.'], 403);
+            }
             abort(403, 'No tienes acceso a esta sección.');
         }
 
