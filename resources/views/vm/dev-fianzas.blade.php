@@ -12,8 +12,21 @@
 
 <div style="padding:0 0 3rem;">
 
+    {{-- Devoluciones que aún no están cerradas, por estado. Cada una filtra la lista; pulsarla otra vez la quita. --}}
+    <div style="display:flex;flex-wrap:nowrap;align-items:center;gap:8px;margin-bottom:12px;white-space:nowrap;font-size:13px;overflow-x:auto;">
+        @foreach($stats as $estadoStat => $n)
+            @php $activa = $statActiva === $estadoStat; @endphp
+            <a href="{{ request()->fullUrlWithQuery(['stat' => $activa ? null : $estadoStat]) }}"
+               title="{{ $activa ? 'Quitar el filtro' : 'Ver solo ' . $estadoStat }}"
+               style="background:{{ colorEstadoFianza($estadoStat)[0] }};color:{{ colorEstadoFianza($estadoStat)[1] }};padding:4px 10px;border-radius:6px;text-decoration:none;border:2px solid {{ $activa ? '#c2410c' : 'transparent' }};">
+                {{ $estadoStat }} <strong style="font-weight:500;">{{ $n }}</strong>
+            </a>
+        @endforeach
+    </div>
+
     {{-- Buscador: el mismo de los listados estándar (misma forma, mismo sitio, mismo placeholder). --}}
     <form method="GET" class="flex gap-2 mb-4">
+        @if($statActiva)<input type="hidden" name="stat" value="{{ $statActiva }}">@endif
         <input type="text" name="q" value="{{ $q }}"
                placeholder="Buscar..."
                class="flex-1 max-w-xs text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300">
@@ -100,7 +113,7 @@
                 <td style="padding:8px 12px;font-size:13px;text-align:center;color:{{ $f->n_fotos ? '#222' : '#ccc' }}">
                     {{ $f->n_fotos }}
                 </td>
-                {{-- El estado no siempre es el guardado: "Vigente" y "Pte. evaluación" se derivan
+                {{-- El estado no siempre es el guardado: "Vigente" y "Pte. revisión" se derivan
                      de la fecha y de si hay decisión, y "Devuelta" de que su tarea SSCC esté
                      cerrada. El cálculo vive en el controlador, para que ficha y listado no
                      puedan discrepar sobre si una fianza se ha devuelto. --}}

@@ -135,6 +135,7 @@ class ReservaController extends Controller
         'foto_quitada'        => 'Foto desmarcada',
         'tarea_creada'        => 'Tarea SSCC creada',
         'tarea_completada'    => 'Tarea SSCC marcada como hecha',
+        'tarea_hermana_borrada' => 'Tarea gemela borrada (la otra ya está hecha)',
         'correo_enviado'      => 'Correo enviado',
         'enlace_iban'         => 'Enlace para el número de cuenta generado',
         'iban_guardado'       => 'Número de cuenta guardado desde el enlace',

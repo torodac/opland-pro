@@ -19,10 +19,13 @@ if (!function_exists('colorEstadoFianza')) {
     function colorEstadoFianza(?string $estado): array
     {
         return match ($estado) {
-            'Vigente'         => ['#F1F3F5', '#555'],      // aun no hay nada que decidir
-            'Pte. evaluación' => ['#E7F0FB', '#1A4F8A'],   // azul: te toca mirarla
+            'Vigente'         => ['#F1F3F5', '#555'],      // aun no ha salido el huésped
+            'Pte. revisión'   => ['#E7F0FB', '#1A4F8A'],   // azul: te toca mirarla
+            'Pte. IBAN'       => ['#F0EDFB', '#4A3A8A'],   // morado: falta el número de cuenta
             'Pte. devolución' => ['#FDF6E3', '#8A6400'],   // amarillo: hay que devolver
-            'Pte. retención'  => ['#FBE9E9', '#9B1C1C'],   // rojo: se le descuenta algo al huesped
+            'Conforme'        => ['#E3F5F1', '#0F6E56'],   // verde azulado: Airbnb, sin devolución desde Opland
+            'Reclamada'       => ['#FBE9E9', '#9B1C1C'],   // rojo: Airbnb, reclamación a Airbnb
+            'Pte. retención'  => ['#FBE9E9', '#9B1C1C'],   // rojo (valor antiguo, por compatibilidad)
             'Devuelta'        => ['#E7F6EC', '#1B7F3B'],   // verde: cerrada
             default           => ['#F1F3F5', '#888'],
         };

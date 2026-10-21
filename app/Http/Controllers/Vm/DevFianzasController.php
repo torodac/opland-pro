@@ -44,15 +44,27 @@ class DevFianzasController extends Controller
 
     // ── El ciclo de vida de la fianza ────────────────────────────────────────
     // Solo se ALMACENAN los tres que nacen de una acción: dar conformidad, aplicar retención, y
-    // el cierre de la tarea SSCC que las remata. "Vigente" y "Pte. evaluación" se DERIVAN al
+    // el cierre de la tarea SSCC que las remata. "Vigente" y "Pte. revisión" se DERIVAN al
     // pintar, de la fecha de checkout y de si hay decisión. Guardarlos obligaría a un proceso
     // nocturno que los fuera cambiando, y el día que fallara habría estados mintiendo sobre el
     // dinero de un huésped.
-    public const ESTADO_VIGENTE    = 'Vigente';
-    public const ESTADO_EVALUACION = 'Pte. evaluación';
-    public const ESTADO_APROBADA   = 'Pte. devolución';
-    public const ESTADO_RETENER    = 'Pte. retención';
-    public const ESTADO_DEVUELTA   = 'Devuelta';
+    // Lo que se muestra. Vigente, Pte. revisión, Pte. IBAN, Pte. devolución, Conforme, Reclamada y
+    // Devuelta se calculan en estadoFianza(), no se guardan.
+    public const ESTADO_VIGENTE         = 'Vigente';
+    public const ESTADO_REVISION        = 'Pte. revisión';
+    public const ESTADO_PTE_IBAN        = 'Pte. IBAN';
+    public const ESTADO_PTE_DEVOLUCION  = 'Pte. devolución';
+    public const ESTADO_CONFORME        = 'Conforme';
+    public const ESTADO_RECLAMADA       = 'Reclamada';
+    public const ESTADO_DEVUELTA        = 'Devuelta';
+
+    // Estados de una devolución que todavía no está cerrada. Son los que se cuentan en el listado.
+    public const ESTADOS_NO_FINALES = [self::ESTADO_REVISION, self::ESTADO_PTE_IBAN, self::ESTADO_PTE_DEVOLUCION];
+
+    // Decisión guardada en vm_reservas.estado_fianza: conformidad (valor de Pte. devolución) o
+    // retención. Son marcas de la decisión, no el estado que se enseña.
+    public const ESTADO_APROBADA = 'Pte. devolución';
+    public const ESTADO_RETENER  = 'Pte. retención';
 
     // Tipos de la tarea SSCC que se crea al decidir, junto a los que ya existen en esa tabla
     // ("Validación informes RRHH", "Revisión Novación").
@@ -94,9 +106,26 @@ class DevFianzasController extends Controller
             ->orderByDesc('r.booking_id')
             ->get();
 
+        // Recuento de las devoluciones que aún no están cerradas, sobre todo el listado.
+        $stats = array_fill_keys(self::ESTADOS_NO_FINALES, 0);
+        foreach ($filas as $fila) {
+            $fila->estado_calc = self::estadoFianza($fila);
+            if (array_key_exists($fila->estado_calc, $stats)) {
+                $stats[$fila->estado_calc]++;
+            }
+        }
+
+        // Un stat pulsado filtra la lista; volver a pulsarlo lo quita.
+        $statActiva = in_array($request->input('stat'), self::ESTADOS_NO_FINALES, true) ? $request->input('stat') : null;
+        if ($statActiva) {
+            $filas = $filas->filter(fn($f) => $f->estado_calc === $statActiva)->values();
+        }
+
         return view('vm.dev-fianzas', [
             'project'   => $project,
             'filas'     => $filas,
+            'stats'     => $stats,
+            'statActiva' => $statActiva,
             'q'         => $q,
             'puedeEditar' => Auth::user()?->canEditTable($project, 'dev_fianzas_default') ?? false,
         ]);
@@ -638,12 +667,19 @@ class DevFianzasController extends Controller
      */
     private function crearTareasDeCobro(int $reservaId, string $canal, string $tipo, string $descripcion): void
     {
+        $ids = [];
         foreach (self::TAREAS_POR_CANAL[$canal] ?? [] as $destino) {
-            $this->crearTareaSscc($reservaId, $destino['departamento'] ?? null, $destino['rol'] ?? null, $tipo, $descripcion);
+            $ids[] = $this->crearTareaSscc($reservaId, $destino['departamento'] ?? null, $destino['rol'] ?? null, $tipo, $descripcion);
+        }
+
+        // Dos tareas para lo mismo (TPV físico): cada una apunta a su gemela. Al cerrar una, la otra se borra.
+        if (count($ids) === 2) {
+            DB::table('vm_tareas_sscc')->where('id', $ids[0])->update(['id_tarea_hermana' => $ids[1]]);
+            DB::table('vm_tareas_sscc')->where('id', $ids[1])->update(['id_tarea_hermana' => $ids[0]]);
         }
     }
 
-    public function crearTareaSscc(int $reservaId, ?int $departamento, ?int $rol, string $tipo, string $descripcion): void
+    public function crearTareaSscc(int $reservaId, ?int $departamento, ?int $rol, string $tipo, string $descripcion): int
     {
         $reserva = DB::table('vm_reservas as r')
             ->leftJoin('vm_propiedades as p', 'p.id', '=', 'r.id_propiedades')
@@ -674,6 +710,8 @@ class DevFianzasController extends Controller
         FianzaAuditoria::registrar($reservaId, 'tarea_creada', [
             'id' => $tareaId, 'tipo' => $tipo, 'departamento' => $departamento, 'rol' => $rol,
         ]);
+
+        return $tareaId;
     }
 
     /** Las fotos de una reserva que llevan retención, en el orden en que se marcaron. */
@@ -748,7 +786,7 @@ class DevFianzasController extends Controller
     /**
      * El estado que se le enseña a la gente, que no siempre es el guardado.
      *
-     * "Vigente" y "Pte. evaluación" se derivan aquí en vez de almacenarse: dependen solo de la
+     * "Vigente" y "Pte. revisión" se derivan aquí en vez de almacenarse: dependen solo de la
      * fecha y de si hay decisión, y guardarlos obligaría a un proceso nocturno que los fuera
      * cambiando. El día que ese proceso fallara, la pantalla mentiría sobre dinero de un huésped.
      *
@@ -760,16 +798,31 @@ class DevFianzasController extends Controller
             return null;
         }
 
-        // Una decisión tomada manda sobre cualquier cálculo.
-        if (!empty($reserva->estado_fianza)) {
-            return !empty($reserva->sscc_finalizada) ? self::ESTADO_DEVUELTA : $reserva->estado_fianza;
+        $decision = $reserva->estado_fianza ?? null;
+
+        // Sin decisión: depende solo de si la salida ya ha pasado.
+        if (empty($decision)) {
+            $checkout = $reserva->check_out_date ?? null;
+
+            return ($checkout && $checkout >= now()->toDateString())
+                ? self::ESTADO_VIGENTE
+                : self::ESTADO_REVISION;
         }
 
-        $checkout = $reserva->check_out_date ?? null;
+        // Airbnb: no hay devolución desde Opland, así que la decisión es el estado final.
+        if (self::esAirbnb($reserva->channel ?? null)) {
+            return $decision === self::ESTADO_RETENER ? self::ESTADO_RECLAMADA : self::ESTADO_CONFORME;
+        }
 
-        return ($checkout && $checkout >= now()->toDateString())
-            ? self::ESTADO_VIGENTE
-            : self::ESTADO_EVALUACION;
+        // Resto de canales, con decisión (conformidad o retención).
+        if (!empty($reserva->sscc_finalizada)) {
+            return self::ESTADO_DEVUELTA;
+        }
+        if (($reserva->fianza_canal_cobro ?? null) === 'Transferencia' && empty($reserva->fianza_iban_guardado_at)) {
+            return self::ESTADO_PTE_IBAN;
+        }
+
+        return self::ESTADO_PTE_DEVOLUCION;
     }
 
     /**

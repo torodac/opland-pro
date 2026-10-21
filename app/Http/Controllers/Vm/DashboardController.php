@@ -147,7 +147,7 @@ class DashboardController extends Controller
         }
 
         $previa = DB::table('vm_tareas_sscc')->where('id', $id)->where('deleted', 0)
-            ->first(['estado', 'Tipo', 'id_reservas']);
+            ->first(['estado', 'Tipo', 'id_reservas', 'id_tarea_hermana']);
 
         $updated = DB::table('vm_tareas_sscc')
             ->where('id', $id)
@@ -166,6 +166,20 @@ class DashboardController extends Controller
             \App\Services\FianzaAuditoria::registrar((int) $previa->id_reservas, 'tarea_completada', [
                 'id' => $id, 'tipo' => $previa->Tipo,
             ]);
+        }
+
+        // La gemela (TPV físico) ya no hace falta: se borra antes de mirar si quedan tareas abiertas.
+        if ($previa && $previa->id_tarea_hermana) {
+            $borrada = DB::table('vm_tareas_sscc')
+                ->where('id', $previa->id_tarea_hermana)
+                ->where('deleted', 0)
+                ->where('estado', '!=', 'Completada')
+                ->update(['deleted' => 1, 'updateuser' => auth()->id(), 'updatedat' => now()]);
+            if ($borrada && $previa->id_reservas) {
+                \App\Services\FianzaAuditoria::registrar((int) $previa->id_reservas, 'tarea_hermana_borrada', [
+                    'id' => $previa->id_tarea_hermana, 'al_cerrar' => $id,
+                ]);
+            }
         }
 
         // Al cerrar la última tarea de una fianza, el dinero ya se ha movido: entonces, y solo
