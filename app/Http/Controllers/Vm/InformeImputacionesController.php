@@ -394,6 +394,12 @@ class InformeImputacionesController extends Controller
         // Antes contaba los dos casos y el panel no cuadraba con el informe -- que a un día con
         // fichaje le pinta "Trabajo" y no lo señala de ninguna forma (decisión 2026-10-08).
         $esTurno = VmHorasService::esDeptoTurno($userId);
+        // El departamento dice si se planifica por turnos, pero admite excepciones por persona:
+        // quien está en un departamento de turnos y no se planifica en el cuadrante no tiene
+        // "días sin horario" que resolver, y el aviso le marcaba el mes entero. Solo afecta a
+        // ese contador; los días de turno y descanso se siguen contando igual.
+        $avisaSinHorario = $esTurno
+            && (bool) DB::table('vm_usuarios')->where('id', $userId)->value('va_por_turnos');
         $diasTurno = 0;
         $diasDescanso = 0;
         $diasSinAsignar = 0;
@@ -409,6 +415,7 @@ class InformeImputacionesController extends Controller
                 // Fuera del contrato tampoco hay nada que planificar: antes del alta o después
                 // de la baja, el mes entero de quien entra a mitad salía marcado como pendiente.
                 if (!($d['en_contrato'] ?? true)) continue;
+                if (!$avisaSinHorario) continue;
                 $diasSinAsignar++;
             }
         }
