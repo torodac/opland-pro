@@ -645,6 +645,75 @@ class DevFianzasController extends Controller
         return response()->json(['ok' => true, 'estado' => self::ESTADO_RETENER, 'total' => $total]);
     }
 
+    /**
+     * Devuelve el proceso de devolución de la reserva al punto de partida: quita la decisión, el
+     * canal, el IBAN y el enlace del IBAN, las retenciones de las fotos y las tareas SSCC de
+     * devolución y retención (borrado lógico). La auditoría deja constancia de lo que había, sin
+     * registrar el número de cuenta.
+     */
+    public function reiniciar(Request $request, Project $project, int $id)
+    {
+        abort_unless(Auth::user()?->canEditTable($project, 'dev_fianzas_default'), 403);
+
+        $reserva = DB::table('vm_reservas')->where('id', $id)
+            ->first(['id', 'estado_fianza', 'fianza_retencion', 'fianza_canal_cobro']);
+        abort_unless($reserva, 404);
+
+        $fotosIds = DB::table('vm_fotos as f')
+            ->join('vm_tareas_limpieza as t', 't.id', '=', 'f.id_tareas_limpieza')
+            ->where('t.id_reservas', $id)
+            ->where(fn($x) => $x->where('f.informe_estancia', 1)
+                ->orWhereNotNull('f.retencion_concepto')
+                ->orWhereNotNull('f.retencion_importe'))
+            ->pluck('f.id')->all();
+
+        $tareasIds = DB::table('vm_tareas_sscc')
+            ->where('id_reservas', $id)
+            ->whereIn('Tipo', [self::SSCC_DEVOLUCION, self::SSCC_RETENCION])
+            ->where(fn($x) => $x->where('deleted', 0)->orWhereNull('deleted'))
+            ->pluck('id')->all();
+
+        DB::transaction(function () use ($id, $fotosIds, $tareasIds) {
+            DB::table('vm_reservas')->where('id', $id)->update([
+                'estado_fianza'           => null,
+                'fianza_retencion'        => null,
+                'fianza_motivo_retencion' => null,
+                'fianza_usuario'          => null,
+                'fianza_fecha'            => null,
+                'fianza_canal_cobro'      => null,
+                'fianza_iban_cifrado'     => null,
+                'fianza_iban_guardado_at' => null,
+                'fianza_token_iban'       => null,
+                'fianza_departamento'     => null,
+                'updatedat'               => now(),
+            ]);
+
+            if ($fotosIds) {
+                DB::table('vm_fotos')->whereIn('id', $fotosIds)->update([
+                    'informe_estancia'      => 0,
+                    'informe_estancia_user' => null,
+                    'informe_estancia_at'   => null,
+                    'retencion_concepto'    => null,
+                    'retencion_importe'     => null,
+                ]);
+            }
+
+            if ($tareasIds) {
+                DB::table('vm_tareas_sscc')->whereIn('id', $tareasIds)->update(['deleted' => 1]);
+            }
+        });
+
+        \App\Services\FianzaAuditoria::registrar($id, 'reinicio_fianza', [
+            'estado_anterior'    => $reserva->estado_fianza,
+            'retencion_anterior' => $reserva->fianza_retencion,
+            'canal_anterior'     => $reserva->fianza_canal_cobro,
+            'fotos_desmarcadas'  => count($fotosIds),
+            'tareas_borradas'    => count($tareasIds),
+        ]);
+
+        return response()->json(['ok' => true]);
+    }
+
     // ── Piezas compartidas por las dos decisiones ────────────────────────────
 
     /** Una reserva de Airbnb, por el canal que manda Icnea (sin distinguir mayúsculas). */

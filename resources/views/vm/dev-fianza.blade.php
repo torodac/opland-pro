@@ -195,10 +195,19 @@
   @elseif($pendiente)
     <p style="font-size:12px;color:#bbb;margin:12px 0 0">No tienes permiso para decidir sobre esta fianza.</p>
   @else
-    <p style="font-size:12px;color:#bbb;margin:12px 0 0">
-      Ya decidida. Para rehacerla, deja el estado en blanco en
-      <a href="{{ route('vm.reserva_form', [$project->slug, $reserva->id]) }}" style="color:#185FA5">la ficha de la reserva</a>.
-    </p>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap">
+      <p style="font-size:12px;color:#bbb;margin:0">Ya decidida.</p>
+      {{-- Vuelve la fianza al punto de partida: quita la decisión, el canal, el IBAN, las retenciones
+           de las fotos y las tareas de devolución. El bloque Fianza de la ficha de la reserva se
+           queda en blanco con ello. Lo que se borra queda en el historial. --}}
+      @if($puedeEditar)
+        <button type="button" class="df-btn" id="df-btn-reiniciar" onclick="reiniciarProceso()"
+                title="Quita la decisión, el canal, el IBAN, las retenciones de las fotos y las tareas de devolución."
+                style="border-color:#E5E7EB;background:#fff;color:#9B1C1C">
+          Reiniciar proceso
+        </button>
+      @endif
+    </div>
   @endif
 
   {{-- Transferencia: el número de cuenta llega por el enlace a Filipinas. Aquí se ve el estado de
@@ -798,6 +807,19 @@ async function conforme() {
     const j = await r.json().catch(() => ({}));
     if (j.error) { alert(j.error); return; }
     location.href = '{{ route('vm.dev-fianzas', $project->slug) }}';
+}
+
+async function reiniciarProceso() {
+    if (!confirm('¿Reiniciar el proceso de devolución de esta reserva? Se quitan la decisión, el canal, el IBAN, las retenciones de las fotos y las tareas de devolución. El historial se conserva.')) return;
+
+    const r = await fetch(BASE_DF + '/reiniciar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_DF, 'Accept': 'application/json' },
+        body: JSON.stringify({}),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) { alert(j.error ?? 'No se pudo reiniciar el proceso.'); return; }
+    location.reload();
 }
 
 actualizarBotones();

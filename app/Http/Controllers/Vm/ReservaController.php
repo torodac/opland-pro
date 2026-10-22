@@ -140,6 +140,7 @@ class ReservaController extends Controller
         'enlace_iban'         => 'Enlace para el número de cuenta generado',
         'iban_guardado'       => 'Número de cuenta guardado desde el enlace',
         'edicion_manual'      => 'Edición manual de la fianza',
+        'reinicio_fianza'     => 'Proceso de devolución reiniciado',
     ];
 
     /**
