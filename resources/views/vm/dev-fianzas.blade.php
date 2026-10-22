@@ -22,11 +22,40 @@
                 {{ $estadoStat }} <strong style="font-weight:500;">{{ $n }}</strong>
             </a>
         @endforeach
+
+        {{-- Aparte de los estados: no es una fase de la devolución, es un aviso sobre la reserva. --}}
+        <span style="width:1px;align-self:stretch;background:#e5e7eb;margin:0 4px;"></span>
+        <a href="{{ request()->fullUrlWithQuery(['stat' => $statActiva === 'sin_limpieza' ? null : 'sin_limpieza']) }}"
+           title="{{ $statActiva === 'sin_limpieza' ? 'Quitar el filtro' : 'Ver solo las reservas sin limpieza de salida' }}"
+           style="background:#FBE9E9;color:#9B1C1C;padding:4px 10px;border-radius:6px;text-decoration:none;border:2px solid {{ $statActiva === 'sin_limpieza' ? '#c2410c' : 'transparent' }};">
+            Sin tarea de limpieza <strong style="font-weight:500;">{{ $sinLimpieza }}</strong>
+        </a>
+
+        {{-- Por canal: el logo del portal y cuántas reservas vienen de él. Aparte de los dos grupos anteriores. --}}
+        <span style="width:1px;align-self:stretch;background:#e5e7eb;margin:0 4px;"></span>
+        @foreach($porCanal as $canal => $n)
+            @php
+                $canal = (string) $canal;
+                $activo = $canalActivo === $canal;
+                $logo = iconoCanal($canal);
+            @endphp
+            <a href="{{ request()->fullUrlWithQuery(['canal' => $activo ? null : $canal]) }}"
+               title="{{ $activo ? 'Quitar el filtro' : 'Ver solo ' . ($canal !== '' ? $canal : 'sin canal') }}"
+               style="background:#fff;color:#222;padding:4px 10px;border-radius:6px;text-decoration:none;border:2px solid {{ $activo ? '#c2410c' : '#e5e7eb' }};display:inline-flex;align-items:center;gap:6px;">
+                @if($logo)
+                    <img src="{{ $logo }}" alt="{{ $canal }}" style="height:16px;width:auto;max-width:48px;object-fit:contain;">
+                @else
+                    {{ $canal !== '' ? $canal : 'Sin canal' }}
+                @endif
+                <strong style="font-weight:500;">{{ $n }}</strong>
+            </a>
+        @endforeach
     </div>
 
     {{-- Buscador: el mismo de los listados estándar (misma forma, mismo sitio, mismo placeholder). --}}
     <form method="GET" class="flex gap-2 mb-4">
         @if($statActiva)<input type="hidden" name="stat" value="{{ $statActiva }}">@endif
+        @if($canalActivo !== null)<input type="hidden" name="canal" value="{{ $canalActivo }}">@endif
         <input type="text" name="q" value="{{ $q }}"
                placeholder="Buscar..."
                class="flex-1 max-w-xs text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300">
@@ -80,6 +109,9 @@
                     @if($f->n_tareas)
                         <span title="{{ $f->n_tareas }} {{ $f->n_tareas === 1 ? 'limpieza' : 'limpiezas' }} de salida asociada{{ $f->n_tareas === 1 ? '' : 's' }}"
                               style="color:#1B7F3B;margin-left:5px;font-weight:600">✔</span>
+                    @else
+                        <span title="Sin limpieza de salida asociada: no hay comentarios ni fotos que revisar"
+                              style="color:#B45309;margin-left:5px;font-weight:600">❗</span>
                     @endif
                 </td>
                 <td style="padding:8px 12px;font-size:13px">{{ $f->nombre ?: '—' }}</td>

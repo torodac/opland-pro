@@ -115,16 +115,32 @@ class DevFianzasController extends Controller
             }
         }
 
+        // Las reservas sin limpieza de salida asociada tienen su propio contador, aparte de los estados.
+        $sinLimpieza = $filas->filter(fn($f) => (int) $f->n_tareas === 0)->count();
+
+        // Un stat por canal, con su logo. Cuenta sobre el listado completo, como los de estado.
+        $porCanal = $filas->groupBy(fn($f) => (string) ($f->channel ?? ''))->map->count()->sortDesc();
+        $canalActivo = in_array($request->input('canal'), $porCanal->keys()->all(), true) ? (string) $request->input('canal') : null;
+
         // Un stat pulsado filtra la lista; volver a pulsarlo lo quita.
-        $statActiva = in_array($request->input('stat'), self::ESTADOS_NO_FINALES, true) ? $request->input('stat') : null;
-        if ($statActiva) {
+        $statActiva = in_array($request->input('stat'), array_merge(self::ESTADOS_NO_FINALES, ['sin_limpieza']), true) ? $request->input('stat') : null;
+        if ($statActiva === 'sin_limpieza') {
+            $filas = $filas->filter(fn($f) => (int) $f->n_tareas === 0)->values();
+        } elseif ($statActiva) {
             $filas = $filas->filter(fn($f) => $f->estado_calc === $statActiva)->values();
+        }
+
+        if ($canalActivo !== null) {
+            $filas = $filas->filter(fn($f) => (string) ($f->channel ?? '') === $canalActivo)->values();
         }
 
         return view('vm.dev-fianzas', [
             'project'   => $project,
             'filas'     => $filas,
             'stats'     => $stats,
+            'sinLimpieza' => $sinLimpieza,
+            'porCanal'    => $porCanal,
+            'canalActivo' => $canalActivo,
             'statActiva' => $statActiva,
             'q'         => $q,
             'puedeEditar' => Auth::user()?->canEditTable($project, 'dev_fianzas_default') ?? false,
@@ -794,11 +810,12 @@ class DevFianzasController extends Controller
      */
     public static function estadoFianza(?object $reserva): ?string
     {
-        if (!$reserva || (float) ($reserva->fianza ?? 0) <= 0) {
+        if (!$reserva) {
             return null;
         }
 
         $decision = $reserva->estado_fianza ?? null;
+
 
         // Sin decisión: depende solo de si la salida ya ha pasado.
         if (empty($decision)) {
