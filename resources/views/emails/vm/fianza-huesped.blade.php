@@ -5,25 +5,25 @@
 
         {{-- Cabecera con el logo --}}
         <tr>
-          <td align="center" style="padding:28px 24px 20px;border-bottom:3px solid #c2410c;">
-            <img src="{{ asset('projects/vm/logo.png') }}" alt="Vacation Marbella" width="180" style="display:block;width:180px;height:auto;border:0;">
+          <td align="center" style="padding:20px 16px 14px;border-bottom:3px solid #c2410c;">
+            <img src="{{ asset('projects/vm/logo.png') }}" alt="Vacation Marbella" width="126" style="display:block;width:126px;height:auto;border:0;">
           </td>
         </tr>
 
         {{-- Castellano --}}
         <tr>
-          <td style="padding:28px 32px 8px;color:#16232b;font-size:15px;line-height:1.6;">
+          <td style="padding:20px 24px 6px;color:#16232b;font-size:15px;line-height:1.6;">
             <p style="margin:0 0 12px;">Hola{{ $nombre ? ' ' . $nombre : '' }},</p>
             <p style="margin:0 0 16px;">Le confirmamos la devolución de la fianza de su estancia.</p>
           </td>
         </tr>
         <tr>
-          <td style="padding:0 32px 8px;">
+          <td style="padding:0 24px 6px;">
             @include('emails.vm.partials.fianza-huesped-datos', ['idioma' => 'es', 'propiedad' => $propiedad, 'booking_id' => $booking_id, 'entrada' => $entrada, 'salida' => $salida, 'importe' => $importe, 'retencion' => $retencion, 'motivo' => $motivo])
           </td>
         </tr>
         <tr>
-          <td style="padding:16px 32px 28px;color:#16232b;font-size:15px;line-height:1.6;">
+          <td style="padding:10px 24px 20px;color:#16232b;font-size:15px;line-height:1.6;">
             <p style="margin:0;">Gracias por su estancia.</p>
           </td>
         </tr>
@@ -35,18 +35,18 @@
 
         {{-- Inglés --}}
         <tr>
-          <td style="padding:24px 32px 8px;color:#16232b;font-size:15px;line-height:1.6;">
+          <td style="padding:16px 24px 6px;color:#16232b;font-size:15px;line-height:1.6;">
             <p style="margin:0 0 12px;">Hello{{ $nombre ? ' ' . $nombre : '' }},</p>
             <p style="margin:0 0 16px;">We confirm the refund of your deposit for your stay.</p>
           </td>
         </tr>
         <tr>
-          <td style="padding:0 32px 8px;">
+          <td style="padding:0 24px 6px;">
             @include('emails.vm.partials.fianza-huesped-datos', ['idioma' => 'en', 'propiedad' => $propiedad, 'booking_id' => $booking_id, 'entrada' => $entrada, 'salida' => $salida, 'importe' => $importe, 'retencion' => $retencion, 'motivo' => $motivo])
           </td>
         </tr>
         <tr>
-          <td style="padding:16px 32px 28px;color:#16232b;font-size:15px;line-height:1.6;">
+          <td style="padding:10px 24px 20px;color:#16232b;font-size:15px;line-height:1.6;">
             <p style="margin:0;">Thank you for your stay.</p>
           </td>
         </tr>
