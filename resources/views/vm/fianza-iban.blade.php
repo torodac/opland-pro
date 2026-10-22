@@ -19,7 +19,9 @@
     dd { margin:0; }
     label { display:block; font-weight:600; margin-bottom:6px; }
     input[type=text] { width:100%; box-sizing:border-box; padding:10px; font:inherit; border:1px solid var(--bd); border-radius:6px; background:var(--bg); color:var(--fg); letter-spacing:.04em; }
-    button { margin-top:12px; padding:10px 16px; font:inherit; font-weight:600; border:0; border-radius:6px; background:#0969da; color:#fff; cursor:pointer; width:100%; }
+    button { margin-top:12px; padding:10px 16px; font:inherit; font-weight:600; border:0; border-radius:6px; background:#ecdba4; color:#16232b; cursor:pointer; width:100%; }
+    .cabecera { text-align:center; padding:0 0 14px; margin:0 0 20px; border-bottom:3px solid #ecdba4; }
+    .cabecera img { display:block; width:126px; height:auto; margin:0 auto; }
     .aviso { padding:12px; border:1px solid var(--bd); border-radius:6px; margin-bottom:16px; }
     .error { color:var(--err); margin:0 0 12px; }
     .ok { color:var(--ok); font-weight:600; }
@@ -28,6 +30,9 @@
 </head>
 <body>
 <main>
+  <header class="cabecera">
+    <img src="{{ asset('projects/vm/logo.png') }}" alt="Vacation Marbella">
+  </header>
   <h1>Número de cuenta para la devolución</h1>
   <p class="en">Bank account for the deposit refund</p>
 
