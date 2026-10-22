@@ -5,7 +5,7 @@
 
         {{-- Cabecera con el logo --}}
         <tr>
-          <td align="center" style="padding:20px 16px 14px;border-bottom:3px solid #c2410c;">
+          <td align="center" style="padding:20px 16px 14px;border-bottom:3px solid #ecdba4;">
             <img src="{{ asset('projects/vm/logo.png') }}" alt="Vacation Marbella" width="126" style="display:block;width:126px;height:auto;border:0;">
           </td>
         </tr>
@@ -22,8 +22,8 @@
           <td align="center" style="padding:4px 24px 14px;">
             <table role="presentation" cellpadding="0" cellspacing="0" border="0">
               <tr>
-                <td align="center" bgcolor="#c2410c" style="border-radius:6px;">
-                  <a href="{{ $enlace }}" target="_blank" style="display:inline-block;padding:12px 26px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:6px;">Abrir enlace</a>
+                <td align="center" bgcolor="#ecdba4" style="border-radius:6px;">
+                  <a href="{{ $enlace }}" target="_blank" style="display:inline-block;padding:12px 26px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#16232b;text-decoration:none;border-radius:6px;">Abrir enlace</a>
                 </td>
               </tr>
             </table>
@@ -57,8 +57,8 @@
           <td align="center" style="padding:4px 24px 14px;">
             <table role="presentation" cellpadding="0" cellspacing="0" border="0">
               <tr>
-                <td align="center" bgcolor="#c2410c" style="border-radius:6px;">
-                  <a href="{{ $enlace }}" target="_blank" style="display:inline-block;padding:12px 26px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:6px;">Open link</a>
+                <td align="center" bgcolor="#ecdba4" style="border-radius:6px;">
+                  <a href="{{ $enlace }}" target="_blank" style="display:inline-block;padding:12px 26px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#16232b;text-decoration:none;border-radius:6px;">Open link</a>
                 </td>
               </tr>
             </table>
