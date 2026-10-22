@@ -193,7 +193,7 @@
     </div>
   </div>
 
-  {{-- ── Pestaña 2: jerarquía de aprobación (vm_usuarios.id_aprueba_informe) ── --}}
+  {{-- ── Pestaña 2: jerarquía de aprobación (vm_usuarios.supervisados) ── --}}
   <div class="jer-cols" data-panel="aprueba" hidden>
     <div class="jer-main">
       <p class="jer-seccion">Jerarquía</p>

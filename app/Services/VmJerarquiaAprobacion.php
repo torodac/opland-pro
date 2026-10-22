@@ -35,8 +35,9 @@ class VmJerarquiaAprobacion
      * La fuente es **vm_usuarios.supervisados**: la lista, en la ficha de cada responsable, de
      * las personas cuyo informe firma. Se informa así desde el 2026-10-08; antes estaba al
      * revés, en un desplegable "Aprueba informe" en la ficha de cada trabajador
-     * (`id_aprueba_informe`), que se conserva en la base de datos pero ya no se lee ni se
-     * ofrece en la ficha. Ver 3.124 del DOC_TECNICO.
+     * (`id_aprueba_informe`), retirado de la base de datos el 22/10/2026 cuando se comprobó
+     * que ya no lo leía nadie salvo la pantalla de Jerarquías, que mostraba un árbol obsoleto.
+     * Ver 3.124 y 3.160 del DOC_TECNICO.
      *
      * Se descartan los usuarios borrados o inexistentes y la autosupervisión. Si una persona
      * apareciera en DOS listas, gana la del responsable de id más bajo y se deja constancia en

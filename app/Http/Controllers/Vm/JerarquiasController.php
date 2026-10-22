@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Vm;
 use App\Http\Controllers\Controller;
 use App\Models\Project;
 use Illuminate\Http\Request;
+use App\Services\VmJerarquiaAprobacion;
 use Illuminate\Support\Facades\DB;
 
 // Jerarquías: visualiza en forma de árbol los DOS organigramas que conviven en VM y que hoy
@@ -13,8 +14,14 @@ use Illuminate\Support\Facades\DB;
 //   1. Roles    -- vm_roles.roles_supervisados (una lista de ids de rol por rol). Es la que usa
 //                  RoleHierarchy para decidir a quién ve cada usuario (informe, fichajes,
 //                  listados, dashboard y PWA). Relación entre ROLES, no entre personas.
-//   2. Aprueba  -- vm_usuarios.id_aprueba_informe. Relación entre PERSONAS concretas, pensada
-//                  para el circuito de firma del informe mensual.
+//   2. Aprueba  -- vm_usuarios.supervisados: la lista, en la ficha de cada responsable, de las
+//                  personas cuyo informe firma. Relación entre PERSONAS concretas, y la que usa
+//                  de verdad el circuito de firma del informe mensual.
+//
+// Hasta el 22/10/2026 esta segunda pestaña se dibujaba con el campo antiguo "Aprueba informe"
+// (vm_usuarios.id_aprueba_informe), que dejó de gobernar nada el 08/10 al invertirse la
+// relación. Coincidían en 21 de 22 personas por inercia del dato viejo, así que el árbol
+// parecía correcto y mentía en el único caso que había cambiado desde entonces.
 //
 // La página es de solo lectura y no impone gate de rol propio: el acceso se configura desde
 // /config/projects sobre la tabla virtual del menú, igual que informe-financiero/operativo.
@@ -30,7 +37,7 @@ class JerarquiasController extends Controller
         $usuarios = DB::table('vm_usuarios')
             ->where('deleted', 0)
             ->orderBy('nombre')
-            ->get(['id', 'nombre', 'id_rol', 'id_aprueba_informe']);
+            ->get(['id', 'nombre', 'id_rol']);
 
         [$arbolRoles, $sueltosRoles]     = $this->arbolRoles($roles, $usuarios, $project);
         [$arbolAprueba, $sueltosAprueba] = $this->arbolAprueba($roles, $usuarios, $project);
@@ -121,8 +128,13 @@ class JerarquiasController extends Controller
             ];
         }
 
+        // La misma fuente que usa el circuito al firmar, para que el árbol no pueda discrepar
+        // de lo que pasa de verdad. mapaAprobadores() ya descarta borrados, autosupervisión y
+        // dobles asignaciones.
+        $aprobadores = VmJerarquiaAprobacion::mapaAprobadores();
+
         foreach ($usuarios as $u) {
-            $apr = $u->id_aprueba_informe ? (int) $u->id_aprueba_informe : null;
+            $apr = $aprobadores[(int) $u->id] ?? null;
             // Un aprobador borrado o inexistente se trata como "sin aprobador", para que la
             // persona no desaparezca del árbol por un dato colgado.
             if ($apr === null || !$activos->has($apr) || $apr === (int) $u->id) continue;
@@ -133,7 +145,7 @@ class JerarquiasController extends Controller
         $sueltos = [];
         foreach ($usuarios as $u) {
             $id  = (int) $u->id;
-            $apr = $u->id_aprueba_informe ? (int) $u->id_aprueba_informe : null;
+            $apr = $aprobadores[$id] ?? null;
             $tieneAprobador = $apr !== null && $activos->has($apr) && $apr !== $id;
             if ($tieneAprobador) continue;
             if (!empty($hijos[$id])) $raices[]  = $id;

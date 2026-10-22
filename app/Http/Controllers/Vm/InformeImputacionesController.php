@@ -138,7 +138,7 @@ class InformeImputacionesController extends Controller
 
         // A DIFERENCIA de la ficha individual (que une las dos jerarquías), este panel se limita
         // a la jerarquía de APROBACIÓN: cada usuario ve solo su propia rama de
-        // vm_usuarios.id_aprueba_informe -- quien no aprueba a nadie se ve solo a sí mismo.
+        // aprobación (vm_usuarios.supervisados) -- quien no aprueba a nadie se ve solo a sí mismo.
         // Decisión explícita 2026-09-24.
         //
         // Excepción: admin, Dirección general y Director RRHH siguen viendo a todos, porque
@@ -436,7 +436,7 @@ class InformeImputacionesController extends Controller
         ];
     }
 
-    // Paso 1/4: el supervisor designado en la ficha del trabajador (vm_usuarios.id_aprueba_informe)
+    // Paso 1/4: el supervisor que tiene al trabajador en su "Supervisa a" (vm_usuarios.supervisados)
     // firma. Admin, Dirección general y RRHH pueden firmarlo en su lugar para que una baja o unas
     // vacaciones del titular no bloqueen el cierre de mes (decisión explícita 2026-09-24).
     public function firmarAprueba(Request $request, Project $project)
@@ -582,7 +582,7 @@ class InformeImputacionesController extends Controller
         //
         // El flujo es: aprueba → rrhh → trabajador → direccion → completado. El primer paso,
         // "aprueba" (etiquetado "Supervisor"), lo firma la persona designada en la ficha del
-        // usuario (vm_usuarios.id_aprueba_informe), y se salta cuando no tiene aprobador o
+        // responsable que lo tiene en su "Supervisa a", y se salta cuando no tiene aprobador o
         // cuando quien lo aprueba es Dirección general, que ya firma el último paso.
         $resultado = CircuitoFirmas::firmar(
             CircuitoFirmas::MENSUAL,
