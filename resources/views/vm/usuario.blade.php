@@ -86,6 +86,14 @@ $sinVigente = $contratos->isNotEmpty()
 .section-card{background:#fff;border:0.5px solid rgba(0,0,0,.08);border-radius:12px;padding:1rem 1.25rem;margin-bottom:12px;}
 .dark .section-card{background:#1a1a1a;border-color:rgba(255,255,255,.08);}
 .sec-title{font-weight:500;font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:8px;}
+/* Mando de plegado: mismo lenguaje que los bloques del dashboard -- chip con el numero y
+   flecha que apunta a la derecha cuando esta cerrado. El hover delata que se puede pulsar. */
+.sec-chip{background:#EFF1F3;color:#4B5563;font-size:11px;font-weight:600;border-radius:9px;padding:1px 7px;}
+.dark .sec-chip{background:#2a2a2a;color:#9ca3af;}
+.sec-flecha{color:#9ca3af;font-size:13px;line-height:1;transition:transform .15s;display:inline-block;}
+.sec-title[role="button"]:hover{color:#378ADD;}
+.sec-title[role="button"]:hover .sec-flecha{color:#378ADD;}
+.sec-title[role="button"]:focus-visible{outline:2px solid #378ADD;outline-offset:3px;border-radius:4px;}
 th{text-align:left;padding:6px 8px;font-size:12px;color:#888;font-weight:500;}
 td{padding:8px;font-size:13px;}
 .trow{border-bottom:0.5px solid rgba(0,0,0,.06);}
@@ -279,10 +287,17 @@ td{padding:8px;font-size:13px;}
 
   {{-- Contratos --}}
   <div class="section-card">
+    {{-- Plegado por defecto: la tabla y el grafico ocupan media pantalla y casi nunca es lo
+         que se viene a mirar a la ficha. El titulo entero es el mando, no solo el chevron. --}}
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <p class="sec-title" style="margin:0;"><i class="ti ti-file-text" style="font-size:16px;"></i>Contratos</p>
+      <p class="sec-title" data-plegable="contratos" style="margin:0;">
+        <i class="ti ti-file-text" style="font-size:16px;"></i>Contratos
+        <span class="sec-chip">{{ $contratos->count() }}</span>
+        <span class="sec-flecha">&#9662;</span>
+      </p>
       <button class="btn" onclick="openContratoModal(null)"><i class="ti ti-plus" style="font-size:13px;vertical-align:-2px;"></i> Nuevo</button>
     </div>
+    <div id="blk-contratos" hidden>
     <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
       <thead><tr>
         <th style="width:13%;text-align:center;">Inicio</th>
@@ -334,14 +349,20 @@ td{padding:8px;font-size:13px;}
       <div style="position:relative;height:130px;"><canvas id="salario-chart"></canvas></div>
     </div>
     @endif
+    </div>
   </div>
 
   {{-- Bonus --}}
   <div class="section-card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <p class="sec-title" style="margin:0;"><i class="ti ti-rosette" style="font-size:16px;"></i>Bonus aplicables</p>
+      <p class="sec-title" data-plegable="bonus" style="margin:0;">
+        <i class="ti ti-rosette" style="font-size:16px;"></i>Bonus aplicables
+        <span class="sec-chip">{{ $bonus->count() }}</span>
+        <span class="sec-flecha">&#9662;</span>
+      </p>
       <button class="btn" onclick="openModal('modal-bonus')"><i class="ti ti-plus" style="font-size:13px;vertical-align:-2px;"></i> Bonus personal</button>
     </div>
+    <div id="blk-bonus" hidden>
     @if($bonus->isEmpty())
       <p style="font-size:13px;color:#aaa;margin:0;">No hay bonus definidos para este usuario.</p>
     @else
@@ -374,14 +395,20 @@ td{padding:8px;font-size:13px;}
       </tbody>
     </table>
     @endif
+    </div>
   </div>
 
   {{-- Nóminas --}}
   <div class="section-card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <p class="sec-title" style="margin:0;"><i class="ti ti-receipt" style="font-size:16px;"></i>Nóminas</p>
+      <p class="sec-title" data-plegable="nominas" style="margin:0;">
+        <i class="ti ti-receipt" style="font-size:16px;"></i>Nóminas
+        <span class="sec-chip">{{ $nominas->count() }}</span>
+        <span class="sec-flecha">&#9662;</span>
+      </p>
       <button class="btn" onclick="openNominaModal(null,null,null,null)"><i class="ti ti-plus" style="font-size:13px;vertical-align:-2px;"></i> Registrar mes</button>
     </div>
+    <div id="blk-nominas" hidden>
     @if($nominas->isEmpty())
       <p style="font-size:13px;color:#aaa;margin:0;">Sin registros.</p>
     @else
@@ -410,6 +437,7 @@ td{padding:8px;font-size:13px;}
       </tbody>
     </table>
     @endif
+    </div>
   </div>
 
   {{-- Ausencias --}}
@@ -1011,6 +1039,12 @@ function eliminarUsuario() {
     ])->values();
     $chartMin = $cincoAniosAtras->format('Y-m-d');
 @endphp
+// Diferido: con el bloque plegado el canvas mide 0x0 y Chart.js dibujaria un grafico vacio
+// que no se recupera al abrirlo. Se construye la primera vez que se despliega Contratos.
+let graficoSalarioHecho = false;
+function dibujarGraficoSalario() {
+    if (graficoSalarioHecho) return;
+    graficoSalarioHecho = true;
 new Chart(document.getElementById('salario-chart'), {
     type: 'line',
     data: {
@@ -1023,7 +1057,43 @@ new Chart(document.getElementById('salario-chart'), {
         }
     }
 });
+}
 @endif
+
+// Contratos, Bonus y Nominas arrancan plegados: ocupan media pantalla y casi nunca son lo
+// que se viene a mirar a la ficha. Un solo punto para los tres, por data-plegable="clave"
+// en el titulo y <div id="blk-clave"> con el cuerpo, para que anadir un cuarto no toque JS.
+//
+// El estado NO se recuerda entre visitas a proposito: se quiere plegado cada vez que se abre
+// una ficha, al contrario que en el dashboard, que es una pantalla fija de trabajo diario.
+document.querySelectorAll('[data-plegable]').forEach(titulo => {
+    const cuerpo = document.getElementById('blk-' + titulo.dataset.plegable);
+    if (!cuerpo) return;
+    const flecha = titulo.querySelector('.sec-flecha');
+
+    // El titulo no es un <button>: se le da rol y foco para que funcione con teclado.
+    titulo.setAttribute('role', 'button');
+    titulo.setAttribute('tabindex', '0');
+    titulo.setAttribute('aria-controls', cuerpo.id);
+
+    const pintar = () => {
+        titulo.setAttribute('aria-expanded', String(!cuerpo.hidden));
+        if (flecha) flecha.style.transform = cuerpo.hidden ? 'rotate(-90deg)' : '';
+    };
+    const alternar = () => {
+        cuerpo.hidden = !cuerpo.hidden;
+        pintar();
+        // El grafico de salarios se dibuja al desplegar y no antes: con el bloque oculto el
+        // canvas mide 0x0 y Chart.js pintaria un grafico vacio que no se recupera al abrirlo.
+        if (!cuerpo.hidden && typeof dibujarGraficoSalario === 'function') dibujarGraficoSalario();
+    };
+
+    pintar();
+    titulo.addEventListener('click', alternar);
+    titulo.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); alternar(); }
+    });
+});
 
 const AUSENCIAS  = {!! $ausenciasJs !!};
 const FESTIVOS   = new Set({!! $festivos !!});
