@@ -3,7 +3,9 @@
         <tr>
           <td style="padding:20px 24px 6px;color:#16232b;font-size:15px;line-height:1.6;">
             <p style="margin:0 0 12px;">Hola{{ $nombre ? ' ' . $nombre : '' }},</p>
-            @if($importe > 0)
+            @if($importe > 0 && $retencion > 0)
+              <p style="margin:0 0 16px;">Le confirmamos la devolución parcial de la fianza de su estancia: se le devuelve el importe indicado y se retiene el resto por el motivo indicado a continuación.</p>
+            @elseif($importe > 0)
               <p style="margin:0 0 16px;">Le confirmamos la devolución de la fianza de su estancia.</p>
             @else
               <p style="margin:0 0 16px;">Le informamos de que no se devuelve la fianza de su estancia: queda retenida en su totalidad por el motivo indicado a continuación.</p>
