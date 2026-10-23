@@ -14,7 +14,11 @@
         <tr>
           <td style="padding:20px 24px 6px;color:#16232b;font-size:15px;line-height:1.6;">
             <p style="margin:0 0 12px;">Hola{{ $nombre ? ' ' . $nombre : '' }},</p>
-            <p style="margin:0 0 16px;">Le confirmamos la devolución de la fianza de su estancia.</p>
+            @if($importe > 0)
+              <p style="margin:0 0 16px;">Le confirmamos la devolución de la fianza de su estancia.</p>
+            @else
+              <p style="margin:0 0 16px;">Le informamos de que no se devuelve la fianza de su estancia: queda retenida en su totalidad por el motivo indicado a continuación.</p>
+            @endif
           </td>
         </tr>
         <tr>
@@ -37,7 +41,11 @@
         <tr>
           <td style="padding:16px 24px 6px;color:#16232b;font-size:15px;line-height:1.6;">
             <p style="margin:0 0 12px;">Hello{{ $nombre ? ' ' . $nombre : '' }},</p>
-            <p style="margin:0 0 16px;">We confirm the refund of your deposit for your stay.</p>
+            @if($importe > 0)
+              <p style="margin:0 0 16px;">We confirm the refund of your deposit for your stay.</p>
+            @else
+              <p style="margin:0 0 16px;">We inform you that the deposit for your stay will not be refunded: it is withheld in full for the reason stated below.</p>
+            @endif
           </td>
         </tr>
         <tr>
