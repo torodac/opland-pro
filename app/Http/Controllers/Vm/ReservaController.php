@@ -55,6 +55,8 @@ class ReservaController extends Controller
                     'fianza_iban_cifrado' => $this->valorIban($id, $reserva),
                     'estancia'            => $this->estancia($reserva),
                     'ocupacion'           => $this->ocupacion($reserva),
+                    // Es el id de la reserva, que es también el de su devolución en Dev. fianzas.
+                    'ficha_fianza'        => (string) $id,
                     default               => $this->formatea($campo, $reserva->$campo ?? null, $nombres),
                 };
                 $filas[] = [
@@ -66,6 +68,8 @@ class ReservaController extends Controller
                     'logo'      => $campo === 'channel' ? iconoCanal($reserva->channel) : null,
                     // Icono de Tabler que va delante del valor de algunos campos de la reserva.
                     'icono'     => self::ICONOS[$campo] ?? null,
+                    // Solo el id de la ficha de fianza va enlazado a su pantalla de devolución.
+                    'enlace'    => $campo === 'ficha_fianza' ? route('vm.dev-fianza', [$project->slug, $id]) : null,
                 ];
             }
             $secciones[$titulo] = $filas;
@@ -229,7 +233,7 @@ class ReservaController extends Controller
                       'guest_name', 'guest_email', 'guest_phone', 'guest_language',
                       'propiedad', 'vm_propiedades_nombre', 'id_propiedades', 'channel', 'channel_booking_id', 'icnea_lodging_id'],
         'Importes reserva' => ['fianza', 'base_propietario', 'base_calculo', 'novacion_iva_pct', 'novacion_porc_honorarios'],
-        'Fianza' => ['estado_fianza', 'fianza_retencion', 'fianza_motivo_retencion', 'fianza_usuario',
+        'Fianza' => ['ficha_fianza', 'estado_fianza', 'fianza_retencion', 'fianza_motivo_retencion', 'fianza_usuario',
                      'fianza_fecha', 'fianza_canal_cobro', 'fianza_iban_cifrado', 'fianza_iban_guardado_at', 'fianza_departamento'],
         'Novación y liquidación' => ['liquidado', 'novacion', 'novacion_at', 'novacion_user'],
         // Registro va al final de la ficha: lo ve quien necesita la trazabilidad, no quien decide.
@@ -246,7 +250,7 @@ class ReservaController extends Controller
 
     public const ETIQUETAS = [
         'booking_id' => 'Booking', 'booking_status' => 'Estado de la reserva', 'booking_date' => 'Fecha de reserva',
-        'estancia' => 'Estancia', 'ocupacion' => 'Ocupación',
+        'estancia' => 'Estancia', 'ocupacion' => 'Ocupación', 'ficha_fianza' => 'Ficha fianza',
         'check_in_date' => 'Entrada', 'check_out_date' => 'Salida', 'number_of_adults' => 'Adultos',
         'number_of_children' => 'Niños', 'number_of_infants' => 'Bebés', 'checkin_status' => 'Estado del check-in',
         'guest_name' => 'Nombre', 'guest_email' => 'Correo', 'guest_phone' => 'Teléfono', 'guest_language' => 'Idioma',

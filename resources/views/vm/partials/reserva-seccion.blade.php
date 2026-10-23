@@ -61,7 +61,11 @@
                 <img src="{{ $fila['logo'] }}" alt="{{ $fila['valor'] }}" title="{{ $fila['valor'] }}"
                      style="height:20px;width:auto;max-width:56px;object-fit:contain;flex-shrink:0">
               @endif
-              <span style="min-width:0;overflow-wrap:anywhere;{{ $fila['valor'] === '—' ? 'color:#bbb;font-style:italic;' : '' }}">{{ $fila['valor'] }}</span>
+              @if(!empty($fila['enlace']))
+                <a href="{{ $fila['enlace'] }}" style="min-width:0;overflow-wrap:anywhere;color:#185FA5;text-decoration:none;">{{ $fila['valor'] }}</a>
+              @else
+                <span style="min-width:0;overflow-wrap:anywhere;{{ $fila['valor'] === '—' ? 'color:#bbb;font-style:italic;' : '' }}">{{ $fila['valor'] }}</span>
+              @endif
             </span>
           @endif
         </div>
