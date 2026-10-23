@@ -431,7 +431,7 @@ class DevFianzasController extends Controller
     /**
      * Correo bilingüe al huésped con la devolución. Lo llama DashboardController::marcarSsccHecho
      * cuando todas las tareas SSCC de la fianza están completadas: ahí es cuando el dinero se ha
-     * movido de verdad. Si no hay importe que devolver (fianza 0, o todo retenido), no hay correo.
+     * movido de verdad. Sin fianza (0), no hay correo; con fianza lo hay siempre, también si se retiene todo.
      */
     public function avisarHuespedDevolucion(int $reservaId): void
     {
@@ -444,11 +444,14 @@ class DevFianzasController extends Controller
             return;
         }
 
-        $retencion = (float) ($r->fianza_retencion ?? 0);
-        $importe   = max(0.0, (float) ($r->fianza ?? 0) - $retencion);
-        if ($importe <= 0) {
+        // Sin fianza no hay nada que devolver ni que retener, y no se avisa. Con fianza se avisa siempre,
+        // también si se retiene todo: el huésped tiene que saber qué se queda y por qué.
+        if ((float) ($r->fianza ?? 0) <= 0) {
             return;
         }
+
+        $retencion = (float) ($r->fianza_retencion ?? 0);
+        $importe   = max(0.0, (float) ($r->fianza ?? 0) - $retencion);
         if (!$r->guest_email) {
             Log::warning('Fianza: sin correo del huésped, no se avisa de la devolución', ['reserva' => $reservaId]);
             return;
