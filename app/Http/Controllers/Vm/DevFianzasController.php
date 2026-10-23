@@ -435,33 +435,50 @@ class DevFianzasController extends Controller
      */
     public function avisarHuespedDevolucion(int $reservaId): void
     {
+        $aviso = $this->datosAvisoHuesped($reservaId);
+        if ($aviso['motivo'] === 'sin_fianza') {
+            return;
+        }
+        if ($aviso['motivo'] === 'sin_correo') {
+            Log::warning('Fianza: sin correo del huésped, no se avisa de la devolución', ['reserva' => $reservaId]);
+            return;
+        }
+
+        FianzaAuditoria::registrar($reservaId, 'correo_enviado', ['tipo' => 'devolucion_huesped', 'destinatario' => $aviso['to']]);
+        Mail::to($this->destinatario($aviso['to']))->send(new VmFianzaAvisoMail($aviso['asunto'], 'emails.vm.fianza-huesped', $aviso['datos']));
+    }
+
+    /**
+     * Lo que diría el correo al huésped y a quién iría. Lo usan el envío y la previsualización del
+     * botón Hecho, para que lo que se ve sea lo que sale. 'motivo' es null cuando sí hay correo.
+     *
+     * @return array{motivo: ?string, to: ?string, asunto: ?string, datos: array}
+     */
+    public function datosAvisoHuesped(int $reservaId): array
+    {
         $r = DB::table('vm_reservas as r')
             ->leftJoin('vm_propiedades as p', 'p.id', '=', 'r.id_propiedades')
             ->where('r.id', $reservaId)
             ->first(['r.booking_id', 'r.guest_name', 'r.guest_email', 'r.check_in_date', 'r.check_out_date',
                      'r.fianza', 'r.fianza_retencion', 'r.fianza_motivo_retencion', 'p.nombre as propiedad']);
-        if (!$r) {
-            return;
-        }
 
         // Sin fianza no hay nada que devolver ni que retener, y no se avisa. Con fianza se avisa siempre,
         // también si se retiene todo: el huésped tiene que saber qué se queda y por qué.
-        if ((float) ($r->fianza ?? 0) <= 0) {
-            return;
+        if (!$r || (float) ($r->fianza ?? 0) <= 0) {
+            return ['motivo' => 'sin_fianza', 'to' => null, 'asunto' => null, 'datos' => []];
+        }
+        if (!$r->guest_email) {
+            return ['motivo' => 'sin_correo', 'to' => null, 'asunto' => null, 'datos' => []];
         }
 
         $retencion = (float) ($r->fianza_retencion ?? 0);
         $importe   = max(0.0, (float) ($r->fianza ?? 0) - $retencion);
-        if (!$r->guest_email) {
-            Log::warning('Fianza: sin correo del huésped, no se avisa de la devolución', ['reserva' => $reservaId]);
-            return;
-        }
 
-        FianzaAuditoria::registrar($reservaId, 'correo_enviado', ['tipo' => 'devolucion_huesped', 'destinatario' => $r->guest_email]);
-        Mail::to($this->destinatario($r->guest_email))->send(new VmFianzaAvisoMail(
-            'Devolución de su fianza · Deposit refund · reserva ' . $r->booking_id,
-            'emails.vm.fianza-huesped',
-            [
+        return [
+            'motivo'  => null,
+            'to'      => $r->guest_email,
+            'asunto'  => 'Devolución de su fianza · Deposit refund · reserva ' . $r->booking_id,
+            'datos'   => [
                 'nombre'     => $r->guest_name,
                 'booking_id' => $r->booking_id,
                 'propiedad'  => $r->propiedad ?: 'sin propiedad',
@@ -473,7 +490,89 @@ class DevFianzasController extends Controller
                 'motivo'     => str_replace(self::SUFIJO_SIN_EVIDENCIAS, '', (string) ($r->fianza_motivo_retencion ?? '')),
                 'adjuntos'   => $this->rutasFotosRetencion($reservaId),
             ],
-        ));
+        ];
+    }
+
+    /**
+     * Lo que provocaría el botón Hecho de esta tarea, para la modal de confirmación: si manda correo
+     * al huésped y a quién, el correo en castellano y las miniaturas de las fotos que van adjuntas.
+     */
+    public function previaHecho(Request $request, Project $project, int $id)
+    {
+        abort_unless(Auth::user()?->canViewTable($project, 'tareas_sscc'), 403);
+
+        $tarea = DB::table('vm_tareas_sscc')->where('id', $id)->where('deleted', 0)
+            ->first(['id', 'estado', 'Tipo', 'id_reservas', 'id_tarea_hermana']);
+        abort_unless($tarea, 404);
+
+        $vacia = ['envia' => false, 'motivo' => null, 'destinatario' => null, 'redirigido_a' => null, 'html' => null, 'fotos' => []];
+
+        if ($tarea->estado === 'Completada') {
+            return response()->json(['motivo' => 'La tarea ya está hecha.'] + $vacia);
+        }
+        if (!$tarea->id_reservas || !in_array($tarea->Tipo, [self::SSCC_DEVOLUCION, self::SSCC_RETENCION], true)) {
+            return response()->json(['motivo' => 'Esta tarea no es de fianza: no envía correo.'] + $vacia);
+        }
+
+        // Mismo criterio que DashboardController::marcarSsccHecho: la gemela se borra al cerrar esta,
+        // así que el correo sale si no quedan más tareas abiertas aparte de ellas dos.
+        $otras = DB::table('vm_tareas_sscc')
+            ->where('id_reservas', $tarea->id_reservas)
+            ->where('deleted', 0)
+            ->where('estado', '!=', 'Completada')
+            ->where('id', '!=', $id)
+            ->when($tarea->id_tarea_hermana, fn($q) => $q->where('id', '!=', $tarea->id_tarea_hermana))
+            ->exists();
+        if ($otras) {
+            return response()->json(['motivo' => 'Quedan otras tareas de la fianza abiertas: el correo sale al cerrar la última.'] + $vacia);
+        }
+
+        $aviso = $this->datosAvisoHuesped((int) $tarea->id_reservas);
+        if ($aviso['motivo'] === 'sin_fianza') {
+            return response()->json(['motivo' => 'La reserva no tiene fianza: no hay correo al huésped.'] + $vacia);
+        }
+        if ($aviso['motivo'] === 'sin_correo') {
+            return response()->json(['motivo' => 'La reserva no tiene correo del huésped: no se enviará.'] + $vacia);
+        }
+
+        $fotos = [];
+        foreach ($this->retencionesDeReserva((int) $tarea->id_reservas) as $foto) {
+            if (is_file(storage_path('app/public/' . $foto->file_foto))) {
+                $fotos[] = [
+                    'url'      => route('vm.sscc.foto', [$project->slug, $id, $foto->id]),
+                    'concepto' => $foto->retencion_concepto,
+                    'importe'  => (float) $foto->retencion_importe,
+                ];
+            }
+        }
+
+        $override = (string) config('services.vm_fianzas.mail_override_to');
+
+        return response()->json([
+            'envia'         => true,
+            'motivo'        => null,
+            'destinatario'  => $aviso['to'],
+            'redirigido_a'  => $override !== '' ? $override : null,
+            'html'          => view('emails.vm.partials.fianza-huesped-es', $aviso['datos'] + ['idioma' => 'es'])->render(),
+            'fotos'         => $fotos,
+        ]);
+    }
+
+    /** Una foto de retención de la tarea, para la miniatura de la modal. Solo las que van adjuntas al correo. */
+    public function fotoRetencionSscc(Request $request, Project $project, int $id, int $foto)
+    {
+        abort_unless(Auth::user()?->canViewTable($project, 'tareas_sscc'), 403);
+
+        $reservaId = DB::table('vm_tareas_sscc')->where('id', $id)->value('id_reservas');
+        abort_unless($reservaId, 404);
+
+        $fila = collect($this->retencionesDeReserva((int) $reservaId))->firstWhere('id', $foto);
+        abort_unless($fila, 404);
+
+        $ruta = storage_path('app/public/' . $fila->file_foto);
+        abort_unless(is_file($ruta), 404);
+
+        return response()->file($ruta);
     }
 
     /**

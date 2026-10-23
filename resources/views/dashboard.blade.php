@@ -728,8 +728,12 @@ async function validarTarea(btn, id, tipo) {
     }
 }
 
-async function marcarSsccHecho(btn, id) {
-    if (!confirm('¿Marcar esta tarea SSCC como hecha?\n\nSi es la última de su fianza, la fianza pasará a Devuelta y se avisará al huésped.\n\nUna vez hecha, el comentario ya no se podrá editar.')) return;
+// El botón abre la modal con la previsualización; la acción solo se ejecuta al confirmar en ella.
+function marcarSsccHecho(btn, id) {
+    abrirModalHecho(@json(route('vm.sscc.previa_hecho', [$project->slug, '__ID__'])).replace('__ID__', id), () => ejecutarSsccHecho(btn, id));
+}
+
+async function ejecutarSsccHecho(btn, id) {
 
     btn.disabled = true;
     btn.textContent = '…';
@@ -749,6 +753,7 @@ async function marcarSsccHecho(btn, id) {
     }
 }
 </script>
+@include('vm.partials.sscc-hecho-modal')
 
 
 @if ($vmUsuario)

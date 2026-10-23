@@ -342,6 +342,11 @@ Route::middleware('auth')->group(function () {
             ->where('id', '[0-9]+')->name('vm.sscc_form');
         Route::post('tareas_sscc_form/{id}/comentario', [\App\Http\Controllers\Vm\SsccController::class, 'guardarComentario'])
             ->where('id', '[0-9]+')->name('vm.sscc_form.comentario');
+        // Lo que haría el botón Hecho (modal de confirmación) y la miniatura de cada foto adjunta.
+        Route::get('tareas_sscc_form/{id}/vista-previa-hecho', [\App\Http\Controllers\Vm\DevFianzasController::class, 'previaHecho'])
+            ->where('id', '[0-9]+')->name('vm.sscc.previa_hecho');
+        Route::get('tareas_sscc_form/{id}/foto/{foto}', [\App\Http\Controllers\Vm\DevFianzasController::class, 'fotoRetencionSscc'])
+            ->where(['id' => '[0-9]+', 'foto' => '[0-9]+'])->name('vm.sscc.foto');
         // La ruta anterior sigue funcionando y lleva a la nueva.
         Route::get('sscc_form/{id}', fn(string $project, int $id) => redirect()->route('vm.sscc_form', [$project, $id]))
             ->where('id', '[0-9]+');

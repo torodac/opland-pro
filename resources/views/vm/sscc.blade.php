@@ -155,9 +155,12 @@
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') guardarComentario(true); });
   window.addEventListener('pagehide', () => guardarComentario(true));
 
-  async function marcarHecho() {
-    if (!confirm('¿Marcar esta tarea SSCC como hecha?\n\nSi es la última de su fianza, la fianza pasará a Devuelta y se avisará al huésped.\n\nUna vez hecha, el comentario ya no se podrá editar.')) return;
+  // El botón abre la modal con la previsualización; la acción solo se ejecuta al confirmar en ella.
+  function marcarHecho() {
+    abrirModalHecho(@json(route('vm.sscc.previa_hecho', [$project->slug, $tarea->id])), ejecutarHecho);
+  }
 
+  async function ejecutarHecho() {
     const btn = document.getElementById('ssc-hecho');
     btn.disabled = true;
     const r = await fetch(@json(route('vm.dashboard.sscc-hecho', [$project->slug, $tarea->id])), {
@@ -173,4 +176,5 @@
     }
   }
 </script>
+@include('vm.partials.sscc-hecho-modal')
 </x-app-layout>
