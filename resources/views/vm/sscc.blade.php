@@ -34,7 +34,9 @@
       <p class="text-sm text-gray-500">{{ $tarea->Tipo ?: 'Sin tipo' }}</p>
     </div>
     <div class="flex items-center gap-2">
-      <span class="text-sm px-3 py-1 rounded-full bg-gray-100 text-gray-700">{{ $tarea->estado ?: '—' }}</span>
+      @if($tarea->estado === 'Completada' && $tarea->updatedat)
+        <span class="text-sm text-gray-500">Hecho el {{ \Carbon\Carbon::parse($tarea->updatedat)->format('d/m/Y H:i') }}</span>
+      @endif
       @if($puedeHecho)
         {{-- Mismo cierre que el dashboard: pide confirmación porque dispara lo que depende de la tarea --}}
         {{-- Color en línea: las clases de color de Tailwind no siempre están compiladas en este proyecto --}}
