@@ -229,7 +229,8 @@
 <div class="df-card">
   <div class="df-title">Gestión</div>
   @forelse($sscc as $t)
-    <a href="{{ route('vm.sscc_form', [$project->slug, $t->id]) }}"
+    @php $href = $t->puedeVer ? route('vm.sscc_form', [$project->slug, $t->id]) : '#'; @endphp
+    <a href="{{ $href }}" @unless($t->puedeVer) onclick="event.preventDefault();alert('No tiene acceso a esa información.')" @endunless
        style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:6px;text-decoration:none;color:#111;font-size:13px;">
       <span>
         <strong style="font-weight:500">{{ $t->Tipo ?: 'Sin tipo' }}</strong>
@@ -237,7 +238,7 @@
       </span>
       <span style="color:#666;white-space:nowrap">
         {{ $t->estado ?: '—' }}@if($t->estado === 'Completada' && $t->updatedat) · Hecho el {{ \Carbon\Carbon::parse($t->updatedat)->format('d/m/Y H:i') }}@endif
-        <span style="color:#185FA5;margin-left:8px">Abrir ficha</span>
+        <span style="color:{{ $t->puedeVer ? '#185FA5' : '#999' }};margin-left:8px">{{ $t->puedeVer ? 'Abrir ficha' : 'Sin acceso' }}</span>
       </span>
     </a>
   @empty

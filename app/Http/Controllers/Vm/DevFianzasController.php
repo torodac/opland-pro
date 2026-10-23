@@ -212,7 +212,13 @@ class DevFianzasController extends Controller
             ->where('s.id_reservas', $id)
             ->where(fn($x) => $x->where('s.deleted', 0)->orWhereNull('s.deleted'))
             ->orderBy('s.id')
-            ->get(['s.id', 's.Tipo', 's.estado', 's.updatedat', 'ro.nombre as rol', 'de.nombre as departamento']);
+            ->get(['s.id', 's.Tipo', 's.estado', 's.updatedat', 's.control_user', 's.id_departamento', 's.id_rol',
+                   'ro.nombre as rol', 'de.nombre as departamento']);
+
+        // Una tarea que no es suya se lista, pero no se abre: la vista lo avisa en lugar de enlazarla.
+        foreach ($sscc as $t) {
+            $t->puedeVer = SsccVisibilidad::puedeVer($project, $t);
+        }
 
         return view('vm.dev-fianza', [
             'project'       => $project,
