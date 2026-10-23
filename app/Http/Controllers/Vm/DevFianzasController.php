@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Vm;
 use App\Http\Controllers\Controller;
 use App\Mail\VmFianzaAvisoMail;
 use App\Services\FianzaAuditoria;
+use App\Services\SsccVisibilidad;
 use App\Models\Project;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -513,8 +514,9 @@ class DevFianzasController extends Controller
         abort_unless(Auth::user()?->canViewTable($project, 'tareas_sscc'), 403);
 
         $tarea = DB::table('vm_tareas_sscc')->where('id', $id)->where('deleted', 0)
-            ->first(['id', 'estado', 'Tipo', 'id_reservas', 'id_tarea_hermana']);
+            ->first(['id', 'estado', 'Tipo', 'id_reservas', 'id_tarea_hermana', 'control_user', 'id_departamento', 'id_rol']);
         abort_unless($tarea, 404);
+        abort_unless(SsccVisibilidad::puedeVer($project, $tarea), 403, 'Esta tarea no está asignada a ti, a tu rol ni a tu departamento.');
 
         $vacia = ['envia' => false, 'motivo' => null, 'destinatario' => null, 'redirigido_a' => null, 'html' => null, 'fotos' => []];
 
@@ -574,7 +576,10 @@ class DevFianzasController extends Controller
     {
         abort_unless(Auth::user()?->canViewTable($project, 'tareas_sscc'), 403);
 
-        $reservaId = DB::table('vm_tareas_sscc')->where('id', $id)->value('id_reservas');
+        $tarea = DB::table('vm_tareas_sscc')->where('id', $id)->where('deleted', 0)
+            ->first(['id_reservas', 'control_user', 'id_departamento', 'id_rol']);
+        abort_unless($tarea && SsccVisibilidad::puedeVer($project, $tarea), 403);
+        $reservaId = $tarea->id_reservas;
         abort_unless($reservaId, 404);
 
         $fila = collect($this->retencionesDeReserva((int) $reservaId))->firstWhere('id', $foto);

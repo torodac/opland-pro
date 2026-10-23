@@ -9,6 +9,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use App\Services\InformeAprobacionGuard;
 use App\Services\RoleHierarchy;
+use App\Services\SsccVisibilidad;
 use App\Services\VmAusenciaTipos;
 use App\Services\VmFichajePermisos;
 use App\Services\VmHorasService;
@@ -147,7 +148,10 @@ class DashboardController extends Controller
         }
 
         $previa = DB::table('vm_tareas_sscc')->where('id', $id)->where('deleted', 0)
-            ->first(['estado', 'Tipo', 'id_reservas', 'id_tarea_hermana']);
+            ->first(['estado', 'Tipo', 'id_reservas', 'id_tarea_hermana', 'control_user', 'id_departamento', 'id_rol']);
+        if ($previa && !SsccVisibilidad::puedeVer($project, $previa)) {
+            return response()->json(['error' => 'Esta tarea no está asignada a ti, a tu rol ni a tu departamento.'], 403);
+        }
 
         $updated = DB::table('vm_tareas_sscc')
             ->where('id', $id)

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Project;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Services\SsccVisibilidad;
 use Illuminate\Support\Facades\DB;
 
 // Ficha de una tarea SSCC. Vista propia, como la de fichaje: se ve todo, pero el estado no se
@@ -20,8 +21,10 @@ class SsccController extends Controller
 
         $tarea = DB::table('vm_tareas_sscc')->where('id', $id)->where('deleted', 0)->first();
         abort_unless($tarea, 404);
+        // Misma regla que el listado: no basta con poder ver la pantalla de tareas, hay que ver esta tarea.
+        abort_unless(SsccVisibilidad::puedeVer($project, $tarea), 403, 'Esta tarea no está asignada a ti, a tu rol ni a tu departamento.');
 
-        $propiedad    = $tarea->id_propiedades ? DB::table('vm_propiedades')->where('id', $tarea->id_propiedades)->value('nombre') : null;
+        $propiedad   = $tarea->id_propiedades ? DB::table('vm_propiedades')->where('id', $tarea->id_propiedades)->value('nombre') : null;
         $departamento = $tarea->id_departamento ? DB::table('vm_departamentos')->where('id', $tarea->id_departamento)->value('nombre') : null;
         $rol          = $tarea->id_rol ? DB::table('vm_roles')->where('id', $tarea->id_rol)->value('nombre') : null;
 
@@ -70,8 +73,10 @@ class SsccController extends Controller
     {
         abort_unless(Auth::user()?->canViewTable($project, 'tareas_sscc'), 403);
 
-        $tarea = DB::table('vm_tareas_sscc')->where('id', $id)->where('deleted', 0)->first(['id', 'blocked', 'estado']);
+        $tarea = DB::table('vm_tareas_sscc')->where('id', $id)->where('deleted', 0)
+            ->first(['id', 'blocked', 'estado', 'control_user', 'id_departamento', 'id_rol']);
         abort_unless($tarea, 404);
+        abort_unless(SsccVisibilidad::puedeVer($project, $tarea), 403, 'Esta tarea no está asignada a ti, a tu rol ni a tu departamento.');
         abort_if($tarea->blocked, 403, 'Esta tarea está bloqueada y no puede editarse.');
         // Una vez marcada como hecha, el comentario queda cerrado: es parte de lo que se dejó constancia.
         abort_if($tarea->estado === 'Completada', 403, 'Esta tarea ya está hecha: el comentario no se puede editar.');
