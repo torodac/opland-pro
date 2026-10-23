@@ -225,6 +225,26 @@
   @endif
 </div>
 
+{{-- ── Gestión: las tareas SSCC de la reserva, con acceso directo a cada ficha ──── --}}
+<div class="df-card">
+  <div class="df-title">Gestión</div>
+  @forelse($sscc as $t)
+    <a href="{{ route('vm.sscc_form', [$project->slug, $t->id]) }}"
+       style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:6px;text-decoration:none;color:#111;font-size:13px;">
+      <span>
+        <strong style="font-weight:500">{{ $t->Tipo ?: 'Sin tipo' }}</strong>
+        <span style="color:#888"> · {{ $t->rol ?: ($t->departamento ?: 'Sin asignar') }}</span>
+      </span>
+      <span style="color:#666;white-space:nowrap">
+        {{ $t->estado ?: '—' }}@if($t->estado === 'Completada' && $t->updatedat) · Hecho el {{ \Carbon\Carbon::parse($t->updatedat)->format('d/m/Y H:i') }}@endif
+        <span style="color:#185FA5;margin-left:8px">Abrir ficha</span>
+      </span>
+    </a>
+  @empty
+    <p style="font-size:13px;color:#999;margin:0">No hay tareas SSCC para esta reserva.</p>
+  @endforelse
+</div>
+
 {{-- ── Bloque 2: comentarios de las limpiezas de salida ──────────────────── --}}
 <div class="df-card">
   <div class="df-title">

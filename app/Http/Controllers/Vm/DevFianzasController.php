@@ -203,6 +203,16 @@ class DevFianzasController extends Controller
 
         $fotos = $fotosLimpieza->concat($fotosIncidencias)->values();
 
+        // Las tareas SSCC de la reserva, para el bloque Gestión. Las borradas (la gemela de TPV físico
+        // o las del reinicio) no se enseñan.
+        $sscc = DB::table('vm_tareas_sscc as s')
+            ->leftJoin('vm_roles as ro', 'ro.id', '=', 's.id_rol')
+            ->leftJoin('vm_departamentos as de', 'de.id', '=', 's.id_departamento')
+            ->where('s.id_reservas', $id)
+            ->where(fn($x) => $x->where('s.deleted', 0)->orWhereNull('s.deleted'))
+            ->orderBy('s.id')
+            ->get(['s.id', 's.Tipo', 's.estado', 's.updatedat', 'ro.nombre as rol', 'de.nombre as departamento']);
+
         return view('vm.dev-fianza', [
             'project'       => $project,
             'reserva'       => $reserva,
@@ -210,6 +220,7 @@ class DevFianzasController extends Controller
             'comentarios'   => $comentarios,
             'incidencias'   => $incidencias,
             'fotos'         => $fotos,
+            'sscc'          => $sscc,
             'estado'        => self::estadoFianza($reserva),
             'esAirbnb'      => self::esAirbnb($reserva->channel),
             'canales'       => self::esAirbnb($reserva->channel) ? [self::CANAL_AIRBNB] : self::CANALES_COBRO,
