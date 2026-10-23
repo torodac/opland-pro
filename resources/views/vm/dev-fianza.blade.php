@@ -200,7 +200,7 @@
       {{-- Vuelve la fianza al punto de partida: quita la decisión, el canal, el IBAN, las retenciones
            de las fotos y las tareas de devolución. El bloque Fianza de la ficha de la reserva se
            queda en blanco con ello. Lo que se borra queda en el historial. --}}
-      @if($puedeEditar)
+      @if($puedeEditar && $estado !== 'Devuelta')
         <button type="button" class="df-btn" id="df-btn-reiniciar" onclick="reiniciarProceso()"
                 title="Quita la decisión, el canal, el IBAN, las retenciones de las fotos y las tareas de devolución."
                 style="border-color:#E3A8A8;background:#FBE9E9;color:#9B1C1C">
@@ -765,8 +765,6 @@ async function confirmarRetencionSinEvidencias() {
     // Se valida aquí para no hacer el viaje; el servidor vuelve a validar, que es el que decide.
     if (!concepto) { errorSinEvidencias('Indica el concepto de la retención.'); return; }
     if (!(importe > 0)) { errorSinEvidencias('Indica un importe mayor que cero.'); return; }
-    if (!confirm('¿Retener ' + eur(importe) + ' sin evidencias? Esta decisión no se rehace desde aquí.')) return;
-
     const r = await fetch(BASE_DF + '/retener-sin-evidencias', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_DF, 'Accept': 'application/json' },
