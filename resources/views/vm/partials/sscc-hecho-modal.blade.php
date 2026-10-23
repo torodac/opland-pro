@@ -3,9 +3,9 @@
 <div id="modal-hecho" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1000;align-items:center;justify-content:center;padding:16px;">
   <div role="dialog" aria-modal="true" aria-labelledby="mh-titulo"
        style="background:#fff;color:#111;border-radius:12px;max-width:640px;width:100%;max-height:90vh;overflow:auto;padding:20px 22px;box-shadow:0 10px 30px rgba(0,0,0,.2);">
-    <h2 id="mh-titulo" style="font-size:17px;font-weight:600;margin:0 0 10px;">Marcar como hecha</h2>
+    <h2 id="mh-titulo" style="font-size:17px;font-weight:600;margin:-20px -22px 12px;padding:12px 22px;background:#16a34a;color:#fff;border-radius:12px 12px 0 0;">Finalizar tarea</h2>
 
-    <p style="font-size:13px;color:#9B1C1C;margin:0 0 12px;"><strong>Una vez hecha, el comentario ya no se podrá editar.</strong></p>
+    <p style="font-size:13px;color:#9B1C1C;margin:0 0 12px;"><strong>Si quieres indicar un comentario, hazlo, en la ficha, antes de finalizar la tarea.</strong></p>
 
     <p id="mh-envio" style="font-size:13px;margin:0 0 12px;"></p>
 
@@ -27,6 +27,13 @@
     </div>
   </div>
 </div>
+
+<style>
+  /* El correo de la previsualización va más compacto para que la modal quepa sin scroll. Va con !important
+     porque el correo trae estilos en línea que, si no, ganan. */
+  #mh-html p { margin:0 0 6px !important; font-size:12px !important; line-height:1.35 !important; }
+  #mh-html td { font-size:12px !important; line-height:1.35 !important; padding:3px 8px !important; }
+</style>
 
 <script>
   let accionModalHecho = null;
@@ -53,12 +60,12 @@
     lista.innerHTML = '';
     p.fotos.forEach(f => {
       const figura = document.createElement('figure');
-      figura.style.cssText = 'margin:0;width:110px;';
+      figura.style.cssText = 'margin:0;width:90px;';
       const img = document.createElement('img');
       img.src = f.url;
       img.alt = f.concepto || 'Foto';
       img.loading = 'lazy';
-      img.style.cssText = 'width:110px;height:110px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb;display:block;';
+      img.style.cssText = 'width:90px;height:90px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb;display:block;';
       const pie = document.createElement('figcaption');
       pie.style.cssText = 'font-size:11px;color:#555;margin-top:4px;';
       pie.textContent = (f.concepto || '') + (f.importe ? ' · ' + f.importe.toFixed(2).replace('.', ',') + ' €' : '');
