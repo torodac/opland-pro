@@ -761,13 +761,22 @@ class DevFianzasController extends Controller
             ->first(['id', 'estado_fianza', 'fianza_retencion', 'fianza_canal_cobro']);
         abort_unless($reserva, 404);
 
-        $fotosIds = DB::table('vm_fotos as f')
-            ->join('vm_tareas_limpieza as t', 't.id', '=', 'f.id_tareas_limpieza')
-            ->where('t.id_reservas', $id)
-            ->where(fn($x) => $x->where('f.informe_estancia', 1)
-                ->orWhereNotNull('f.retencion_concepto')
-                ->orWhereNotNull('f.retencion_importe'))
-            ->pluck('f.id')->all();
+        // Las fotos cuelgan de la limpieza o de una incidencia de mantenimiento salida de ella: hay que
+        // mirar los dos caminos, igual que retencionesDeReserva, o quedan marcas sin borrar.
+        $limpiezas   = DB::table('vm_tareas_limpieza')->where('id_reservas', $id)->pluck('id')->all();
+        $incidencias = $limpiezas ? $this->incidenciasDeTareas($limpiezas)->pluck('id')->all() : [];
+
+        $fotosIds = DB::table('vm_fotos')
+            ->where(function ($q) use ($limpiezas, $incidencias) {
+                $q->whereIn('id_tareas_limpieza', $limpiezas);
+                if ($incidencias) {
+                    $q->orWhereIn('id_tareas_mantenimiento', $incidencias);
+                }
+            })
+            ->where(fn($x) => $x->where('informe_estancia', 1)
+                ->orWhereNotNull('retencion_concepto')
+                ->orWhereNotNull('retencion_importe'))
+            ->pluck('id')->all();
 
         $tareasIds = DB::table('vm_tareas_sscc')
             ->where('id_reservas', $id)
