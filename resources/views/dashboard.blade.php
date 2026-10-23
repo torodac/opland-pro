@@ -729,7 +729,7 @@ async function validarTarea(btn, id, tipo) {
 }
 
 async function marcarSsccHecho(btn, id) {
-    if (!confirm('¿Marcar esta tarea SSCC como hecha?\n\nSi es la última de su fianza, la fianza pasará a Devuelta y se avisará al huésped.')) return;
+    if (!confirm('¿Marcar esta tarea SSCC como hecha?\n\nSi es la última de su fianza, la fianza pasará a Devuelta y se avisará al huésped.\n\nUna vez hecha, el comentario ya no se podrá editar.')) return;
 
     btn.disabled = true;
     btn.textContent = '…';

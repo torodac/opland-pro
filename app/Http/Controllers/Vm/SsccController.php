@@ -70,9 +70,11 @@ class SsccController extends Controller
     {
         abort_unless(Auth::user()?->canViewTable($project, 'tareas_sscc'), 403);
 
-        $tarea = DB::table('vm_tareas_sscc')->where('id', $id)->where('deleted', 0)->first(['id', 'blocked']);
+        $tarea = DB::table('vm_tareas_sscc')->where('id', $id)->where('deleted', 0)->first(['id', 'blocked', 'estado']);
         abort_unless($tarea, 404);
         abort_if($tarea->blocked, 403, 'Esta tarea está bloqueada y no puede editarse.');
+        // Una vez marcada como hecha, el comentario queda cerrado: es parte de lo que se dejó constancia.
+        abort_if($tarea->estado === 'Completada', 403, 'Esta tarea ya está hecha: el comentario no se puede editar.');
 
         $datos = $request->validate(['comentario' => 'nullable|string|max:5000']);
 

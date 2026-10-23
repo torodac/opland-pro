@@ -100,7 +100,7 @@
       <span id="comentario-estado" style="font-size:11px;font-weight:400;text-transform:none;letter-spacing:0;color:#999;"></span>
     </div>
     <label for="comentario" class="sr-only">Comentarios</label>
-    <textarea id="comentario" rows="4" @unless($puedeComentar) readonly @endunless
+    <textarea id="comentario" rows="4" @if(! $puedeComentar || $tarea->estado === 'Completada') readonly @endif
               class="f-input">{{ $tarea->comentario }}</textarea>
   </section>
 
@@ -129,6 +129,14 @@
         body: JSON.stringify({ comentario: texto }),
         keepalive: salir,
       });
+      // 403 es un rechazo definitivo (tarea hecha o bloqueada): no tiene sentido reintentarlo.
+      if (r.status === 403) {
+        const data = await r.json().catch(() => ({}));
+        indicador.textContent = data.message || 'No se puede editar este comentario';
+        campoComentario.readOnly = true;
+        ultimoGuardado = texto;
+        return;
+      }
       if (!r.ok) throw new Error(r.status);
       ultimoGuardado = texto;
       indicador.textContent = 'Guardado';
@@ -148,7 +156,7 @@
   window.addEventListener('pagehide', () => guardarComentario(true));
 
   async function marcarHecho() {
-    if (!confirm('¿Marcar esta tarea SSCC como hecha?\n\nSi es la última de su fianza, la fianza pasará a Devuelta y se avisará al huésped.')) return;
+    if (!confirm('¿Marcar esta tarea SSCC como hecha?\n\nSi es la última de su fianza, la fianza pasará a Devuelta y se avisará al huésped.\n\nUna vez hecha, el comentario ya no se podrá editar.')) return;
 
     const btn = document.getElementById('ssc-hecho');
     btn.disabled = true;
