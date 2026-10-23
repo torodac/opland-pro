@@ -82,12 +82,12 @@ class DevFianzasController extends Controller
     // para el huésped: el correo al huésped la quita.
     public const SUFIJO_SIN_EVIDENCIAS = ' · sin evidencias';
 
-    // Quién recibe la tarea según el canal. Carol es el rol Contabilidad (7); Leticia, el rol
-    // Dirección de Operaciones (10); Recepción, el departamento 3. La transferencia no crea tarea
-    // al decidir: la de Carol nace cuando el IBAN ya está en Opland.
+    // Quién recibe la tarea según el canal. Carol es el rol Contabilidad (7); en TPV físico, las dos
+    // tareas van a Coordinador recepción (14) y Empleado Recepción (16). La transferencia no crea
+    // tarea al decidir: la de Carol nace cuando el IBAN ya está en Opland.
     public const TAREAS_POR_CANAL = [
         'TPV virtual'   => [['rol' => 7]],
-        'TPV físico'    => [['departamento' => 3], ['rol' => 10]],
+        'TPV físico'    => [['rol' => 14], ['rol' => 16]],
         'Transferencia' => [],
         'Airbnb'        => [],
     ];
