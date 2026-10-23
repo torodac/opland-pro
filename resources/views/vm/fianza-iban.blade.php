@@ -22,7 +22,7 @@
     button { margin-top:12px; padding:10px 16px; font:inherit; font-weight:600; border:0; border-radius:6px; background:#ecdba4; color:#16232b; cursor:pointer; width:100%; }
     .cabecera { text-align:center; padding:0 0 14px; margin:0 0 20px; border-bottom:3px solid #ecdba4; }
     .cabecera img { display:block; width:126px; height:auto; margin:0 auto; }
-    .aviso { padding:12px; border:1px solid var(--bd); border-radius:6px; margin-bottom:16px; }
+    .aviso { margin-bottom:16px; }
     .error { color:var(--err); margin:0 0 12px; }
     .ok { color:var(--ok); font-weight:600; }
     small { color:var(--mut); display:block; margin-top:8px; }
