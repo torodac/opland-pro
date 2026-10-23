@@ -338,10 +338,13 @@ Route::middleware('auth')->group(function () {
             ->name('vm.tarea.update');
 
         // Ficha de una tarea SSCC. Solo lectura del estado: marcarla como hecha se hace desde el dashboard.
-        Route::get('sscc_form/{id}', [\App\Http\Controllers\Vm\SsccController::class, 'show'])
+        Route::get('tareas_sscc_form/{id}', [\App\Http\Controllers\Vm\SsccController::class, 'show'])
             ->where('id', '[0-9]+')->name('vm.sscc_form');
-        Route::post('sscc_form/{id}/comentario', [\App\Http\Controllers\Vm\SsccController::class, 'guardarComentario'])
+        Route::post('tareas_sscc_form/{id}/comentario', [\App\Http\Controllers\Vm\SsccController::class, 'guardarComentario'])
             ->where('id', '[0-9]+')->name('vm.sscc_form.comentario');
+        // La ruta anterior sigue funcionando y lleva a la nueva.
+        Route::get('sscc_form/{id}', fn(string $project, int $id) => redirect()->route('vm.sscc_form', [$project, $id]))
+            ->where('id', '[0-9]+');
 
         // Ficha de una reserva. Los datos vienen de Icnea; solo se edita la decisión de fianza.
         Route::get('reservas_form/{id}', [\App\Http\Controllers\Vm\ReservaController::class, 'show'])

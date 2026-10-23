@@ -21,35 +21,13 @@
 .dark .f-input{background:#111;color:#eee;border-color:rgba(255,255,255,.18)}
 </style>
 
-{{-- Editar / Guardar en la cabecera, igual que en la ficha de reservas. Solo el comentario se edita. --}}
-<x-slot name="actions">
-  @if($puedeComentar)
-    <div id="btn-view-mode" style="display:flex;align-items:center;gap:6px;">
-      <button type="button" onclick="enterEdit()"
-        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">
-        <i class="ti ti-pencil text-sm"></i>Editar
-      </button>
-    </div>
-    <div id="btn-edit-mode" style="display:none;align-items:center;gap:6px;">
-      <button type="button" onclick="cancelEdit()"
-        class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-500 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
-        Cancelar
-      </button>
-      <button type="submit" form="form-sscc" id="btn-save"
-        class="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-orange-500 border border-orange-500 rounded-lg hover:bg-orange-600 transition-colors">
-        Guardar
-      </button>
-    </div>
-  @endif
-</x-slot>
-
 <div class="space-y-6 p-4" style="max-width:1200px;margin:0 auto;">
 
   @if(session('ok'))
     <div class="rounded-lg bg-green-50 text-green-700 text-sm px-4 py-2">{{ session('ok') }}</div>
   @endif
 
-  {{-- Cabecera: nombre y tipo. El estado solo se muestra; se cambia desde el dashboard. --}}
+  {{-- Cabecera: nombre y tipo. El estado solo se muestra; el botón Hecho es el mismo del dashboard. --}}
   <div class="flex items-start justify-between gap-4">
     <div>
       <h1 class="text-xl font-semibold text-gray-900">{{ $tarea->nombre ?: ('Tarea #' . $tarea->id) }}</h1>
@@ -64,7 +42,7 @@
                 class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg text-white"
                 style="background:#16a34a;border:1px solid #16a34a;"
                 onmouseover="this.style.background='#15803d'" onmouseout="this.style.background='#16a34a'">
-          <i class="ti ti-check text-sm"></i>Hecho
+          Hecho
         </button>
       @endif
     </div>
@@ -113,21 +91,60 @@
     </section>
   @endif
 
-  {{-- Comentario: lo único que se escribe desde esta ficha. Solo se habilita en modo edición. --}}
+  {{-- Comentarios: se guardan solos mientras se escribe, al salir del campo y al cerrar la página. --}}
   <section class="section-card">
-    <div class="sec-title">Comentario</div>
-    <form id="form-sscc" method="POST" action="{{ route('vm.sscc_form.comentario', [$project->slug, $tarea->id]) }}">
-      @csrf
-      <label for="comentario" class="sr-only">Comentario</label>
-      <textarea id="comentario" name="comentario" rows="4" readonly
-                data-original="{{ $tarea->comentario }}"
-                class="f-input bg-gray-50">{{ old('comentario', $tarea->comentario) }}</textarea>
-    </form>
+    <div class="sec-title" style="justify-content:space-between">
+      <span>Comentarios</span>
+      <span id="comentario-estado" style="font-size:11px;font-weight:400;text-transform:none;letter-spacing:0;color:#999;"></span>
+    </div>
+    <label for="comentario" class="sr-only">Comentarios</label>
+    <textarea id="comentario" rows="4" @unless($puedeComentar) readonly @endunless
+              class="f-input">{{ $tarea->comentario }}</textarea>
   </section>
 
 </div>
 
 <script>
+  const URL_COMENTARIO = @json(route('vm.sscc_form.comentario', [$project->slug, $tarea->id]));
+  const CSRF_SSCC = @json(csrf_token());
+  const campoComentario = document.getElementById('comentario');
+  const indicador = document.getElementById('comentario-estado');
+  let ultimoGuardado = campoComentario.value;
+  let temporizador = null;
+
+  // Guarda el texto si ha cambiado desde la última vez. Con «salir» (cerrar la página) va con keepalive,
+  // para que la petición sobreviva a la descarga de la página.
+  async function guardarComentario(salir = false) {
+    clearTimeout(temporizador);
+    const texto = campoComentario.value;
+    if (texto === ultimoGuardado) return;
+
+    indicador.textContent = 'Guardando…';
+    try {
+      const r = await fetch(URL_COMENTARIO, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_SSCC, 'Accept': 'application/json' },
+        body: JSON.stringify({ comentario: texto }),
+        keepalive: salir,
+      });
+      if (!r.ok) throw new Error(r.status);
+      ultimoGuardado = texto;
+      indicador.textContent = 'Guardado';
+    } catch (e) {
+      indicador.textContent = 'No se pudo guardar; se volverá a intentar';
+      temporizador = setTimeout(() => guardarComentario(), 5000);
+    }
+  }
+
+  campoComentario.addEventListener('input', () => {
+    clearTimeout(temporizador);
+    temporizador = setTimeout(() => guardarComentario(), 800);
+  });
+  campoComentario.addEventListener('blur', () => guardarComentario());
+  // Cerrar o cambiar de pestaña no siempre dispara el blur: por eso también se guarda al ocultarse la página.
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') guardarComentario(true); });
+  window.addEventListener('pagehide', () => guardarComentario(true));
+
   async function marcarHecho() {
     if (!confirm('¿Marcar esta tarea SSCC como hecha?\n\nSi es la última de su fianza, la fianza pasará a Devuelta y se avisará al huésped.')) return;
 
@@ -135,7 +152,7 @@
     btn.disabled = true;
     const r = await fetch(@json(route('vm.dashboard.sscc-hecho', [$project->slug, $tarea->id])), {
       method: 'POST',
-      headers: { 'X-CSRF-TOKEN': @json(csrf_token()), 'Accept': 'application/json' },
+      headers: { 'X-CSRF-TOKEN': CSRF_SSCC, 'Accept': 'application/json' },
     });
     const data = await r.json().catch(() => ({}));
     if (r.ok && data.ok) {
@@ -144,25 +161,6 @@
       btn.disabled = false;
       alert(data.error || 'No se pudo marcar la tarea como hecha.');
     }
-  }
-
-  // Mismo mecanismo que la ficha de reservas: se ocultan los bloques de lectura y se muestran los de edición.
-  function enterEdit() {
-    const t = document.getElementById('comentario');
-    t.readOnly = false;
-    t.classList.remove('bg-gray-50');
-    document.getElementById('btn-view-mode').style.display = 'none';
-    document.getElementById('btn-edit-mode').style.display = 'flex';
-    t.focus();
-  }
-
-  function cancelEdit() {
-    const t = document.getElementById('comentario');
-    t.value = t.dataset.original;
-    t.readOnly = true;
-    t.classList.add('bg-gray-50');
-    document.getElementById('btn-view-mode').style.display = 'flex';
-    document.getElementById('btn-edit-mode').style.display = 'none';
   }
 </script>
 </x-app-layout>

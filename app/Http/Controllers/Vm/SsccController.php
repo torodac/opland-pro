@@ -56,10 +56,9 @@ class SsccController extends Controller
             'rol'          => $rol,
             'enlaces'      => $enlaces,
             'puedeComentar' => Auth::user()?->canViewTable($project, 'tareas_sscc') ?? false,
-            // Marcar como hecha lo hace el dashboard, que exige un usuario de VM. Sin él no hay botón.
-            'puedeHecho'    => $tarea->estado !== 'Completada' && DB::table('vm_usuarios')
-                ->where('admin_user_id', Auth::id())->where(fn($q) => $q->where('deleted', 0)->orWhereNull('deleted'))
-                ->exists(),
+            // Mismo botón Hecho que el dashboard: aparece mientras la tarea no esté completada. Si quien
+            // lo pulsa no tiene usuario de VM, el servidor lo rechaza con el mismo aviso que el dashboard.
+            'puedeHecho'    => $tarea->estado !== 'Completada',
         ]);
     }
 
@@ -82,6 +81,11 @@ class SsccController extends Controller
             'updateuser' => Auth::id(),
             'updatedat'  => now(),
         ]);
+
+        // La ficha lo guarda sola, en segundo plano, y espera JSON. Un envío de formulario normal vuelve atrás.
+        if ($request->expectsJson()) {
+            return response()->json(['ok' => true]);
+        }
 
         return back()->with('ok', 'Comentario guardado.');
     }
