@@ -34,6 +34,16 @@
                 Guardar contraseña
             </button>
         </form>
+
+        {{-- Salida para quien no quiera seguir ahora. La contrasena sigue pendiente: al volver
+             a entrar, el middleware trae otra vez a esta pantalla. --}}
+        <form method="POST" action="{{ route('logout') }}" class="mt-4 pt-4 border-t border-gray-100">
+            @csrf
+            <button type="submit"
+                    class="w-full text-sm text-gray-400 hover:text-gray-600 py-1 transition-colors">
+                Cerrar sesión
+            </button>
+        </form>
     </div>
 </body>
 </html>

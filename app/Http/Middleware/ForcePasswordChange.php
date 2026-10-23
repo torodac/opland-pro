@@ -12,7 +12,10 @@ class ForcePasswordChange
         $user = $request->user();
 
         if ($user && $user->must_change_password) {
-            if (!$request->routeIs('password.change', 'password.change.update')) {
+            // 'logout' va en la lista a proposito: la pantalla de cambio ofrece cerrar sesion
+            // para quien no quiera seguir, y sin esto su POST acabaria redirigido a la propia
+            // pantalla -- el boton no daria error, simplemente no haria nada.
+            if (!$request->routeIs('password.change', 'password.change.update', 'logout')) {
                 return redirect()->route('password.change');
             }
         }
