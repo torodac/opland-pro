@@ -41,6 +41,7 @@ class NukiController extends Controller
             ->select(
                 'c.id', 'c.nuki_smartlock_id', 'c.nombre as nombre_cerradura',
                 'c.bateria', 'c.bateria_critica', 'c.leido_at',
+                'c.ultimo_uso_at', 'c.ultimo_uso_quien',
                 'c.id_propiedades', 'p.nombre as propiedad', 'p.deleted as prop_deleted'
             )
             ->get();
@@ -49,15 +50,28 @@ class NukiController extends Controller
         $accesos = DB::table('vm_cerraduras_accesos')
             ->select('nuki_smartlock_id',
                 DB::raw('count(*) as total'),
-                DB::raw('sum(case when fecha_hasta is null then 1 else 0 end) as sin_caducidad'))
+                DB::raw('sum(case when fecha_hasta is null then 1 else 0 end) as sin_caducidad'),
+                DB::raw('max(ultimo_uso_at) as ultimo_acceso'))
             ->groupBy('nuki_smartlock_id')
             ->get()
             ->keyBy('nuki_smartlock_id');
 
         // Tareas de cambio de batería por propiedad, para el icono de Breezeway de cada tarjeta.
-        $tareas = $this->tareasBateria($cerraduras->pluck('id_propiedades')->filter()->unique()->values()->all());
+        $propiedadesIds = $cerraduras->pluck('id_propiedades')->filter()->unique()->values()->all();
+        $tareas = $this->tareasBateria($propiedadesIds);
 
-        $todas = $cerraduras->map(function ($c) use ($umbral, $accesos, $tareas) {
+        // Tareas de batería de cada propiedad en los últimos 30 días, todas las que haya.
+        $tareasMes = DB::table('vm_tareas_mantenimiento')
+            ->whereIn('id_propiedades', $propiedadesIds)
+            ->whereNotNull('breezeway_task_id')
+            ->whereRaw("nombre ~* 'nuki'")
+            ->whereRaw("nombre ~* '(bater|pila)'")
+            ->whereDate('fecha_planificada', '>=', now()->subDays(30)->toDateString())
+            ->groupBy('id_propiedades')
+            ->selectRaw('id_propiedades, count(*) as n')
+            ->pluck('n', 'id_propiedades');
+
+        $todas = $cerraduras->map(function ($c) use ($umbral, $accesos, $tareas, $tareasMes) {
             // "Propiedad activa" = vinculada y no borrada. Sin contrato ni fechas (decidido).
             $sinProp = $c->id_propiedades === null
                 || $c->propiedad === null
@@ -85,6 +99,10 @@ class NukiController extends Controller
                 'bateria'       => $c->bateria,
                 'bateria_baja'  => $bateriaBaja,
                 'leido_at'      => $c->leido_at ? Carbon::parse($c->leido_at) : null,
+                'ultimo_uso_at' => $c->ultimo_uso_at ? Carbon::parse($c->ultimo_uso_at) : null,
+                'ultimo_uso_quien' => $c->ultimo_uso_quien,
+                'ultimo_acceso'    => $acc?->ultimo_acceso ? Carbon::parse($acc->ultimo_acceso) : null,
+                'tareas_mes'       => (int) ($tareasMes[$c->id_propiedades] ?? 0),
                 'accesos'       => (int) ($acc->total ?? 0),
                 'sin_caducidad' => (int) ($acc->sin_caducidad ?? 0),
                 'estado'        => $estado,

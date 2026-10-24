@@ -69,6 +69,9 @@
             <div style="font-size:11px;color:#777;text-align:right;margin-top:6px">
                 Leída {{ $fmt($cerradura->leido_at) ?? 'nunca' }}
             </div>
+            <div style="font-size:11px;color:#777;text-align:right;margin-top:2px">
+                Último uso: {{ $fmt($cerradura->ultimo_uso_at) ?? 'sin datos' }}{{ $cerradura->ultimo_uso_quien ? ' · ' . $cerradura->ultimo_uso_quien : '' }}
+            </div>
         </div>
     </div>
 

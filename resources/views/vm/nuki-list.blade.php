@@ -133,16 +133,6 @@
                 @endif
 
                 <div class="nk-row">
-                    <div class="nk-bat" style="color:{{ $colorBat }}">
-                        <svg width="26" height="14" viewBox="0 0 26 14" aria-hidden="true">
-                            <rect x="0.75" y="0.75" width="21.5" height="12.5" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
-                            <rect x="23.25" y="4.5" width="2" height="5" rx="1" fill="currentColor"/>
-                            @if($anchoRelleno > 0)
-                                <rect x="3" y="3" width="{{ $anchoRelleno }}" height="8" rx="1.5" fill="currentColor"/>
-                            @endif
-                        </svg>
-                        <span>{{ $t->bateria !== null ? $t->bateria . ' %' : 'Sin dato' }}</span>
-                    </div>
                     <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
                         @if($t->bateria_baja)
                             <span class="nk-tag nk-tag--baja">Batería baja</span>
@@ -153,9 +143,27 @@
                     </div>
                 </div>
 
-                <div class="nk-meta">
-                    <span>{{ $t->accesos }} {{ $t->accesos === 1 ? 'acceso' : 'accesos' }}@if($t->sin_caducidad > 0) · {{ $t->sin_caducidad }} sin caducidad @endif</span>
-                    <span>{{ $t->leido_at ? 'Leída ' . $t->leido_at->format('d/m H:i') : 'Sin lectura' }}</span>
+                {{-- Una sola línea: batería, último uso (calendario, quién al pasar el ratón) y tareas
+                     de batería de los últimos 30 días (llave inglesa). --}}
+                <div class="nk-meta" style="align-items:center;justify-content:space-between;margin-top:12px;color:#444">
+                    <span title="Batería" style="display:inline-flex;align-items:center;gap:6px;font-weight:600;color:{{ $colorBat }};font-variant-numeric:tabular-nums">
+                        <svg width="26" height="14" viewBox="0 0 26 14" aria-hidden="true">
+                            <rect x="0.75" y="0.75" width="21.5" height="12.5" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                            <rect x="23.25" y="4.5" width="2" height="5" rx="1" fill="currentColor"/>
+                            @if($anchoRelleno > 0)
+                                <rect x="3" y="3" width="{{ $anchoRelleno }}" height="8" rx="1.5" fill="currentColor"/>
+                            @endif
+                        </svg>
+                        {{ $t->bateria !== null ? $t->bateria . ' %' : 'Sin dato' }}
+                    </span>
+                    <span title="Último uso{{ $t->ultimo_uso_quien ? ': ' . $t->ultimo_uso_quien : '' }}" style="display:inline-flex;align-items:center;gap:5px">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                        {{ $t->ultimo_uso_at ? $t->ultimo_uso_at->format('d/m H:i') : '—' }}
+                    </span>
+                    <span title="Tareas de batería de los últimos 30 días" style="display:inline-flex;align-items:center;gap:5px">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z"/></svg>
+                        {{ $t->tareas_mes }}
+                    </span>
                 </div>
             </div>
         @endforeach

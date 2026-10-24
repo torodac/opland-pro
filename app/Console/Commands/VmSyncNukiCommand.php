@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -72,6 +73,13 @@ class VmSyncNukiCommand extends Command
                 $atadas++;   // atadas EN ESTA PASADA, no el total que ya tienen propiedad
             }
 
+            // Último evento de la cerradura: cuándo y quién. Una llamada por cerradura, de solo lectura.
+            $ultimo = $this->ultimoEvento((int) $id, $token);
+            if ($ultimo !== null) {
+                $datos['ultimo_uso_at'] = $ultimo['at'];
+                $datos['ultimo_uso_quien'] = $ultimo['quien'];
+            }
+
             DB::table('vm_cerraduras')->updateOrInsert(['nuki_smartlock_id' => $id], $datos);
             $guardadas++;
         }
@@ -84,6 +92,33 @@ class VmSyncNukiCommand extends Command
         Log::info("vm:sync-nuki: {$guardadas} cerraduras, {$atadas} con propiedad, {$bajas} con bateria baja.");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * El último evento registrado en la cerradura: la fecha y quién (o cómo) la accionó.
+     * Null si no hay eventos o si Nuki no responde.
+     */
+    private function ultimoEvento(int $smartlockId, string $token): ?array
+    {
+        [$code, $log] = $this->get("https://api.nuki.io/smartlock/{$smartlockId}/log?limit=1", $token);
+        if ($code !== 200 || !is_array($log) || empty($log[0]['date'])) {
+            return null;
+        }
+
+        $evento = $log[0];
+        $quien = trim((string) ($evento['name'] ?? '')) ?: match ((int) ($evento['trigger'] ?? -1)) {
+            1       => 'Botón de la cerradura',
+            2       => 'Bluetooth / app',
+            3       => 'Llave física',
+            4       => 'Automático',
+            255     => 'Web / teclado',
+            default => 'Sin identificar',
+        };
+
+        return [
+            'at'    => Carbon::parse($evento['date']),
+            'quien' => $quien,
+        ];
     }
 
     /** Porcentaje a partir del cual se avisa. En el .env para poder subirlo o bajarlo sin desplegar. */
